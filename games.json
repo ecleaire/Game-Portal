@@ -1,0 +1,22 @@
+[
+  {
+    "id": "platformer-demo",
+    "title": "Platformer Demo",
+    "engine": "Godot",
+    "description": "Godotゲームを想定したサンプルです。実際のWeb Exportに差し替えて使えます。",
+    "thumbnail": "",
+    "path": "games/platformer-demo/index.html",
+    "controls": "← → : 移動\nSpace : ジャンプ",
+    "version": "0.1 Demo"
+  },
+  {
+    "id": "scratch-demo",
+    "title": "Scratch Demo",
+    "engine": "Scratch",
+    "description": "Scratch / TurboWarp作品を想定したサンプルです。HTML出力に差し替えて使えます。",
+    "thumbnail": "",
+    "path": "games/scratch-demo/index.html",
+    "controls": "マウス / キーボード",
+    "version": "0.1 Demo"
+  }
+]
