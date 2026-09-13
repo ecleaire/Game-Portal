@@ -1,0 +1,17 @@
+.portal { max-width: 960px; }
+.portal nav { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
+.portal section { padding: 24px; margin: 20px 0; border: 1px solid var(--line); border-radius: 18px; background: var(--panel); }
+.portal form { display: flex; flex-wrap: wrap; gap: 16px; align-items: end; margin: 18px 0; }
+.portal label { display: grid; gap: 8px; flex: 1 1 200px; color: var(--muted); }
+.portal input, .portal select { width: 100%; min-width: 0; padding: 11px; color: var(--text); background: var(--bg); border: 1px solid #667085; border-radius: 8px; font: inherit; }
+.portal button { padding: 11px 16px; color: var(--text); background: var(--panel-2); border: 1px solid #667085; border-radius: 8px; cursor: pointer; font: inherit; }
+.portal button:disabled { opacity: .5; cursor: wait; }
+.portal :focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.portal .muted { color: var(--muted); line-height: 1.7; }
+.portal .message { white-space: pre-line; padding: 16px 0; color: var(--accent); }
+.portal .actions { display: flex; gap: 12px; flex-wrap: wrap; }
+.portal .danger { border-color: #fda4af; }
+.portal .list { display: grid; gap: 12px; }
+.portal .row { padding: 16px; border: 1px solid var(--line); border-radius: 10px; overflow-wrap: anywhere; }
+.portal pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+[hidden] { display: none !important; }
