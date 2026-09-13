@@ -1,0 +1,5 @@
+project_id = "game-portal"
+
+[functions.portal]
+# Custom opaque sessions are checked on EVERY protected RPC, not Supabase Auth JWTs.
+verify_jwt = false
