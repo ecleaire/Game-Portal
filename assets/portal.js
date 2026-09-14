@@ -16,7 +16,7 @@ const errors = {
   forbidden: 'この操作を行う権限がありません。',
   rate_limited: '試行回数の上限です。15分後に再試行してください。',
   conflict: 'そのユーザー名は使用されています。',
-  invalid_request: '入力を確認してください。ユーザー名は英数字・_ の3〜32文字、パスワードは12文字以上・UTF-8で72バイト以内です。',
+  invalid_request: '入力を確認してください。ユーザー名は英数字・_ の3〜32文字、パスワードは5文字以上・UTF-8で72バイト以内です。',
   password_limit: '代替パスワードは最大5件です。',
   not_found: '対象が見つかりません。画面を更新してください。',
   unavailable: 'サーバーに接続できません。設定を確認し、しばらくして再試行してください。',
@@ -62,7 +62,7 @@ function section(title, parent = root) {
 function field(name, title, type = 'text', options = {}) { return { name, title, type, ...options }; }
 const username = () => field('username', 'ユーザー名', 'text', { autocomplete: 'username', pattern: '[A-Za-z0-9_]{3,32}', maxlength: '32' });
 const password = (name = 'password', title = 'パスワード', fresh = true) => field(name, title, 'password', {
-  autocomplete: fresh ? 'new-password' : 'current-password', ...(fresh ? { minlength: '12' } : {}), maxlength: '72',
+  autocomplete: fresh ? 'new-password' : 'current-password', minlength: '5', maxlength: '72',
 });
 const role = () => field('role', 'ユーザー権限', 'select', { choices: [['player', '一般ユーザー'], ['uploader', '投稿可能ユーザー']] });
 function form(parent, fields, submitText, submit) {

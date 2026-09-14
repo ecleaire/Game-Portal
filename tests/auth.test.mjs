@@ -76,8 +76,10 @@ test('user/admin sessions cannot cross authorization boundaries or spoof privile
   assert.equal(users.users[0].id, uid);
 });
 test('password validation, atomic failed creation and case-insensitive username uniqueness', async () => {
-  await assert.rejects(api('admin.create', { username: 'bob', password: 'short' }, adminToken), /password/);
+  await assert.rejects(api('admin.create', { username: 'bob', password: 'four' }, adminToken), /password/);
   assert.equal((await api('admin.users', {}, adminToken)).users.length, 1);
+  const minimum = await api('admin.create', { username: 'five', password: 'short' }, adminToken);
+  assert.equal(minimum.user.username, 'five');
   await assert.rejects(api('admin.create', { username: 'ALICE', password: original }, adminToken), /unique/);
   await assert.rejects(manage('admin.password.add', { password: 'あ'.repeat(25) }), /72/);
 });
