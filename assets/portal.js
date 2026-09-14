@@ -3,6 +3,7 @@ import { config } from './config.js';
 const root = document.querySelector('#portal');
 const message = document.querySelector('#message');
 const adminMode = document.body.dataset.page === 'admin';
+const uploadMode = document.body.dataset.page === 'upload';
 // Tokens live only in this document. Existing games share the Pages origin, so never
 // put privileged credentials in localStorage/sessionStorage or a readable cookie.
 let session = null;
@@ -93,7 +94,7 @@ function login() {
   s.append(el('p', '安全のためログイン状態はこの画面内だけで保持します。再読み込み・別ページへの移動後は再ログインしてください。', { class: 'muted' }));
   form(s, [username(), password('password', 'パスワード', false)], 'ログイン', async data => {
     session = await api(adminMode ? 'admin.login' : 'user.login', data);
-    if (adminMode) { offset = 0; selected = null; await dashboard(); } else await account();
+    if (adminMode) { offset = 0; selected = null; await dashboard(); } else if (uploadMode) await upload(); else await account();
     notice('ログインしました。');
   });
 }
@@ -115,7 +116,10 @@ async function account() {
   form(s, [password('current_password', '現在の本人用パスワード', false), password('password', '新しい本人用パスワード')], 'パスワードを変更', async data => {
     await api('user.password', data); session = null; login(); notice('パスワードを変更しました。再ログインしてください。');
   });
-  section('投稿したゲーム').append(el('p', 'ゲーム投稿・審査機能はPhase 3で提供予定です。現在は投稿を受け付けていません。', { class: 'muted' }));
+  const submissions = section('投稿したゲーム');
+  const result = await api('user.submissions');
+  if (!result.submissions.length) submissions.append(el('p', '投稿はまだありません。'));
+  for (const game of result.submissions) submissions.append(el('p', `${game.title} / ${game.engine} / ${game.status} / ${game.created_at}`));
 }
 async function dashboard() {
   const [{ admin }, { users }] = await Promise.all([api('admin.me'), api('admin.users', { offset })]);
@@ -187,8 +191,40 @@ async function showAudit(parent) {
   parent.append(results);
 }
 
-if (document.body.dataset.page === 'upload') {
-  section('ゲーム投稿').append(el('p', '投稿機能は準備中です。Phase 3で認証・投稿権限を確認するバックエンド経由でZIPを保管します。Google Driveは公開ゲームのホスティングには使用しません。'));
+async function uploadPackage(submission) {
+  root.replaceChildren();
+  const s = section('ゲームZIPを保管'); logoutButton(s);
+  s.append(el('p', `${submission.title} のZIPを選択してください。管理者専用のGoogle Drive保管領域へ送信します。公開されることはありません。`, { class: 'muted' }));
+  const f = el('form', null); const label = el('label', 'ゲームZIP（最大50MB）');
+  const input = el('input', null, { type: 'file', name: 'package', accept: '.zip,application/zip', required: 'required' });
+  label.append(input); f.append(label); f.append(el('button', '非公開で保管', { type: 'submit' }));
+  f.addEventListener('submit', event => { event.preventDefault(); run(async () => {
+    const file = input.files?.[0]; if (!file) throw new Error('invalid_request');
+    const body = new FormData(); body.set('submission_id', submission.id); body.set('package', file);
+    const response = await fetch(`${config.supabaseUrl.replace(/\/$/, '')}/functions/v1/portal/upload`, { method: 'POST', credentials: 'omit',
+      headers: { ...(config.anonKey ? { apikey: config.anonKey } : {}), 'X-Portal-Session': session.token }, body, signal: AbortSignal.timeout(120000) });
+    const result = await response.json(); if (!response.ok || result.error) throw new Error(result.error ?? 'unavailable');
+    await upload(); notice('管理者専用の保管領域へ送信しました。審査待ちです。');
+  }); });
+  root.append(f);
+}
+async function upload() {
+  const { user } = await api('user.me'); root.replaceChildren();
+  const s = section('ゲーム投稿'); logoutButton(s);
+  if (user.role !== 'uploader') { s.append(el('p', 'このアカウントには投稿権限がありません。管理者に投稿可能ユーザーへの変更を依頼してください。')); return; }
+  s.append(el('p', 'ZIPは公開されないGoogle Driveの審査待ちフォルダーへ保管されます。管理者が承認するまで公開ゲームにはなりません。', { class: 'muted' }));
+  form(s, [field('title', 'ゲーム名', 'text', { maxlength: '120' }), field('engine', 'エンジン', 'select', { choices: [['godot','Godot'],['scratch','Scratch / TurboWarp'],['other','その他']] }), field('description', '説明', 'text', { maxlength: '4000' }), field('version', 'バージョン', 'text', { maxlength: '80' }), field('controls', '操作説明', 'text', { maxlength: '2000', optional: true })], 'ZIPを選択する', async data => {
+    const { submission } = await api('user.submission.create', data); await uploadPackage(submission);
+  });
+  const { submissions } = await api('user.submissions');
+  const history = section('自分の投稿');
+  if (!submissions.length) history.append(el('p', '投稿はまだありません。'));
+  for (const game of submissions) history.append(el('p', `${game.title} / ${game.status} / ${game.created_at}`));
+}
+
+if (uploadMode) {
+  if (!config.supabaseUrl) section('投稿サービスは未設定です').append(el('p', '管理者がSupabaseと非公開保管領域を設定すると利用できます。'));
+  else login();
 } else if (!config.supabaseUrl) {
   section('認証サービスは未設定です').append(el('p', '管理者がSupabaseの設定を完了すると利用できます。公開済みゲームは引き続き遊べます。'));
 } else login();

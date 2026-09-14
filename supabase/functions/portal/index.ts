@@ -5,4 +5,6 @@ Deno.serve(createHandler({
   serviceKey: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
   pepper: Deno.env.get('SESSION_TOKEN_PEPPER') ?? '',
   allowedOrigins: Deno.env.get('ALLOWED_ORIGINS') ?? '',
+  googleServiceAccountJson: Deno.env.get('GOOGLE_SERVICE_ACCOUNT_JSON') ?? '',
+  googlePendingFolderId: Deno.env.get('GOOGLE_DRIVE_PENDING_FOLDER_ID') ?? '',
 }));

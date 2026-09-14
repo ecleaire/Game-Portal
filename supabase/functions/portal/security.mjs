@@ -3,6 +3,7 @@ export const actions = new Set([
   'admin.me', 'admin.users', 'admin.audit', 'admin.create', 'admin.rename', 'admin.role',
   'admin.passwords', 'admin.password.add', 'admin.password.revoke', 'admin.kick',
   'admin.ban', 'admin.unban', 'admin.disable', 'admin.enable',
+  'user.submissions', 'user.submission.create', 'user.submission.prepare',
 ]);
 
 export function token() {

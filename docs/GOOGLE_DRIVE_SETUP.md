@@ -1,22 +1,30 @@
-# Google Drive：Phase 3向け所有者設定
+# Google Drive：管理者専用の投稿保管領域
 
-Phase 1/2はGoogle資格情報を必要としません。現時点ではDrive API呼び出し、ZIPアップロード、承認・公開機能は実装していません。認証・認可基盤の検証を終えてから以下を実施してください。Driveは投稿ZIPの保管/アーカイブ専用で、HTMLの公開ホスティングには使いません。
+投稿されたZIPは、Google Driveの**非公開 `pending` フォルダー**に保管します。ブラウザーはGoogleの認証情報、folder ID、Drive file ID、共有URLを受け取りません。管理者以外にフォルダーを共有しなければ、投稿者を含む一般ユーザーはDrive上のファイルを閲覧できません。
 
-## 所有者が行う必要がある手順
+Driveは投稿ZIPの保管・審査用です。公開ゲームのHTMLホスティングには使いません。
 
-1. Google Cloud Consoleで所有者管理のプロジェクトを作成/選択し、APIs & Services → LibraryでGoogle Drive APIを有効にします。
-2. Google Auth PlatformでBranding/Audience/Data Accessを設定します。外部アプリのテストモードでは所有者をテストユーザーへ追加します。テストモードのrefresh tokenには短い有効期限がある場合があるので、本番公開前にGoogle側の公開状態・必要な審査を確認します。
-3. 将来実装する**サーバー側の**OAuth callbackのHTTPS URLを決め、そのURLに完全一致するredirect URIをOAuth Web application clientへ登録します。GitHub PagesのJavaScriptへclient secretを埋め込まないでください。まだcallbackは存在しないため、現在のPages URLを仮のcallbackとして運用しません。
-4. 所有者が安全なローカル/サーバー側のOAuth設定ツールで認可し、offline accessによるrefresh tokenを取得します。最小権限`https://www.googleapis.com/auth/drive.file`を第一候補とします。認可ツールにはstate検証・PKCE・コードの一度限りの交換を実装します。アクセストークンやrefresh tokenを画面/ログ/共有URLへ出しません。
-5. 同じアプリの資格情報で`Game-Portal`と`pending`/`approved`/`rejected`（任意で`thumbnails`）を作成し、返されたfolder IDを保存します。`drive.file`は任意の既存フォルダーへ自由にアクセスする権限ではないため、所有者が手作業で作ったフォルダーにアクセスできるとは仮定しません。
-6. server-onlyの`GOOGLE_DRIVE_FOLDER_ID`、`GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET`、`GOOGLE_REFRESH_TOKEN`をSupabase secretsへ設定します。`.env.example`はキー名の参照です。Phase 3実装まで設定を急ぐ必要はありません。
+## 所有者が行う設定
 
-## 次の実装で守るインターフェース
+1. Google Cloud Consoleで所有者管理のプロジェクトを作成し、**Google Drive API**を有効にします。
+2. **サービス アカウント**を1つ作成します。鍵をJSON形式で一度だけ生成し、安全なパスワードマネージャーまたは秘密管理に保管します。鍵ファイルをリポジトリ、Google Drive、GitHub Actions、GitHub Pagesに置かないでください。
+3. Google Driveで `Game-Portal/pending` フォルダーを作成します。フォルダーの一般アクセスを「制限付き」のままにし、作成したサービスアカウントのメールアドレスだけを**編集者**として追加します。一般ユーザーや「リンクを知っている全員」には共有しません。
+4. `pending` フォルダーのURLからfolder IDを取得します。
+5. Supabase Dashboard → Edge Functions → `portal` → Secretsに、次を設定します。値を画面やソースコードへ貼り付けないでください。
 
-- ブラウザー → 独自セッションを検証するバックエンド → Drive。ブラウザーへGoogle tokenを渡しません。
-- 認可時点のactive/non-bannedと`uploader`権限を確認し、DBに投稿メタデータとDrive file/folder IDを保存します。ファイル名を識別子にしません。
-- 保存先はpending、審査結果でapproved/rejected。Drive共有設定は非公開を維持します。
-- ZIP上限、拡張子/MIME、エントリーHTML、展開後サイズ、エントリー数、zip-slip・絶対パス・symlink・zip bombへの対策を実装してからアップロードを有効化します。
-- Phase 3では承認後に`approved`で止める方式も可。公開時は別originに安全に配置し、GitHub Pages向けメタデータを生成します。`games.json`の現行公開一覧はそれまで維持します。
+   - `GOOGLE_SERVICE_ACCOUNT_JSON`: サービスアカウントJSON全体を1行の値として設定
+   - `GOOGLE_DRIVE_PENDING_FOLDER_ID`: 手順4のID
 
-参考：[Drive API認証スコープ](https://developers.google.com/workspace/drive/api/guides/api-specific-auth)、[OAuth Web server flow](https://developers.google.com/identity/protocols/oauth2/web-server)。
+6. Edge Function `portal` を、このリポジトリの `supabase/functions/portal/` で再デプロイします。次のSQL migrationもSupabase SQL Editorで適用します。
+
+   - `supabase/migrations/202609140004_private_game_submissions.sql`
+
+## 保管時の制約
+
+- 投稿者は`uploader`権限、active状態、非BANである必要があります。
+- ZIPは最大50MBです。拡張子とZIPマジックバイトを確認します。
+- Edge Functionがセッションを確認してからDriveへ送信し、DBにはDrive file IDを非公開値として記録します。
+- 投稿者には投稿状態だけを返し、DriveのファイルID・閲覧リンクは返しません。
+- 現在はDriveの`pending`に保管して審査待ちにする段階です。承認／却下時のフォルダー移動と安全な公開自動化は次の段階で実装します。
+
+サービスアカウントは`drive.file`スコープで短時間のアクセストークンをEdge Function内で取得します。ブラウザーでGoogleログインやOAuth callbackを実装する必要はありません。

@@ -38,8 +38,16 @@ test('CORS, methods, size, malformed input and missing sessions fail before data
   for (const body of ['{', 'null', '[]', { action: 'bootstrap' }, { action: 'admin.users', data: [] }, { action: 'admin.users', data: { offset: -1 } }]) {
     assert.equal((await handler(request(body))).status, 400);
   }
+  assert.equal((await handler(request({ action: 'user.submission.complete', data: {} }, { 'x-portal-session': token() }))).status, 400);
   assert.equal((await handler(request({ action: 'admin.users' }))).status, 401);
   assert.equal(calls, 0);
+});
+test('private ZIP upload requires an authenticated session and server-only Drive configuration', async () => {
+  const form = new FormData(); form.set('submission_id', crypto.randomUUID()); form.set('package', new Blob(['PK\x03\x04zip'], { type: 'application/zip' }), 'game.zip');
+  const requestUpload = headers => new Request('https://example.supabase.co/functions/v1/portal/upload', { method: 'POST', headers: { origin: settings.allowedOrigins, ...headers }, body: form });
+  const handler = createHandler({ ...settings, fetcher: async () => { throw new Error('must not call database'); } });
+  assert.equal((await handler(requestUpload())).status, 401);
+  assert.equal((await handler(requestUpload({ 'x-portal-session': token() }))).status, 503);
 });
 test('revoked sessions and DB errors are sanitized; secrets are never reflected', async () => {
   for (const [databaseResult, upstreamStatus, expected] of [
