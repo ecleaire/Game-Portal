@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+assets/config.local.js
+node_modules/
+dist/
+.supabase/
+supabase/.temp/
+supabase/.branches/
+*.log
+.tools/
+test-results/
+playwright-report/
