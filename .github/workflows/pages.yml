@@ -28,10 +28,21 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build public files only
+        run: node scripts/build-site.mjs
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+
       - name: Upload site
         uses: actions/upload-pages-artifact@v4
         with:
-          path: "."
+          path: "dist"
 
       - name: Deploy to GitHub Pages
         id: deployment
