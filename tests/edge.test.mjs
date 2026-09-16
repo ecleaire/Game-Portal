@@ -2,8 +2,16 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHandler } from '../supabase/functions/portal/handler.mjs';
 import { digest, token } from '../supabase/functions/portal/security.mjs';
+import { validateZip } from '../supabase/functions/portal/drive.mjs';
 
 const settings = { url: 'https://example.supabase.co', serviceKey: 'server-test-key', pepper: 'test-only-pepper'.repeat(3), allowedOrigins: 'https://ecleaire.github.io' };
+function zip(name = 'index.html', mode = 0) {
+  const encoded = Buffer.from(name); const data = Buffer.from('<');
+  const local = Buffer.alloc(30); local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(20, 4); local.writeUInt32LE(1, 18); local.writeUInt32LE(1, 22); local.writeUInt16LE(encoded.length, 26);
+  const central = Buffer.alloc(46); central.writeUInt32LE(0x02014b50, 0); central.writeUInt16LE(0x0314, 4); central.writeUInt16LE(20, 6); central.writeUInt32LE(1, 20); central.writeUInt32LE(1, 24); central.writeUInt16LE(encoded.length, 28); central.writeUInt32LE(mode, 38);
+  const end = Buffer.alloc(22); end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(1, 8); end.writeUInt16LE(1, 10); end.writeUInt32LE(central.length + encoded.length, 12); end.writeUInt32LE(local.length + encoded.length + data.length, 16);
+  return new Uint8Array(Buffer.concat([local, encoded, data, central, encoded, end]));
+}
 function request(body, headers = {}, method = 'POST') {
   return new Request('https://example.supabase.co/functions/v1/portal', { method,
     headers: { origin: settings.allowedOrigins, 'content-type': 'application/json', ...headers },
@@ -39,8 +47,14 @@ test('CORS, methods, size, malformed input and missing sessions fail before data
     assert.equal((await handler(request(body))).status, 400);
   }
   assert.equal((await handler(request({ action: 'user.submission.complete', data: {} }, { 'x-portal-session': token() }))).status, 400);
+  assert.equal((await handler(request({ action: 'admin.submission.prepare', data: {} }, { 'x-portal-session': token() }))).status, 400);
   assert.equal((await handler(request({ action: 'admin.users' }))).status, 401);
   assert.equal(calls, 0);
+});
+test('ZIP validation permits a normal web archive and rejects traversal or symlinks', () => {
+  assert.doesNotThrow(() => validateZip(zip()));
+  assert.throws(() => validateZip(zip('../index.html')), /invalid_upload/);
+  assert.throws(() => validateZip(zip('index.html', 0xa0000000)), /invalid_upload/);
 });
 test('private ZIP upload requires an authenticated session and server-only Drive configuration', async () => {
   const form = new FormData(); form.set('submission_id', crypto.randomUUID()); form.set('package', new Blob(['PK\x03\x04zip'], { type: 'application/zip' }), 'game.zip');

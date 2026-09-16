@@ -25,4 +25,4 @@ https://ecleaire.github.io/Game-Portal/
 
 `npm ci` → `npm test` → `npm run build` → `npm run dev`でローカル確認できます（Node.js 22以上）。公開値が未設定でも既存ゲームは動作します。GitHub Pagesは`dist/`の公開ファイルだけを配信します。
 
-追加URLは`login/`、`account/`、`admin/`、`upload/`です。ログインはページ内だけで保持し、再読み込み時は再ログインが必要です。管理画面での審査、承認／却下、公開自動化は次の段階です。未信頼ゲームを公開する前に、ゲームと管理画面のorigin分離が必要です。
+追加URLは`login/`、`account/`、`admin/`、`upload/`です。ログインはページ内だけで保持し、再読み込み時は再ログインが必要です。管理者は投稿ZIPを隔離環境で確認し、承認または却下できます。承認済みファイルは非公開Driveに保管され、公開自動化はまだ行いません。未信頼ゲームを公開する前に、ゲームと管理画面のorigin分離が必要です。

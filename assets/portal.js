@@ -122,7 +122,7 @@ async function account() {
   for (const game of result.submissions) submissions.append(el('p', `${game.title} / ${game.engine} / ${game.status} / ${game.created_at}`));
 }
 async function dashboard() {
-  const [{ admin }, { users }] = await Promise.all([api('admin.me'), api('admin.users', { offset })]);
+  const [{ admin }, { users }, { submissions }] = await Promise.all([api('admin.me'), api('admin.users', { offset }), api('admin.submissions', { offset: 0 })]);
   root.replaceChildren();
   const top = section(`管理画面 — ${admin.username}`);
   logoutButton(top);
@@ -145,6 +145,23 @@ async function dashboard() {
   button(pages, '更新', async () => { await dashboard(); notice('更新しました。'); }); list.append(pages);
   const user = users.find(u => u.id === selected);
   if (user) await manage(user);
+  const reviews = section('ゲーム投稿の審査');
+  if (!submissions.length) reviews.append(el('p', '投稿はありません。'));
+  for (const game of submissions) {
+    const row = el('div', null, { class: 'row' });
+    row.append(el('p', `${game.title} / 投稿者: ${game.username} / ${game.engine} / ${game.version} / ${game.status}`));
+    if (game.description) row.append(el('p', game.description, { class: 'muted' }));
+    if (game.review_reason) row.append(el('p', `審査メモ: ${game.review_reason}`, { class: 'muted' }));
+    button(row, 'ZIPを安全にダウンロード', () => downloadSubmission(game.id));
+    if (game.status === 'pending') {
+      button(row, '承認（非公開で保管を継続）', () => reviewSubmission(game.id, 'approved'));
+      button(row, '却下', async () => {
+        const reason = prompt('却下理由（任意・500文字まで）', '');
+        if (reason !== null) await reviewSubmission(game.id, 'rejected', reason);
+      }, true);
+    }
+    reviews.append(row);
+  }
   const audit = section('管理操作の監査ログ');
   button(audit, '最新の100件', async () => { auditBefore = undefined; await showAudit(audit); notice('監査ログを表示しました。'); });
 }
@@ -207,6 +224,21 @@ async function uploadPackage(submission) {
     await upload(); notice('管理者専用の保管領域へ送信しました。審査待ちです。');
   }); });
   root.append(f);
+}
+async function reviewSubmission(submissionId, decision, reason = '') {
+  const response = await fetch(`${config.supabaseUrl.replace(/\/$/, '')}/functions/v1/portal/review`, { method: 'POST', credentials: 'omit',
+    headers: { 'Content-Type': 'application/json', ...(config.anonKey ? { apikey: config.anonKey } : {}), 'X-Portal-Session': session.token },
+    body: JSON.stringify({ submission_id: submissionId, decision, reason }), signal: AbortSignal.timeout(30000) });
+  const result = await response.json(); if (!response.ok || result.error) throw new Error(result.error ?? 'unavailable');
+  await dashboard(); notice(decision === 'approved' ? '承認しました。公開はまだ行われません。' : '却下しました。');
+}
+async function downloadSubmission(submissionId) {
+  const response = await fetch(`${config.supabaseUrl.replace(/\/$/, '')}/functions/v1/portal/download`, { method: 'POST', credentials: 'omit',
+    headers: { 'Content-Type': 'application/json', ...(config.anonKey ? { apikey: config.anonKey } : {}), 'X-Portal-Session': session.token },
+    body: JSON.stringify({ submission_id: submissionId }), signal: AbortSignal.timeout(60000) });
+  if (!response.ok) { const result = await response.json().catch(() => ({})); throw new Error(result.error ?? 'unavailable'); }
+  const blob = await response.blob(); const url = URL.createObjectURL(blob); const a = el('a', '', { href: url, download: 'submission.zip' });
+  document.body.append(a); a.click(); a.remove(); URL.revokeObjectURL(url); notice('ZIPをダウンロードしました。実行・展開前に隔離環境で確認してください。');
 }
 async function upload() {
   const { user } = await api('user.me'); root.replaceChildren();

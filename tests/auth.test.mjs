@@ -200,6 +200,12 @@ test('private game submission metadata hides Drive identifiers from users', asyn
   assert.equal((await api('user.submission.prepare', { submission_id: made.submission.id }, session.hash)).submission_id, made.submission.id);
   const completed = await api('user.submission.complete', { submission_id: made.submission.id, drive_file_id: 'private-drive-file-id', package_name: 'game.zip', package_size: '100' }, session.hash);
   assert.equal(completed.submission.status, 'pending');
+  const adminList = await api('admin.submissions', {}, adminToken);
+  assert.equal(adminList.submissions.find(item => item.id === made.submission.id).drive_file_id, undefined);
+  const prepared = await api('admin.submission.prepare', { submission_id: made.submission.id }, adminToken);
+  assert.equal(prepared.submission.drive_file_id, 'private-drive-file-id');
+  const reviewed = await api('admin.submission.complete', { submission_id: made.submission.id, status: 'approved', reason: 'checked' }, adminToken);
+  assert.equal(reviewed.submission.status, 'approved');
   const listed = await api('user.submissions', {}, session.hash);
   assert.equal(listed.submissions[0].drive_file_id, undefined);
   const { rows } = await db.query('select drive_file_id from portal_private.game_submissions where id=$1', [made.submission.id]);

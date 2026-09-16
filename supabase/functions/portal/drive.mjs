@@ -10,7 +10,7 @@ function pemBytes(pem) {
   const binary = atob(text);
   return Uint8Array.from(binary, c => c.charCodeAt(0));
 }
-async function accessToken(serviceAccountJson, fetcher = fetch) {
+export async function accessToken(serviceAccountJson, fetcher = fetch) {
   let account;
   try { account = JSON.parse(serviceAccountJson); } catch { throw new Error('drive_unavailable'); }
   if (!account.client_email || !account.private_key) throw new Error('drive_unavailable');
@@ -32,10 +32,40 @@ async function accessToken(serviceAccountJson, fetcher = fetch) {
   return result.access_token;
 }
 
+const u16 = (bytes, at) => bytes[at] | (bytes[at + 1] << 8);
+const u32 = (bytes, at) => (bytes[at] | (bytes[at + 1] << 8) | (bytes[at + 2] << 16) | (bytes[at + 3] * 0x1000000)) >>> 0;
+
+// Parse the central directory without extracting files. This rejects zip-slip,
+// symlinks, encrypted archives and decompression bombs before they reach Drive.
+export function validateZip(bytes) {
+  if (bytes.length < 22 || !(bytes[0] === 0x50 && bytes[1] === 0x4b && [0x03, 0x05, 0x07].includes(bytes[2]) && [0x04, 0x06, 0x08].includes(bytes[3]))) throw new Error('invalid_upload');
+  let eocd = -1;
+  for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65557); i--) if (u32(bytes, i) === 0x06054b50) { eocd = i; break; }
+  if (eocd < 0 || u16(bytes, eocd + 4) !== 0 || u16(bytes, eocd + 6) !== 0) throw new Error('invalid_upload');
+  const count = u16(bytes, eocd + 10); const directorySize = u32(bytes, eocd + 12); let at = u32(bytes, eocd + 16);
+  if (count === 0 || count === 0xffff || directorySize === 0xffffffff || count > 5000 || at + directorySize > eocd) throw new Error('invalid_upload');
+  const decoder = new TextDecoder('utf-8', { fatal: true }); let total = 0; let html = false;
+  for (let entry = 0; entry < count; entry++) {
+    if (at + 46 > eocd || u32(bytes, at) !== 0x02014b50) throw new Error('invalid_upload');
+    const flags = u16(bytes, at + 8); const uncompressed = u32(bytes, at + 24); const nameLength = u16(bytes, at + 28);
+    const extraLength = u16(bytes, at + 30); const commentLength = u16(bytes, at + 32); const external = u32(bytes, at + 38);
+    const end = at + 46 + nameLength + extraLength + commentLength;
+    if (end > eocd || (flags & 0x1) !== 0) throw new Error('invalid_upload');
+    let name; try { name = decoder.decode(bytes.slice(at + 46, at + 46 + nameLength)); } catch { throw new Error('invalid_upload'); }
+    const unixMode = external >>> 16;
+    if (!name || name.includes('\\') || name.startsWith('/') || /^[A-Za-z]:/.test(name) || name.split('/').includes('..') || (unixMode & 0xf000) === 0xa000) throw new Error('invalid_upload');
+    if (/\.html?$/i.test(name)) html = true;
+    total += uncompressed;
+    if (!Number.isSafeInteger(total) || total > 209715200) throw new Error('invalid_upload');
+    at = end;
+  }
+  if (at !== u32(bytes, eocd + 16) + directorySize || !html) throw new Error('invalid_upload');
+}
+
 export async function storePrivateZip({ serviceAccountJson, pendingFolderId, submissionId, file, fetcher = fetch }) {
   if (!pendingFolderId || !file || file.size < 1 || file.size > 52428800 || !/\.zip$/i.test(file.name)) throw new Error('invalid_upload');
   const bytes = new Uint8Array(await file.arrayBuffer());
-  if (!(bytes[0] === 0x50 && bytes[1] === 0x4b && [0x03, 0x05, 0x07].includes(bytes[2]) && [0x04, 0x06, 0x08].includes(bytes[3]))) throw new Error('invalid_upload');
+  validateZip(bytes);
   const access = await accessToken(serviceAccountJson, fetcher);
   const boundary = `portal-${crypto.randomUUID()}`;
   const metadata = JSON.stringify({ name: `${submissionId}.zip`, parents: [pendingFolderId], mimeType: 'application/zip' });
@@ -47,4 +77,23 @@ export async function storePrivateZip({ serviceAccountJson, pendingFolderId, sub
   const result = await response.json().catch(() => null);
   if (!response.ok || typeof result?.id !== 'string') throw new Error('drive_unavailable');
   return { id: result.id, name: file.name, size: file.size };
+}
+
+export async function movePrivateZip({ serviceAccountJson, fileId, fromFolderId, toFolderId, fetcher = fetch }) {
+  if (!fileId || !fromFolderId || !toFolderId) throw new Error('drive_unavailable');
+  const access = await accessToken(serviceAccountJson, fetcher);
+  const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?addParents=${encodeURIComponent(toFolderId)}&removeParents=${encodeURIComponent(fromFolderId)}&fields=id`;
+  const response = await fetcher(url, { method: 'PATCH', headers: { Authorization: `Bearer ${access}` } });
+  const result = await response.json().catch(() => null);
+  if (!response.ok || result?.id !== fileId) throw new Error('drive_unavailable');
+}
+
+export async function downloadPrivateZip({ serviceAccountJson, fileId, fetcher = fetch }) {
+  if (!fileId) throw new Error('drive_unavailable');
+  const access = await accessToken(serviceAccountJson, fetcher);
+  const response = await fetcher(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`, {
+    headers: { Authorization: `Bearer ${access}` }, signal: AbortSignal.timeout(30000),
+  });
+  if (!response.ok || !response.body) throw new Error('drive_unavailable');
+  return response;
 }

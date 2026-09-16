@@ -1,8 +1,8 @@
 import { digest, token, readBody, statusFor } from './security.mjs';
-import { storePrivateZip } from './drive.mjs';
+import { downloadPrivateZip, movePrivateZip, storePrivateZip } from './drive.mjs';
 
 // Dependency injection keeps the actual HTTP boundary testable without deployed secrets.
-export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleServiceAccountJson = '', googlePendingFolderId = '', fetcher = fetch }) {
+export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleServiceAccountJson = '', googlePendingFolderId = '', googleApprovedFolderId = '', googleRejectedFolderId = '', fetcher = fetch }) {
   const origins = new Set(allowedOrigins.split(',').map(s => s.trim()).filter(Boolean));
   return async request => {
     const origin = request.headers.get('origin');
@@ -29,6 +29,15 @@ export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleS
       const result = await response.json();
       return { response, result };
     };
+    const internalError = ({ response, result }) => !response.ok || result?.error
+      ? reply({ error: result?.error ?? 'unavailable' }, statusFor(result?.error ?? 'unavailable')) : null;
+    const privateJson = async () => {
+      const length = Number(request.headers.get('content-length') ?? 0);
+      if (length > 8192 || !request.headers.get('content-type')?.toLowerCase().startsWith('application/json')) throw new Error('invalid_request');
+      const body = await request.json();
+      if (!body || Array.isArray(body) || typeof body !== 'object') throw new Error('invalid_request');
+      return body;
+    };
     // ZIPs are accepted only through this authenticated server path. They are
     // stored in a Drive folder shared with the service account, never published.
     if (new URL(request.url).pathname.endsWith('/upload')) {
@@ -51,6 +60,42 @@ export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleS
         const name = error?.message;
         return reply({ error: name === 'invalid_upload' ? 'invalid_request' : 'unavailable' }, name === 'invalid_upload' ? 400 : 503);
       }
+    }
+    // Review and download never expose a Drive ID to the browser. They invoke
+    // internal RPC actions, which the JSON API allowlist does not accept.
+    if (new URL(request.url).pathname.endsWith('/review')) {
+      const supplied = request.headers.get('x-portal-session');
+      if (!/^[a-f0-9]{64}$/.test(supplied ?? '')) return reply({ error: 'unauthorized' }, 401);
+      if (!googleServiceAccountJson || !googlePendingFolderId || !googleApprovedFolderId || !googleRejectedFolderId) return reply({ error: 'unavailable' }, 503);
+      try {
+        const { submission_id: submissionId, decision, reason = '' } = await privateJson();
+        if (typeof submissionId !== 'string' || !['approved', 'rejected'].includes(decision) || typeof reason !== 'string' || reason.length > 500) return reply({ error: 'invalid_request' }, 400);
+        const prepared = await rpc('admin.submission.prepare', { submission_id: submissionId }, supplied);
+        const failed = internalError(prepared); if (failed) return failed;
+        const fileId = prepared.result.submission?.drive_file_id;
+        if (typeof fileId !== 'string') return reply({ error: 'unavailable' }, 503);
+        await movePrivateZip({ serviceAccountJson: googleServiceAccountJson, fileId, fromFolderId: googlePendingFolderId,
+          toFolderId: decision === 'approved' ? googleApprovedFolderId : googleRejectedFolderId, fetcher });
+        const completed = await rpc('admin.submission.complete', { submission_id: submissionId, status: decision, reason }, supplied);
+        const completionError = internalError(completed); if (completionError) return completionError;
+        return reply(completed.result);
+      } catch (error) { return reply({ error: error?.message === 'invalid_request' ? 'invalid_request' : 'unavailable' }, error?.message === 'invalid_request' ? 400 : 503); }
+    }
+    if (new URL(request.url).pathname.endsWith('/download')) {
+      const supplied = request.headers.get('x-portal-session');
+      if (!/^[a-f0-9]{64}$/.test(supplied ?? '')) return reply({ error: 'unauthorized' }, 401);
+      if (!googleServiceAccountJson) return reply({ error: 'unavailable' }, 503);
+      try {
+        const { submission_id: submissionId } = await privateJson();
+        if (typeof submissionId !== 'string') return reply({ error: 'invalid_request' }, 400);
+        const prepared = await rpc('admin.submission.download', { submission_id: submissionId }, supplied);
+        const failed = internalError(prepared); if (failed) return failed;
+        const submission = prepared.result.submission;
+        const response = await downloadPrivateZip({ serviceAccountJson: googleServiceAccountJson, fileId: submission?.drive_file_id, fetcher });
+        const safeName = String(submission?.package_name ?? 'submission.zip').replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 120) || 'submission.zip';
+        return new Response(response.body, { status: 200, headers: { ...headers, 'Content-Type': 'application/zip',
+          'Content-Disposition': `attachment; filename="${safeName}"`, 'Access-Control-Expose-Headers': 'Content-Disposition' } });
+      } catch (error) { return reply({ error: error?.message === 'invalid_request' ? 'invalid_request' : 'unavailable' }, error?.message === 'invalid_request' ? 400 : 503); }
     }
     let input;
     try { input = await readBody(request); }
