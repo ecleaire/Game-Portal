@@ -210,8 +210,7 @@ async function dashboard() {
 }
 async function manage(user) {
   const s = section(`${user.username} の管理`); s.id = 'selected-user';
-  s.append(el('p', `状態: ${user.status} / BAN: ${user.banned ? user.banned_until ?? '永久' : 'なし'}`));
-  if (user.ban_reason) s.append(el('p', `理由: ${user.ban_reason}`));
+  s.append(el('p', `アカウント状態: ${user.status}`, { class: 'muted' }));
   const change = async (action, data = {}) => {
     await api(action, { ...data, user_id: user.id }); await dashboard(); notice('変更を保存しました。');
   };
@@ -224,9 +223,12 @@ async function manage(user) {
   button(actions, user.status === 'disabled' ? 'アカウントを再有効化' : 'アカウントを無効化', async () => {
     if (confirm(`${user.username} のアカウント状態を変更しますか？無効化すると全セッションが失効します。`)) await change(user.status === 'disabled' ? 'admin.enable' : 'admin.disable'); else notice('キャンセルしました。');
   }, true);
-  if (user.banned) button(actions, 'BANを解除', () => change('admin.unban'));
-  s.append(el('h3', 'BAN')); s.append(el('p', '期限が空欄なら永久BANです。BAN時は全セッションが失効します。', { class: 'muted' }));
-  form(s, [field('banned_until', '期限（端末のローカル時刻・省略で永久）', 'datetime-local', { optional: true }), field('reason', '理由', 'text', { maxlength: '500', optional: true })], 'BANする', async data => {
+  const ban = el('div', null, { class: `ban-panel${user.banned ? ' is-banned' : ''}` }); s.append(ban);
+  ban.append(el('h3', user.banned ? '現在BAN中' : 'BAN設定'));
+  ban.append(el('p', user.banned ? `BAN期限: ${user.banned_until ?? '永久'}${user.ban_reason ? ` / 理由: ${user.ban_reason}` : ''}` : 'BANすると、このユーザーはログインできず、すべてのセッションが直ちに失効します。', { class: 'muted' }));
+  if (user.banned) {
+    button(ban, 'BANを解除', () => change('admin.unban'));
+  } else form(ban, [field('banned_until', '終了日時（空欄は永久BAN）', 'datetime-local', { optional: true }), field('reason', '理由（任意）', 'text', { maxlength: '500', optional: true })], 'BANする', async data => {
     if (!confirm(`${user.username} を${data.banned_until ? '期限付き' : '永久'}BANしますか？`)) { notice('キャンセルしました。'); return; }
     await change('admin.ban', { ...data, banned_until: data.banned_until ? new Date(data.banned_until).toISOString() : null });
   });
@@ -287,12 +289,16 @@ async function upload() {
   const { user } = await api('user.me'); root.replaceChildren();
   const s = section('ゲーム投稿'); logoutButton(s);
   if (user.role !== 'uploader') { s.append(el('p', 'このアカウントには投稿権限がありません。管理者に投稿可能ユーザーへの変更を依頼してください。')); return; }
-  s.append(el('p', 'ZIPは公開されないGoogle Driveの審査待ちフォルダーへ保管されます。管理者が承認するまで公開ゲームにはなりません。', { class: 'muted' }));
+  s.append(el('p', '投稿データは公開されません。管理者が確認するまで、Google Driveの非公開フォルダーにだけ保管されます。', { class: 'muted' }));
+  const steps = el('ol', null, { class: 'steps' });
+  for (const text of ['ゲーム情報を入力', '次の画面でZIPを選択', '非公開で保管・管理者の審査を待つ']) steps.append(el('li', text));
+  s.append(steps);
+  s.append(el('h3', '1. ゲーム情報を入力'));
   form(s, [field('title', 'ゲーム名', 'text', { maxlength: '120' }), field('engine', 'エンジン', 'select', { choices: [['godot','Godot'],['scratch','Scratch / TurboWarp'],['other','その他']] }), field('description', '説明', 'text', { maxlength: '4000' }), field('version', 'バージョン', 'text', { maxlength: '80' }), field('controls', '操作説明', 'text', { maxlength: '2000', optional: true })], 'ZIPを選択する', async data => {
     const { submission } = await api('user.submission.create', data); await uploadPackage(submission);
   });
   const { submissions } = await api('user.submissions');
-  const history = section('自分の投稿');
+  const history = section('投稿履歴');
   if (!submissions.length) history.append(el('p', '投稿はまだありません。'));
   for (const game of submissions) history.append(el('p', `${game.title} / ${game.status} / ${game.created_at}`));
 }

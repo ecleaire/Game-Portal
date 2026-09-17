@@ -18,4 +18,9 @@
 .portal .account-overview p { margin: 4px 0; }
 .portal .account-name { font-size: 1.25rem; font-weight: 700; }
 .portal .avatar { display: grid; place-items: center; flex: 0 0 72px; width: 72px; height: 72px; font-size: 2.25rem; background: var(--panel-2); border: 1px solid var(--line); border-radius: 50%; }
+.portal .steps { display: grid; gap: 8px; padding: 14px 14px 14px 36px; background: var(--panel-2); border-radius: 10px; line-height: 1.6; }
+.portal .steps li::marker { color: var(--accent); font-weight: 700; }
+.portal .ban-panel { margin-top: 22px; padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); }
+.portal .ban-panel h3 { margin-top: 0; }
+.portal .ban-panel.is-banned { border-color: #fda4af; }
 [hidden] { display: none !important; }
