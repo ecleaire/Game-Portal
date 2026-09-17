@@ -66,7 +66,7 @@ test('browser flows connect to the real Edge handler and migrated database', asy
   await expect(user.locator('#message')).toContainText('セッションが終了');
   await expect(user.getByRole('button', { name: 'ログイン', exact: true })).toBeVisible();
 
-  await selected.getByLabel('理由', { exact: true }).fill('browser test');
+  await selected.getByLabel('理由（任意）', { exact: true }).fill('browser test');
   await selected.getByRole('button', { name: 'BANする', exact: true }).click();
   await expect(page.locator('#message')).toHaveText('変更を保存しました。');
   await user.getByLabel('ユーザー名', { exact: true }).fill('browser_user');
