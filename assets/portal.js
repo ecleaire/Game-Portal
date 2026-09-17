@@ -364,6 +364,7 @@ async function start() {
     return;
   }
   if (!restoreSession()) { login(); return; }
+  if (location.hash === '#logout') { await logout(); return; }
   try {
     if (adminMode) { await api('admin.me'); offset = 0; selected = null; await dashboard(); }
     else { await api('user.me'); if (uploadMode) await upload(); else await account(); }
