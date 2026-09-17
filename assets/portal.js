@@ -4,6 +4,7 @@ const root = document.querySelector('#portal');
 const message = document.querySelector('#message');
 const adminMode = document.body.dataset.page === 'admin';
 const uploadMode = document.body.dataset.page === 'upload';
+const accountMode = document.body.dataset.page === 'account';
 // Tokens live only in this document. Existing games share the Pages origin, so never
 // put privileged credentials in localStorage/sessionStorage or a readable cookie.
 let session = null;
@@ -44,6 +45,11 @@ function syncLoginLink() {
       link.href = link.dataset.loginHref;
       link.onclick = null;
     }
+  });
+  document.querySelectorAll('a[data-portal-account], a[href$="/account/"]').forEach(link => {
+    link.hidden = !session;
+    if (session) { link.href = '#account'; link.onclick = event => { event.preventDefault(); run(account); }; }
+    else link.onclick = null;
   });
 }
 async function run(task) {
@@ -309,7 +315,8 @@ if (uploadMode) {
   else login();
 } else if (!config.supabaseUrl) {
   section('認証サービスは未設定です').append(el('p', '管理者がSupabaseの設定を完了すると利用できます。公開済みゲームは引き続き遊べます。'));
-} else login();
+} else if (accountMode) location.replace('../login/');
+else login();
 
 // A failed/expired session stops account/admin actions; KICK is noticed while idle too.
 setInterval(async () => {
