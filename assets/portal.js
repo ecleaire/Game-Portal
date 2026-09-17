@@ -29,6 +29,23 @@ function el(tag, text, attrs = {}) {
   return node;
 }
 function notice(text) { message.textContent = text; }
+function syncLoginLink() {
+  // A session never leaves this document. Keep the navigation action aligned
+  // with the session that exists in this page.
+  document.querySelectorAll('a[data-portal-login], a[href$="/login/"]').forEach(link => {
+    link.dataset.portalLogin = 'true';
+    if (!link.dataset.loginHref) link.dataset.loginHref = link.href;
+    if (session) {
+      link.textContent = 'ログアウト';
+      link.href = '#logout';
+      link.onclick = event => { event.preventDefault(); run(logout); };
+    } else {
+      link.textContent = 'ログイン';
+      link.href = link.dataset.loginHref;
+      link.onclick = null;
+    }
+  });
+}
 async function run(task) {
   if (busy) return;
   busy = true;
@@ -88,21 +105,24 @@ function form(parent, fields, submitText, submit) {
   parent.append(f); return f;
 }
 function login() {
+  syncLoginLink();
   root.replaceChildren();
   const s = section(adminMode ? '管理者ログイン' : 'ユーザーログイン');
   s.append(el('p', 'アカウントは管理者が作成します。メールアドレスは不要です。', { class: 'muted' }));
   s.append(el('p', '安全のためログイン状態はこの画面内だけで保持します。再読み込み・別ページへの移動後は再ログインしてください。', { class: 'muted' }));
   form(s, [username(), password('password', 'パスワード', false)], 'ログイン', async data => {
     session = await api(adminMode ? 'admin.login' : 'user.login', data);
+    syncLoginLink();
     if (adminMode) { offset = 0; selected = null; await dashboard(); } else if (uploadMode) await upload(); else await account();
     notice('ログインしました。');
   });
 }
+async function logout() {
+  try { await api('logout'); }
+  finally { session = null; syncLoginLink(); login(); notice('ログアウトしました。'); }
+}
 function logoutButton(parent) {
-  button(parent, 'ログアウト', async () => {
-    try { await api('logout'); }
-    finally { session = null; login(); notice('ログアウトしました。'); }
-  });
+  button(parent, 'ログアウト', logout);
 }
 async function account() {
   const { user } = await api('user.me');
