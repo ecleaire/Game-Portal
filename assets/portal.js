@@ -60,7 +60,7 @@ function syncLoginLink() {
   });
   document.querySelectorAll('a[data-portal-account], a[href$="/account/"]').forEach(link => {
     if (!link.dataset.accountHref) link.dataset.accountHref = link.href;
-    link.hidden = !session;
+    link.hidden = !session || adminMode;
     link.href = link.dataset.accountHref;
     link.onclick = null;
   });
