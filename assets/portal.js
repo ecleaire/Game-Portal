@@ -295,9 +295,10 @@ async function upload() {
   s.append(steps);
   s.append(el('h3', '1. ゲーム情報を入力'));
   s.append(el('p', 'ゲーム名・エンジン・説明・バージョンは、好きな順番で入力できます。説明と操作説明は後からでも追加できます。', { class: 'muted' }));
-  form(s, [field('title', 'ゲーム名', 'text', { maxlength: '120' }), field('engine', 'エンジン', 'select', { choices: [['godot','Godot'],['scratch','Scratch / TurboWarp'],['other','その他']] }), field('description', '説明（任意）', 'text', { maxlength: '4000', optional: true }), field('version', 'バージョン', 'text', { value: '1.0.0', maxlength: '80' }), field('controls', '操作説明（任意）', 'text', { maxlength: '2000', optional: true })], 'ZIPを選択する', async data => {
+  const submissionForm = form(s, [field('title', 'ゲーム名', 'text', { maxlength: '120' }), field('engine', 'エンジン', 'select', { choices: [['godot','Godot'],['scratch','Scratch / TurboWarp'],['other','その他']] }), field('description', '説明（任意）', 'text', { maxlength: '4000', optional: true }), field('version', 'バージョン', 'text', { value: '1.0.0', maxlength: '80' }), field('controls', '操作説明（任意）', 'text', { maxlength: '2000', optional: true })], 'ZIPを選択する', async data => {
     const { submission } = await api('user.submission.create', data); await uploadPackage(submission);
   });
+  submissionForm.classList.add('stacked-form');
   const { submissions } = await api('user.submissions');
   const history = section('投稿履歴');
   if (!submissions.length) history.append(el('p', '投稿はまだありません。'));
