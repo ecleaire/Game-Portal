@@ -28,4 +28,5 @@
 .portal .ban-panel { margin-top: 22px; padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); }
 .portal .ban-panel h3 { margin-top: 0; }
 .portal .ban-panel.is-banned { border-color: #fda4af; }
+.portal .private-preview { width: 100%; min-height: 70vh; border: 1px solid var(--line); border-radius: 12px; background: #000; }
 [hidden] { display: none !important; }

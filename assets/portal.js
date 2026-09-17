@@ -200,11 +200,18 @@ function submissionManager(parent, game) {
       await api('user.submission.update', { ...data, submission_id: game.id }); await account(); notice(game.status === 'rejected' ? '修正を再審査へ送りました。' : '投稿情報を更新しました。');
     }).classList.add('stacked-form');
   }
+  if (['pending', 'approved', 'rejected'].includes(game.status)) button(row, '非公開でプレイ', () => previewSubmission(game.id));
   if (['uploading', 'pending', 'rejected', 'approved'].includes(game.status)) button(row, '投稿を取り下げる', async () => {
     if (!confirm(`「${game.title}」を取り下げますか？`)) { notice('キャンセルしました。'); return; }
     await api('user.submission.withdraw', { submission_id: game.id }); await account(); notice('投稿を取り下げました。');
   }, true);
   parent.append(row);
+}
+async function previewSubmission(submissionId) {
+  const response = await fetch(`${config.supabaseUrl.replace(/\/$/, '')}/functions/v1/portal/preview`, { method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'application/json', ...(config.anonKey ? { apikey: config.anonKey } : {}), 'X-Portal-Session': session.token }, body: JSON.stringify({ submission_id: submissionId }), signal: AbortSignal.timeout(30000) });
+  const result = await response.json(); if (!response.ok || result.error || typeof result.url !== 'string') throw new Error(result.error ?? 'unavailable');
+  const frame = el('iframe', null, { src: result.url, title: '非公開ゲームプレビュー', sandbox: 'allow-scripts', referrerpolicy: 'no-referrer' }); frame.className = 'private-preview';
+  root.replaceChildren(section('非公開ゲームプレビュー'), frame); notice('このプレビューは本人専用で、5分後にURLは失効します。');
 }
 async function dashboard() {
   const [{ admin }, { users }, { submissions }] = await Promise.all([api('admin.me'), api('admin.users', { offset }), api('admin.submissions', { offset: 0 })]);

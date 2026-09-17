@@ -1,10 +1,21 @@
 import { digest, token, readBody, statusFor } from './security.mjs';
 import { downloadPrivateZip, movePrivateZip, storePrivateZip } from './drive.mjs';
 
+const bytes = value => new TextEncoder().encode(value);
+const b64url = value => btoa(String.fromCharCode(...value)).replaceAll('+','-').replaceAll('/','_').replaceAll('=','');
+const unb64url = value => Uint8Array.from(atob(value.replaceAll('-','+').replaceAll('_','/').padEnd(Math.ceil(value.length / 4) * 4, '=')), char => char.charCodeAt(0));
+async function previewKey(pepper) { return crypto.subtle.importKey('raw', await crypto.subtle.digest('SHA-256', bytes(pepper)), 'AES-GCM', false, ['encrypt','decrypt']); }
+async function sealPreview(value, pepper) { const iv=crypto.getRandomValues(new Uint8Array(12)); const encrypted=await crypto.subtle.encrypt({name:'AES-GCM',iv},await previewKey(pepper),bytes(JSON.stringify(value))); return `${b64url(iv)}.${b64url(new Uint8Array(encrypted))}`; }
+async function openPreview(value, pepper) { const [iv,cipher,...rest]=value.split('.'); if (!iv || !cipher || rest.length) throw new Error('invalid_preview'); return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64url(iv)},await previewKey(pepper),unb64url(cipher)))); }
+function zipEntry(data, requested) { const view=new DataView(data.buffer,data.byteOffset,data.byteLength); const u16=i=>view.getUint16(i,true),u32=i=>view.getUint32(i,true); let end=-1; for(let i=data.length-22;i>=Math.max(0,data.length-65557);i--) if(u32(i)===0x06054b50){end=i;break;} if(end<0) throw new Error('invalid_preview'); let at=u32(end+16); const count=u16(end+10); for(let n=0;n<count;n++){ if(u32(at)!==0x02014b50) throw new Error('invalid_preview'); const method=u16(at+10),size=u32(at+20),nameLength=u16(at+28),extra=u16(at+30),comment=u16(at+32),local=u32(at+42); const name=new TextDecoder().decode(data.slice(at+46,at+46+nameLength)); if(name===requested){ if(u32(local)!==0x04034b50 || size>52428800) throw new Error('invalid_preview'); const start=local+30+u16(local+26)+u16(local+28), raw=data.slice(start,start+size); return {method,name,raw}; } at+=46+nameLength+extra+comment; } throw new Error('not_found'); }
+async function unpack(entry) { if(entry.method===0) return entry.raw; if(entry.method===8) return new Uint8Array(await new Response(new Blob([entry.raw]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer()); throw new Error('invalid_preview'); }
+const mime = path => ({html:'text/html; charset=utf-8',htm:'text/html; charset=utf-8',js:'text/javascript; charset=utf-8',mjs:'text/javascript; charset=utf-8',css:'text/css; charset=utf-8',wasm:'application/wasm',json:'application/json',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',webp:'image/webp',svg:'image/svg+xml',mp3:'audio/mpeg',ogg:'audio/ogg',wav:'audio/wav'}[path.split('.').pop().toLowerCase()] ?? 'application/octet-stream');
+
 // Dependency injection keeps the actual HTTP boundary testable without deployed secrets.
 export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleServiceAccountJson = '', googlePendingFolderId = '', googleApprovedFolderId = '', googleRejectedFolderId = '', fetcher = fetch }) {
   const origins = new Set(allowedOrigins.split(',').map(s => s.trim()).filter(Boolean));
   return async request => {
+    const requestUrl = new URL(request.url);
     const origin = request.headers.get('origin');
     const headers = {
       'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store',
@@ -15,6 +26,9 @@ export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleS
     if (origin) headers['Access-Control-Allow-Origin'] = origin;
     headers['Access-Control-Allow-Headers'] = 'content-type, x-portal-session, apikey';
     headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS';
+    if (requestUrl.pathname.includes('/preview/')) {
+      try { const [token, ...parts]=requestUrl.pathname.split('/preview/')[1].split('/'); const preview=await openPreview(token,pepper); if (!preview?.fileId || !Number.isFinite(preview.exp) || preview.exp<Date.now()) throw new Error('invalid_preview'); const path=decodeURIComponent(parts.join('/') || 'index.html'); if (!path || path.includes('..') || path.includes('\\')) throw new Error('invalid_preview'); const zip=await downloadPrivateZip({serviceAccountJson:googleServiceAccountJson,fileId:preview.fileId,fetcher}); const entry=zipEntry(new Uint8Array(await new Response(zip.body).arrayBuffer()),path); return new Response(await unpack(entry),{headers:{'Content-Type':mime(path),'Cache-Control':'no-store','Content-Security-Policy':"sandbox allow-scripts; default-src 'self' data: blob:; connect-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline';"}}); } catch { return new Response('Not found',{status:404,headers:{'Cache-Control':'no-store'}}); }
+    }
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers });
     if (request.method !== 'POST') return reply({ error: 'method_not_allowed' }, 405);
     if (!url || !serviceKey || !pepper || pepper.length < 32 || origins.size === 0 || origins.has('*')) {
@@ -40,7 +54,11 @@ export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleS
     };
     // ZIPs are accepted only through this authenticated server path. They are
     // stored in a Drive folder shared with the service account, never published.
-    if (new URL(request.url).pathname.endsWith('/upload')) {
+    if (requestUrl.pathname.endsWith('/preview')) {
+      const supplied=request.headers.get('x-portal-session'); if (!/^[a-f0-9]{64}$/.test(supplied ?? '') || !googleServiceAccountJson) return reply({error:'unauthorized'},401);
+      try { const {submission_id:submissionId}=await privateJson(); if(typeof submissionId!=='string') return reply({error:'invalid_request'},400); const prepared=await rpc('user.submission.preview',{submission_id:submissionId},supplied); const failed=internalError(prepared); if(failed)return failed; const token=await sealPreview({fileId:prepared.result.submission.drive_file_id,exp:Date.now()+5*60*1000},pepper); return reply({url:`${url.replace(/\/$/,'')}/functions/v1/portal/preview/${token}/index.html`}); } catch { return reply({error:'unavailable'},503); }
+    }
+    if (requestUrl.pathname.endsWith('/upload')) {
       const supplied = request.headers.get('x-portal-session');
       if (!/^[a-f0-9]{64}$/.test(supplied ?? '')) return reply({ error: 'unauthorized' }, 401);
       if (!googleServiceAccountJson || !googlePendingFolderId) return reply({ error: 'unavailable' }, 503);
