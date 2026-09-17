@@ -20,6 +20,9 @@
 .portal .avatar { display: grid; place-items: center; flex: 0 0 72px; width: 72px; height: 72px; font-size: 2.25rem; background: var(--panel-2); border: 1px solid var(--line); border-radius: 50%; }
 .portal .steps { display: grid; gap: 8px; padding: 14px 14px 14px 36px; background: var(--panel-2); border-radius: 10px; line-height: 1.6; }
 .portal .steps li::marker { color: var(--accent); font-weight: 700; }
+.portal form.stacked-form { display: grid; max-width: 640px; align-items: stretch; }
+.portal form.stacked-form label { display: grid; }
+.portal form.stacked-form button { justify-self: start; }
 .portal .ban-panel { margin-top: 22px; padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); }
 .portal .ban-panel h3 { margin-top: 0; }
 .portal .ban-panel.is-banned { border-color: #fda4af; }
