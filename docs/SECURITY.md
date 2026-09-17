@@ -18,7 +18,7 @@
 
 ## セッションと競合
 
-Web Cryptoの暗号学的乱数32バイトからトークンを作り、HMAC-SHA-256（server-only pepper）だけをDBへ保存します。ブラウザーは`X-Portal-Session`で送ります。cookieを使用せず、CORSはorigin完全一致、レスポンスは`no-store`です。CORSは認可の代替ではありません。originなしのCLIリクエストも同じセッション検証を通ります。
+Web Cryptoの暗号学的乱数32バイトからトークンを作り、HMAC-SHA-256（server-only pepper）だけをDBへ保存します。ブラウザーは`X-Portal-Session`で送ります。トークンは同じブラウザータブ内だけの`sessionStorage`に保持し、再読み込み・ポータル内のページ移動では復元、タブを閉じると消去されます。cookieを使用せず、CORSはorigin完全一致、レスポンスは`no-store`です。CORSは認可の代替ではありません。originなしのCLIリクエストも同じセッション検証を通ります。
 
 ログイン・認可・管理操作はDBトランザクション内で対象ユーザー行をロックします。保護操作はprincipalを特定→行ロック→セッション再読み込みの順です。これによりBAN/KICKと競合した処理が、失効前に読んだセッションだけで実行を続けることを防ぎます。BAN前に完了した操作を遡って取り消すことはできません。今後の投稿操作も同じトランザクション境界の認可を利用し、先に`user.me`だけを呼んで認可済みとみなさないでください。
 
@@ -26,7 +26,7 @@ Rate limitはDBのatomic upsertで実装し、失敗応答を例外にせずカ�
 
 ## 公開ゲームと管理画面のorigin
 
-現在のGitHub Pages版はゲームHTMLと管理画面が同一originです。localStorage/sessionStorage/cookieにトークンを置かないことで永続ストレージからの窃取を避けますが、**悪意ある同一originのゲームから管理画面を完全隔離することはできません**。同一originのwindow参照やService Workerもリスクです。現段階では所有者が信頼する既存ゲームだけを公開してください。
+現在のGitHub Pages版はゲームHTMLと管理画面が同一originです。ログイン継続のためタブ限定の`sessionStorage`に不透明トークンを置くため、**悪意ある同一originのゲームから管理画面を完全隔離することはできません**。同一originのスクリプト、window参照やService Workerからの窃取もリスクです。現段階では所有者が信頼する既存ゲームだけを公開してください。公開投稿ゲームを扱う前に、ゲームと管理画面のoriginを分離してください。
 
 第三者ZIP公開のPhase 3/4へ進む前に、ゲームの配信を別originへ分離し、管理originに未信頼HTML/JSやService Workerを配信しない設計が必須です。管理画面のプレビューでZIP内HTMLを直接実行しません。追加ページのCSPとtextContentによる描画は追加防御であり、同一origin問題の解決ではありません。
 
