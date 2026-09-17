@@ -12,6 +12,9 @@
 | user.profile | display_name, avatar_key | 一般セッション / user。表示名は1〜40文字、アイコンは固定候補の識別子のみ |
 | user.rename | username | 一般セッション / user |
 | user.password | current_password, password | 本人用パスワード照合 / ok, reauthenticate |
+| user.submissions | なし | 一般セッション / 自分の投稿一覧（最大100件） |
+| user.submission.update | submission_id, title, engine, description（任意）, version, controls（任意） | 一般セッション / 自分の未完了・審査待ち・却下投稿を更新。却下投稿は再審査待ちへ戻る |
+| user.submission.withdraw | submission_id | 一般セッション / 自分の投稿を取り下げ。ZIPは非公開保管を継続 |
 | admin.me | なし | 管理セッション / admin |
 | admin.users | offset（任意、非負整数） | 管理 / users、最大100件 |
 | admin.audit | before_id（任意、非負整数） | 管理 / events、新しい順100件 |

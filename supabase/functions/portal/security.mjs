@@ -4,7 +4,7 @@ export const actions = new Set([
   'admin.passwords', 'admin.password.add', 'admin.password.revoke', 'admin.kick',
   'admin.ban', 'admin.unban', 'admin.disable', 'admin.enable',
   'admin.submissions',
-  'user.submissions', 'user.submission.create', 'user.submission.prepare',
+  'user.submissions', 'user.submission.create', 'user.submission.update', 'user.submission.withdraw', 'user.submission.prepare',
 ]);
 
 export function token() {

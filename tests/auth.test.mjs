@@ -222,6 +222,24 @@ test('private game submission metadata hides Drive identifiers from users', asyn
   assert.notEqual(created.user.id, uid);
 });
 
+test('submitters can manage only their own pending and rejected game metadata', async () => {
+  const created = await api('admin.create', { username: 'manager_user', password: 'manager-password', role: 'uploader' }, adminToken);
+  const owner = await login('manager_user', 'manager-password');
+  const made = await api('user.submission.create', { title: 'Original', engine: 'godot', description: '', version: '1.0.0', controls: '' }, owner.hash);
+  const updated = await api('user.submission.update', { submission_id: made.submission.id, title: 'Updated', engine: 'scratch', description: 'edited', version: '1.0.1', controls: 'keys' }, owner.hash);
+  assert.equal(updated.submission.title, 'Updated');
+  assert.equal(updated.submission.engine, 'scratch');
+  await api('admin.create', { username: 'manager_other', password: 'other-manager-password', role: 'uploader' }, adminToken);
+  const other = await login('manager_other', 'other-manager-password');
+  assert.equal((await api('user.submission.update', { submission_id: made.submission.id, title: 'Nope', engine: 'other', description: '', version: '2', controls: '' }, other.hash)).error, 'not_found');
+  await db.query("update portal_private.game_submissions set status='rejected', drive_file_id='manager-file' where id=$1", [made.submission.id]);
+  const resubmitted = await api('user.submission.update', { submission_id: made.submission.id, title: 'Fixed', engine: 'godot', description: '', version: '1.0.2', controls: '' }, owner.hash);
+  assert.equal(resubmitted.submission.status, 'pending');
+  const withdrawn = await api('user.submission.withdraw', { submission_id: made.submission.id }, owner.hash);
+  assert.equal(withdrawn.submission.status, 'unpublished');
+  assert.equal((await api('user.submission.update', { submission_id: made.submission.id, title: 'Again', engine: 'godot', description: '', version: '3', controls: '' }, owner.hash)).error, 'conflict');
+  assert.notEqual(created.user.id, uid);
+});
 test('expired and deactivated admin sessions cannot perform management', async () => {
   const next = await login('owner', adminPassword, true);
   await db.query("update portal_private.sessions set expires_at=now()-interval '1 second' where token_hash=$1", [next.hash]);

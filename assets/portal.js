@@ -178,10 +178,33 @@ async function account() {
   form(credentials, [password('current_password', '現在の本人用パスワード', false), password('password', '新しい本人用パスワード')], 'パスワードを変更', async data => {
     await api('user.password', data); clearSession(); login(); notice('パスワードを変更しました。再ログインしてください。');
   });
-  const submissions = section('投稿したゲーム');
+  const submissions = section('投稿したゲームの管理');
   const result = await api('user.submissions');
   if (!result.submissions.length) submissions.append(el('p', '投稿はまだありません。'));
-  for (const game of result.submissions) submissions.append(el('p', `${game.title} / ${game.engine} / ${game.status} / ${game.created_at}`));
+  for (const game of result.submissions) submissionManager(submissions, game);
+}
+function submissionManager(parent, game) {
+  const row = el('div', null, { class: 'row submission-manager' });
+  row.append(el('h3', game.title));
+  row.append(el('p', `${game.engine} / バージョン ${game.version} / ${game.status}`, { class: 'muted' }));
+  if (game.review_reason) row.append(el('p', `審査メモ: ${game.review_reason}`, { class: 'muted' }));
+  const editable = ['uploading', 'pending', 'rejected'].includes(game.status);
+  if (editable) {
+    form(row, [
+      field('title', 'ゲーム名', 'text', { value: game.title, maxlength: '120' }),
+      field('engine', 'エンジン', 'select', { value: game.engine, choices: [['godot','Godot'],['scratch','Scratch / TurboWarp'],['other','その他']] }),
+      field('description', '説明（任意）', 'text', { value: game.description, maxlength: '4000', optional: true }),
+      field('version', 'バージョン', 'text', { value: game.version, maxlength: '80' }),
+      field('controls', '操作説明（任意）', 'text', { value: game.controls, maxlength: '2000', optional: true }),
+    ], game.status === 'rejected' ? '修正して再審査へ' : '変更を保存', async data => {
+      await api('user.submission.update', { ...data, submission_id: game.id }); await account(); notice(game.status === 'rejected' ? '修正を再審査へ送りました。' : '投稿情報を更新しました。');
+    }).classList.add('stacked-form');
+  }
+  if (['uploading', 'pending', 'rejected', 'approved'].includes(game.status)) button(row, '投稿を取り下げる', async () => {
+    if (!confirm(`「${game.title}」を取り下げますか？`)) { notice('キャンセルしました。'); return; }
+    await api('user.submission.withdraw', { submission_id: game.id }); await account(); notice('投稿を取り下げました。');
+  }, true);
+  parent.append(row);
 }
 async function dashboard() {
   const [{ admin }, { users }, { submissions }] = await Promise.all([api('admin.me'), api('admin.users', { offset }), api('admin.submissions', { offset: 0 })]);
@@ -320,7 +343,11 @@ async function upload() {
   const { submissions } = await api('user.submissions');
   const history = section('投稿履歴');
   if (!submissions.length) history.append(el('p', '投稿はまだありません。'));
-  for (const game of submissions) history.append(el('p', `${game.title} / ${game.status} / ${game.created_at}`));
+  for (const game of submissions) {
+    const row = el('div', null, { class: 'row' });
+    row.append(el('p', `${game.title} / ${game.status} / ${game.created_at}`));
+    const link = el('a', 'アカウントで管理', { href: '../account/' }); row.append(link); history.append(row);
+  }
 }
 
 async function start() {
