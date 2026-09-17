@@ -289,12 +289,11 @@ async function upload() {
   const { user } = await api('user.me'); root.replaceChildren();
   const s = section('ゲーム投稿'); logoutButton(s);
   if (user.role !== 'uploader') { s.append(el('p', 'このアカウントには投稿権限がありません。管理者に投稿可能ユーザーへの変更を依頼してください。')); return; }
-  s.append(el('p', '投稿データは公開されません。管理者が確認するまで、Google Driveの非公開フォルダーにだけ保管されます。', { class: 'muted' }));
   const steps = el('ol', null, { class: 'steps' });
   for (const text of ['ゲーム情報を入力', '次の画面でZIPを選択', '非公開で保管・管理者の審査を待つ']) steps.append(el('li', text));
   s.append(steps);
   s.append(el('h3', '1. ゲーム情報を入力'));
-  s.append(el('p', 'ゲーム名・エンジン・説明・バージョンは、好きな順番で入力できます。説明と操作説明は後からでも追加できます。', { class: 'muted' }));
+  s.append(el('p', '上から順番でなくても入力できます。説明と操作説明は任意です。', { class: 'muted' }));
   const submissionForm = form(s, [field('title', 'ゲーム名', 'text', { maxlength: '120' }), field('engine', 'エンジン', 'select', { choices: [['godot','Godot'],['scratch','Scratch / TurboWarp'],['other','その他']] }), field('description', '説明（任意）', 'text', { maxlength: '4000', optional: true }), field('version', 'バージョン', 'text', { value: '1.0.0', maxlength: '80' }), field('controls', '操作説明（任意）', 'text', { maxlength: '2000', optional: true })], 'ZIPを選択する', async data => {
     const { submission } = await api('user.submission.create', data); await uploadPackage(submission);
   });
