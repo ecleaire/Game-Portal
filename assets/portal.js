@@ -24,6 +24,7 @@ const errors = {
   password_limit: '代替パスワードは最大5件です。',
   not_found: '対象が見つかりません。画面を更新してください。',
   unavailable: 'サーバーに接続できません。設定を確認し、しばらくして再試行してください。',
+  drive_unavailable: '投稿用のGoogle Driveに接続できません。管理者がGoogle Drive API、サービスアカウント、投稿先フォルダーの共有設定を確認してください。',
 };
 function el(tag, text, attrs = {}) {
   const node = document.createElement(tag);

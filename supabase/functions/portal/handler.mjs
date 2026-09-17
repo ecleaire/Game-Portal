@@ -76,7 +76,8 @@ export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleS
         return reply(after.result);
       } catch (error) {
         const name = error?.message;
-        return reply({ error: name === 'invalid_upload' ? 'invalid_request' : 'unavailable' }, name === 'invalid_upload' ? 400 : 503);
+        const uploadError = name === 'invalid_upload' ? 'invalid_request' : name === 'drive_unavailable' ? 'drive_unavailable' : 'unavailable';
+        return reply({ error: uploadError }, uploadError === 'invalid_request' ? 400 : 503);
       }
     }
     // Review and download never expose a Drive ID to the browser. They invoke
