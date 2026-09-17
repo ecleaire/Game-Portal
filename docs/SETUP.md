@@ -16,7 +16,7 @@ supabase db push --dry-run
 supabase db push
 ```
 
-SQLはmigration番号順に適用します。現在は`202609130001_foundation.sql`、`202609130002_admin_management.sql`、`202609140003_password_minimum_length.sql`、`202609140004_private_game_submissions.sql`、`202609160005_submission_review.sql`です。既存プロジェクトで同名スキーマ/関数がある場合は先に競合を調べます。移行済みSQLの書き換えではなく、新しいmigrationで変更してください。
+SQLはmigration番号順に適用します。現在は`202609130001_foundation.sql`から`202609170008_account_profile.sql`までです。既存プロジェクトで同名スキーマ/関数がある場合は先に競合を調べます。移行済みSQLの書き換えではなく、新しいmigrationで変更してください。
 
 6. パスワードマネージャー等で32バイト以上の暗号学的乱数を生成し、`SESSION_TOKEN_PEPPER`に使います。例の値を使い回さないでください。ローカルの`.env.edge`を作成し、以下の2項目だけを設定します。
 

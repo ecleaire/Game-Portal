@@ -76,6 +76,15 @@ test('user/admin sessions cannot cross authorization boundaries or spoof privile
   const users = await api('admin.users', {}, adminToken);
   assert.equal(users.users[0].id, uid);
 });
+test('users can update only their own safe display profile', async () => {
+  const changed = await api('user.profile', { display_name: 'Alice Player', avatar_key: 'rocket' }, userToken);
+  assert.equal(changed.user.display_name, 'Alice Player');
+  assert.equal(changed.user.avatar_key, 'rocket');
+  assert.equal((await api('user.me', {}, userToken)).user.display_name, 'Alice Player');
+  await assert.rejects(api('user.profile', { display_name: '   ', avatar_key: 'rocket' }, userToken), /display name/);
+  await assert.rejects(api('user.profile', { display_name: 'Alice', avatar_key: 'https://example.test/icon.png' }, userToken), /avatar key/);
+  assert.equal((await api('user.profile', { display_name: 'Alice', avatar_key: 'star' }, adminToken)).error, 'forbidden');
+});
 test('password validation, atomic failed creation and case-insensitive username uniqueness', async () => {
   await assert.rejects(api('admin.create', { username: 'bob', password: 'four' }, adminToken), /password/);
   assert.equal((await api('admin.users', {}, adminToken)).users.length, 1);

@@ -83,6 +83,12 @@ const password = (name = 'password', title = 'パスワード', fresh = true) =>
   autocomplete: fresh ? 'new-password' : 'current-password', minlength: '5', maxlength: '72',
 });
 const role = () => field('role', 'ユーザー権限', 'select', { choices: [['player', '一般ユーザー'], ['uploader', '投稿可能ユーザー']] });
+const avatars = [
+  ['gamepad', '🎮 ゲームパッド'], ['star', '⭐ スター'], ['rocket', '🚀 ロケット'],
+  ['puzzle', '🧩 パズル'], ['palette', '🎨 パレット'], ['lightning', '⚡ ライトニング'],
+  ['cat', '🐱 ねこ'], ['fox', '🦊 きつね'], ['panda', '🐼 パンダ'],
+];
+const avatarGlyph = key => ({ gamepad: '🎮', star: '⭐', rocket: '🚀', puzzle: '🧩', palette: '🎨', lightning: '⚡', cat: '🐱', fox: '🦊', panda: '🐼' }[key] ?? '🎮');
 function form(parent, fields, submitText, submit) {
   const f = el('form', null);
   for (const { name, title, type, choices, optional, value, ...attrs } of fields) {
@@ -128,12 +134,29 @@ async function account() {
   const { user } = await api('user.me');
   root.replaceChildren();
   const s = section('アカウント');
-  s.append(el('p', `${user.username} / ${user.role} / ${user.status}`));
+  const overview = el('div', null, { class: 'account-overview' });
+  overview.append(el('span', avatarGlyph(user.avatar_key), { class: 'avatar', 'aria-hidden': 'true' }));
+  const details = el('div', null);
+  details.append(el('p', user.display_name, { class: 'account-name' }));
+  details.append(el('p', `ログイン用ユーザー名: ${user.username}`, { class: 'muted' }));
+  details.append(el('p', `権限: ${user.role} / 状態: ${user.status}`, { class: 'muted' }));
+  if (user.created_at) details.append(el('p', `登録日: ${new Date(user.created_at).toLocaleDateString('ja-JP')}`, { class: 'muted' }));
+  overview.append(details); s.append(overview);
   logoutButton(s);
-  form(s, [{ ...username(), value: user.username }], 'ユーザー名を変更', async data => {
+  const profile = section('プロフィール');
+  profile.append(el('p', '表示名とアイコンはゲーム投稿などで表示するための情報です。ログイン用ユーザー名やパスワードとは別に管理されます。', { class: 'muted' }));
+  form(profile, [
+    field('display_name', '表示名', 'text', { value: user.display_name, maxlength: '40', autocomplete: 'nickname' }),
+    field('avatar_key', 'アイコン', 'select', { value: user.avatar_key, choices: avatars }),
+  ], 'プロフィールを保存', async data => {
+    await api('user.profile', data); await account(); notice('プロフィールを保存しました。');
+  });
+  const credentials = section('ログイン情報');
+  credentials.append(el('p', 'ログイン用ユーザー名を変更すると、次回から新しい名前でログインします。', { class: 'muted' }));
+  form(credentials, [{ ...username(), value: user.username, title: 'ログイン用ユーザー名' }], 'ログイン用ユーザー名を変更', async data => {
     await api('user.rename', data); await account(); notice('ユーザー名を変更しました。');
   });
-  form(s, [password('current_password', '現在の本人用パスワード', false), password('password', '新しい本人用パスワード')], 'パスワードを変更', async data => {
+  form(credentials, [password('current_password', '現在の本人用パスワード', false), password('password', '新しい本人用パスワード')], 'パスワードを変更', async data => {
     await api('user.password', data); session = null; login(); notice('パスワードを変更しました。再ログインしてください。');
   });
   const submissions = section('投稿したゲーム');
