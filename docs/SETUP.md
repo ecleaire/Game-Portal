@@ -64,7 +64,20 @@ node --env-file=.env.bootstrap scripts/bootstrap-admin.mjs
 revoke execute on function public.portal_bootstrap(text,text) from service_role;
 ```
 
-管理者パスワード変更・追加管理者UIは今回の範囲外です。初期パスワード紛失時は、DB所有者が安全なパラメーター化された管理接続からハッシュを更新し、その管理者の全セッションを失効させます。bootstrapの存在チェックを削除して復旧しないでください。
+管理者パスワード変更・追加管理者UIは今回の範囲外です。初期パスワードを紛失した場合は、先に `202609170007_admin_password_recovery.sql` を適用し、端末の非共有ディレクトリに次の秘密ファイルを作成して実行します。値をチャット、Issue、コマンド引数、SQL Editor、READMEへ貼らないでください。
+
+```dotenv
+SUPABASE_URL=https://PROJECT_REF.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=...
+ADMIN_USERNAME=kanri
+ADMIN_RESET_PASSWORD=5文字以上72UTF-8バイト以下の新しいパスワード
+```
+
+```sh
+node --env-file=/absolute/path/to/.env.admin-reset scripts/reset-admin-password.mjs
+```
+
+成功すると対象super adminの全セッションを失効させ、bcryptハッシュだけを更新します。実行直後に秘密ファイルを削除し、bootstrapの存在チェックを削除して復旧しないでください。
 
 ## 3. 所有者が行う必要がある手順：GitHub Pages
 
