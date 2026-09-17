@@ -14,4 +14,8 @@
 .portal .list { display: grid; gap: 12px; }
 .portal .row { padding: 16px; border: 1px solid var(--line); border-radius: 10px; overflow-wrap: anywhere; }
 .portal pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.portal .account-overview { display: flex; gap: 16px; align-items: center; }
+.portal .account-overview p { margin: 4px 0; }
+.portal .account-name { font-size: 1.25rem; font-weight: 700; }
+.portal .avatar { display: grid; place-items: center; flex: 0 0 72px; width: 72px; height: 72px; font-size: 2.25rem; background: var(--panel-2); border: 1px solid var(--line); border-radius: 50%; }
 [hidden] { display: none !important; }

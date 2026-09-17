@@ -9,6 +9,7 @@
 | admin.login | username, password | 公開 / token, expires_at, admin |
 | logout | なし | 有効セッション / ok |
 | user.me | なし | 一般セッション / user |
+| user.profile | display_name, avatar_key | 一般セッション / user。表示名は1〜40文字、アイコンは固定候補の識別子のみ |
 | user.rename | username | 一般セッション / user |
 | user.password | current_password, password | 本人用パスワード照合 / ok, reauthenticate |
 | admin.me | なし | 管理セッション / admin |
