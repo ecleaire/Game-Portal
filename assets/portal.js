@@ -302,22 +302,13 @@ async function showAudit(parent) {
   parent.append(results);
 }
 
-function uploadPackage(parent, submission) {
-  const s = el('section', null, { class: 'zip-upload-step' }); parent.append(s);
-  s.append(el('h3', '2. ゲームZIPを選択'));
-  s.append(el('p', `${submission.title} のZIPを選択して送信してください。`, { class: 'muted' }));
-  const f = el('form', null); const label = el('label', 'ゲームZIP（最大50MB）');
-  const input = el('input', null, { type: 'file', name: 'package', accept: '.zip,application/zip', required: 'required' });
-  label.append(input); f.append(label); f.append(el('button', '非公開で保管', { type: 'submit' }));
-  f.addEventListener('submit', event => { event.preventDefault(); run(async () => {
-    const file = input.files?.[0]; if (!file) throw new Error('invalid_request');
-    const body = new FormData(); body.set('submission_id', submission.id); body.set('package', file);
+async function uploadPackage(submissionId, file) {
+    if (!file) throw new Error('invalid_request');
+    const body = new FormData(); body.set('submission_id', submissionId); body.set('package', file);
     const response = await fetch(`${config.supabaseUrl.replace(/\/$/, '')}/functions/v1/portal/upload`, { method: 'POST', credentials: 'omit',
       headers: { ...(config.anonKey ? { apikey: config.anonKey } : {}), 'X-Portal-Session': session.token }, body, signal: AbortSignal.timeout(120000) });
     const result = await response.json(); if (!response.ok || result.error) throw new Error(result.error ?? 'unavailable');
     await upload(); notice('非公開で保管しました。審査待ちです。');
-  }); });
-  s.append(f);
 }
 async function reviewSubmission(submissionId, decision, reason = '') {
   const response = await fetch(`${config.supabaseUrl.replace(/\/$/, '')}/functions/v1/portal/review`, { method: 'POST', credentials: 'omit',
@@ -343,10 +334,13 @@ async function upload() {
   s.append(steps);
   s.append(el('h3', '1. ゲーム情報を入力'));
   s.append(el('p', '上から順番でなくても入力できます。説明と操作説明は任意です。', { class: 'muted' }));
-  const submissionForm = form(s, [field('title', 'ゲーム名', 'text', { maxlength: '120' }), field('engine', 'エンジン', 'select', { choices: [['godot','Godot'],['scratch','Scratch / TurboWarp'],['other','その他']] }), field('description', '説明（任意）', 'text', { maxlength: '4000', optional: true }), field('version', 'バージョン', 'text', { value: '1.0.0', maxlength: '80' }), field('controls', '操作説明（任意）', 'text', { maxlength: '2000', optional: true })], 'ZIP選択へ進む', async data => {
-    const { submission } = await api('user.submission.create', data); submissionForm.hidden = true; uploadPackage(s, submission); notice('ZIPを選択してください。');
+  const submissionForm = form(s, [field('title', 'ゲーム名', 'text', { maxlength: '120' }), field('engine', 'エンジン', 'select', { choices: [['godot','Godot'],['scratch','Scratch / TurboWarp'],['other','その他']] }), field('description', '説明（任意）', 'text', { maxlength: '4000', optional: true }), field('version', 'バージョン', 'text', { value: '1.0.0', maxlength: '80' }), field('controls', '操作説明（任意）', 'text', { maxlength: '2000', optional: true })], '投稿して審査へ送る', async data => {
+    const file = submissionForm.elements.package?.files?.[0]; delete data.package; const { submission } = await api('user.submission.create', data); await uploadPackage(submission.id, file);
   });
   submissionForm.classList.add('stacked-form');
+  const packageLabel = el('label', 'ゲームZIP（最大50MB）');
+  const packageInput = el('input', null, { type: 'file', name: 'package', accept: '.zip,application/zip', required: 'required' });
+  packageLabel.append(packageInput); submissionForm.querySelector('button[type=submit]').before(packageLabel);
   const { submissions } = await api('user.submissions');
   const history = section('投稿履歴');
   if (!submissions.length) history.append(el('p', '投稿はまだありません。'));
