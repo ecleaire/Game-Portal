@@ -8,15 +8,16 @@
   <link rel="stylesheet" href="assets/style.css" />
 </head>
 <body class="play-page">
-  <header class="play-header">
-    <a href="index.html" class="back-link">← ゲーム一覧</a>
-    <div class="play-actions">
-      <button id="fullscreenButton" class="action-button">全画面</button>
+  <header class="site-header">
+    <div class="header-inner">
+      <div><p class="eyebrow">MY GAME LIBRARY</p><h1><a href="./" aria-label="GAME PORTAL ホーム">GAME PORTAL</a></h1></div>
+      <nav aria-label="アカウント"><a href="login/" data-portal-login>ログイン</a> · <a href="account/" data-portal-account hidden>アカウント</a> · <a href="upload/">投稿</a> · <a href="admin/">管理</a></nav>
     </div>
   </header>
 
   <main class="play-container">
     <section class="game-info">
+      <button id="fullscreenButton" class="action-button">全画面</button>
       <div>
         <p id="engineLabel" class="engine-label"></p>
         <h1 id="gameTitle">Loading...</h1>
@@ -46,6 +47,7 @@
     </section>
   </main>
 
+  <script type="module" src="assets/navigation.js"></script>
   <script src="assets/play.js"></script>
 </body>
 </html>
