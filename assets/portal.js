@@ -5,8 +5,10 @@ const message = document.querySelector('#message');
 const adminMode = document.body.dataset.page === 'admin';
 const uploadMode = document.body.dataset.page === 'upload';
 const accountMode = document.body.dataset.page === 'account';
-// Tokens live only in this document. Existing games share the Pages origin, so never
-// put privileged credentials in localStorage/sessionStorage or a readable cookie.
+// An opaque token survives navigation only within this browser tab. It is always
+// verified by the server before a protected action, so KICK/BAN takes effect at once.
+// User and administrator sessions intentionally have separate storage keys.
+const sessionKey = `game-portal.${adminMode ? 'admin' : 'user'}.session.v1`;
 let session = null;
 let selected = null;
 let offset = 0;
@@ -30,9 +32,19 @@ function el(tag, text, attrs = {}) {
   return node;
 }
 function notice(text) { message.textContent = text; }
+function saveSession(next) {
+  session = next;
+  if (next?.token && /^[a-f0-9]{64}$/.test(next.token)) sessionStorage.setItem(sessionKey, next.token);
+  else sessionStorage.removeItem(sessionKey);
+}
+function clearSession() { saveSession(null); }
+function restoreSession() {
+  const token = sessionStorage.getItem(sessionKey);
+  if (/^[a-f0-9]{64}$/.test(token ?? '')) session = { token };
+  else sessionStorage.removeItem(sessionKey);
+  return session;
+}
 function syncLoginLink() {
-  // A session never leaves this document. Keep the navigation action aligned
-  // with the session that exists in this page.
   document.querySelectorAll('a[data-portal-login], a[href$="/login/"]').forEach(link => {
     link.dataset.portalLogin = 'true';
     if (!link.dataset.loginHref) link.dataset.loginHref = link.href;
@@ -47,9 +59,10 @@ function syncLoginLink() {
     }
   });
   document.querySelectorAll('a[data-portal-account], a[href$="/account/"]').forEach(link => {
+    if (!link.dataset.accountHref) link.dataset.accountHref = link.href;
     link.hidden = !session;
-    if (session) { link.href = '#account'; link.onclick = event => { event.preventDefault(); run(account); }; }
-    else link.onclick = null;
+    link.href = link.dataset.accountHref;
+    link.onclick = null;
   });
 }
 async function run(task) {
@@ -70,7 +83,7 @@ async function api(action, data = {}) {
   });
   const result = await response.json();
   if (!response.ok || result.error) {
-    if (response.status === 401) { session = null; login(); }
+    if (response.status === 401) { clearSession(); login(); }
     throw new Error(result.error ?? 'unavailable');
   }
   return result;
@@ -121,9 +134,9 @@ function login() {
   root.replaceChildren();
   const s = section(adminMode ? '管理者ログイン' : 'ユーザーログイン');
   s.append(el('p', 'アカウントは管理者が作成します。メールアドレスは不要です。', { class: 'muted' }));
-  s.append(el('p', '安全のためログイン状態はこの画面内だけで保持します。再読み込み・別ページへの移動後は再ログインしてください。', { class: 'muted' }));
+  s.append(el('p', 'ログイン状態は、このブラウザの同じタブ内でページを切り替えても維持されます。', { class: 'muted' }));
   form(s, [username(), password('password', 'パスワード', false)], 'ログイン', async data => {
-    session = await api(adminMode ? 'admin.login' : 'user.login', data);
+    saveSession(await api(adminMode ? 'admin.login' : 'user.login', data));
     syncLoginLink();
     if (adminMode) { offset = 0; selected = null; await dashboard(); } else if (uploadMode) await upload(); else await account();
     notice('ログインしました。');
@@ -131,7 +144,7 @@ function login() {
 }
 async function logout() {
   try { await api('logout'); }
-  finally { session = null; syncLoginLink(); login(); notice('ログアウトしました。'); }
+  finally { clearSession(); syncLoginLink(); login(); notice('ログアウトしました。'); }
 }
 function logoutButton(parent) {
   button(parent, 'ログアウト', logout);
@@ -163,7 +176,7 @@ async function account() {
     await api('user.rename', data); await account(); notice('ユーザー名を変更しました。');
   });
   form(credentials, [password('current_password', '現在の本人用パスワード', false), password('password', '新しい本人用パスワード')], 'パスワードを変更', async data => {
-    await api('user.password', data); session = null; login(); notice('パスワードを変更しました。再ログインしてください。');
+    await api('user.password', data); clearSession(); login(); notice('パスワードを変更しました。再ログインしてください。');
   });
   const submissions = section('投稿したゲーム');
   const result = await api('user.submissions');
@@ -310,13 +323,25 @@ async function upload() {
   for (const game of submissions) history.append(el('p', `${game.title} / ${game.status} / ${game.created_at}`));
 }
 
-if (uploadMode) {
-  if (!config.supabaseUrl) section('投稿サービスは未設定です').append(el('p', '管理者がSupabaseと非公開保管領域を設定すると利用できます。'));
-  else login();
-} else if (!config.supabaseUrl) {
-  section('認証サービスは未設定です').append(el('p', '管理者がSupabaseの設定を完了すると利用できます。公開済みゲームは引き続き遊べます。'));
-} else if (accountMode) location.replace('../login/');
-else login();
+async function start() {
+  if (!config.supabaseUrl) {
+    if (uploadMode) section('投稿サービスは未設定です').append(el('p', '管理者がSupabaseと非公開保管領域を設定すると利用できます。'));
+    else section('認証サービスは未設定です').append(el('p', '管理者がSupabaseの設定を完了すると利用できます。公開済みゲームは引き続き遊べます。'));
+    return;
+  }
+  if (!restoreSession()) { login(); return; }
+  try {
+    if (adminMode) { await api('admin.me'); offset = 0; selected = null; await dashboard(); }
+    else { await api('user.me'); if (uploadMode) await upload(); else await account(); }
+  } catch (error) {
+    clearSession();
+    login();
+    if (error.message !== 'unauthorized') notice(errors[error.message] ?? 'セッションの復元に失敗しました。');
+  }
+}
+start();
+
+
 
 // A failed/expired session stops account/admin actions; KICK is noticed while idle too.
 setInterval(async () => {
@@ -324,5 +349,3 @@ setInterval(async () => {
   try { await api(adminMode ? 'admin.me' : 'user.me'); }
   catch (error) { notice(errors[error.message] ?? 'セッション確認に失敗しました。'); }
 }, 60000);
-window.addEventListener('pagehide', () => { session = null; root.replaceChildren(); });
-window.addEventListener('pageshow', event => { if (event.persisted) location.reload(); });

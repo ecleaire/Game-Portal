@@ -56,7 +56,9 @@ test('browser flows connect to the real Edge handler and migrated database', asy
   await user.getByRole('button', { name: 'ログイン', exact: true }).click();
   await expect(user.getByRole('button', { name: 'パスワードを変更', exact: true })).toBeVisible();
   await expect(user.locator('#portal')).not.toContainText('support');
-  expect(await user.evaluate(() => ({ local: localStorage.length, session: sessionStorage.length }))).toEqual({ local: 0, session: 0 });
+  expect(await user.evaluate(() => ({ local: localStorage.length, session: sessionStorage.length }))).toEqual({ local: 0, session: 1 });
+  await user.reload();
+  await expect(user.getByRole('button', { name: 'パスワードを変更', exact: true })).toBeVisible();
 
   page.on('dialog', dialog => dialog.accept());
   await selected.getByRole('button', { name: 'KICK（全端末をログアウト）' }).click();
