@@ -1,7 +1,16 @@
 import { test, expect } from '@playwright/test';
 
+async function goto(page, path) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try { return await page.goto(path); }
+    catch (error) {
+      if (attempt || !String(error).includes('ERR_ABORTED')) throw error;
+    }
+  }
+}
+
 test('existing listing, search and public game player work without backend configuration', async ({ page }) => {
-  await page.goto('./');
+  await goto(page, './');
   await expect(page.locator('.game-card')).toHaveCount(2);
   await page.locator('#searchInput').fill('Scratch');
   await expect(page.locator('.game-card')).toHaveCount(1);
@@ -12,7 +21,7 @@ test('existing listing, search and public game player work without backend confi
   await page.goto('admin/');
   await expect(page.getByRole('heading', { name: '認証サービスは未設定です' })).toBeVisible();
   await page.goto('upload/');
-  await expect(page.getByText(/投稿機能は準備中/)).toBeVisible();
+  await expect(page.getByRole('heading', { name: '投稿サービスは未設定です' })).toBeVisible();
 });
 
 test('browser flows connect to the real Edge handler and migrated database', async ({ context, page }) => {

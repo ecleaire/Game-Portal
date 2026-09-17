@@ -25,6 +25,9 @@
 | admin.unban | user_id | 管理 / user |
 | admin.disable | user_id | 管理 / user |
 | admin.enable | user_id | 管理 / user |
+| admin.submissions | offset（任意、非負整数） | 管理 / submissions（Drive IDは返さない） |
+
+投稿ZIPのアップロード・審査・ダウンロードは、通常のJSON API actionではありません。Edge Function内でセッションを再検証してから、非公開Driveファイルを操作します。Drive file IDはブラウザーへ返しません。
 
 失敗応答は`{ "error": "code" }`。401=セッション無効、403=権限不足、404=対象なし、409=ユーザー名重複、429=rate limit、503=バックエンド未設定/一時障害、それ以外の入力/資格情報エラーは400です。データベースの生エラーを返しません。
 

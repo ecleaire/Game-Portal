@@ -33,6 +33,7 @@ before(async () => {
 });
 after(async () => { await db?.close(); });
 
+
 test('bootstrap is one-time and logs no credentials', async () => {
   await assert.rejects(db.query('select public.portal_bootstrap($1,$2)', ['second', adminPassword]), /already exists/);
   const log = await api('admin.audit', {}, adminToken);
@@ -188,6 +189,28 @@ test('alternate cap, owner scoping and user-password deletion protection', async
   for (let i = 0; i < 4; i++) await manage('admin.password.add', { password: `test-extra-password-${i}` });
   assert.equal((await manage('admin.password.add', { password: 'test-extra-over-limit' })).error, 'password_limit');
   assert.equal((await manage('admin.passwords')).passwords.length, 5);
+});
+
+test('private game submission metadata hides Drive identifiers from users', async () => {
+  const created = await api('admin.create', { username: 'submitter', password: 'submitter-password', role: 'uploader' }, adminToken);
+  await db.exec("update portal_private.login_limits set window_start=now()-interval '16 minutes' where key='user.login:global'");
+  const session = await login('submitter', 'submitter-password');
+  const made = await api('user.submission.create', { title: 'Private ZIP', engine: 'godot', description: 'test', version: '1.0', controls: '' }, session.hash);
+  assert.equal(made.submission.status, 'uploading');
+  assert.equal((await api('user.submission.prepare', { submission_id: made.submission.id }, session.hash)).submission_id, made.submission.id);
+  const completed = await api('user.submission.complete', { submission_id: made.submission.id, drive_file_id: 'private-drive-file-id', package_name: 'game.zip', package_size: '100' }, session.hash);
+  assert.equal(completed.submission.status, 'pending');
+  const adminList = await api('admin.submissions', {}, adminToken);
+  assert.equal(adminList.submissions.find(item => item.id === made.submission.id).drive_file_id, undefined);
+  const prepared = await api('admin.submission.prepare', { submission_id: made.submission.id }, adminToken);
+  assert.equal(prepared.submission.drive_file_id, 'private-drive-file-id');
+  const reviewed = await api('admin.submission.complete', { submission_id: made.submission.id, status: 'approved', reason: 'checked' }, adminToken);
+  assert.equal(reviewed.submission.status, 'approved');
+  const listed = await api('user.submissions', {}, session.hash);
+  assert.equal(listed.submissions[0].drive_file_id, undefined);
+  const { rows } = await db.query('select drive_file_id from portal_private.game_submissions where id=$1', [made.submission.id]);
+  assert.equal(rows[0].drive_file_id, 'private-drive-file-id');
+  assert.notEqual(created.user.id, uid);
 });
 
 test('expired and deactivated admin sessions cannot perform management', async () => {

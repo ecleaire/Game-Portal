@@ -1,6 +1,6 @@
-# Phase 1・2 セットアップ
+# Phase 1・2・非公開投稿保管セットアップ
 
-`CODEX_TASK.md` が要件の正です。実装済み範囲は認証、セッション、アカウント、管理者によるユーザー管理、代替パスワード、KICK/BAN、監査ログです。ゲーム投稿・Drive通信・審査・自動公開はPhase 3以降です。`/upload/` は準備中画面です。
+`CODEX_TASK.md` が要件の正です。実装済み範囲は認証、セッション、アカウント、管理者によるユーザー管理、代替パスワード、KICK/BAN、監査ログ、投稿ZIPの非公開Drive保管です。管理画面での審査、承認／却下、公開自動化は後続作業です。
 
 ## 1. 所有者が行う必要がある手順：Supabase
 
@@ -16,7 +16,7 @@ supabase db push --dry-run
 supabase db push
 ```
 
-SQLは`supabase/migrations/202609130001_foundation.sql`、`202609130002_admin_management.sql`の順に適用します。2つとも適用してからAPIを公開してください。既存プロジェクトで同名スキーマ/関数がある場合は先に競合を調べます。移行済みSQLの書き換えではなく、新しいmigrationで変更してください。
+SQLはmigration番号順に適用します。現在は`202609130001_foundation.sql`、`202609130002_admin_management.sql`、`202609140003_password_minimum_length.sql`、`202609140004_private_game_submissions.sql`、`202609160005_submission_review.sql`です。既存プロジェクトで同名スキーマ/関数がある場合は先に競合を調べます。移行済みSQLの書き換えではなく、新しいmigrationで変更してください。
 
 6. パスワードマネージャー等で32バイト以上の暗号学的乱数を生成し、`SESSION_TOKEN_PEPPER`に使います。例の値を使い回さないでください。ローカルの`.env.edge`を作成し、以下の2項目だけを設定します。
 
@@ -33,6 +33,8 @@ supabase functions deploy portal
 ```
 
 Supabaseホスト環境は`SUPABASE_URL`と`SUPABASE_SERVICE_ROLE_KEY`をEdge Functionへ自動注入します。`SUPABASE_`接頭辞の値を`secrets set`で上書きする必要はありません。`config.toml`の`verify_jwt = false`は、この独自セッション方式に必要です。関数自身が保護操作すべてでDB上のセッションと権限を検証します。
+
+投稿ZIPを使う場合は、[Google Driveの管理者専用保管領域の設定](GOOGLE_DRIVE_SETUP.md)を先に完了します。`GOOGLE_SERVICE_ACCOUNT_JSON`と`GOOGLE_DRIVE_PENDING_FOLDER_ID`は`.env.edge`ではなくSupabase Edge Function Secretsへ設定してください。これらの値をGitHub Variablesや`assets/config.js`へ入れてはいけません。
 
 ## 2. 所有者が行う必要がある手順：初期super admin
 
