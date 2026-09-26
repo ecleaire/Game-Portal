@@ -63,8 +63,8 @@ test('browser flows connect to the real Edge handler and migrated database', asy
   page.on('dialog', dialog => dialog.accept());
   await selected.getByRole('button', { name: 'KICK（全端末をログアウト）' }).click();
   await expect(page.locator('#message')).toHaveText('変更を保存しました。');
-  await user.getByLabel('ユーザー名', { exact: true }).fill('should_not_change');
-  await user.getByRole('button', { name: 'ユーザー名を変更' }).click();
+  await user.getByLabel('ログイン用ユーザー名', { exact: true }).fill('should_not_change');
+  await user.getByRole('button', { name: 'ログイン用ユーザー名を変更', exact: true }).click();
   await expect(user.locator('#message')).toContainText('セッションが終了');
   await expect(user.getByRole('button', { name: 'ログイン', exact: true })).toBeVisible();
 
@@ -88,6 +88,6 @@ test('browser flows connect to the real Edge handler and migrated database', asy
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: 'test-results/admin-mobile.png', fullPage: true });
   await page.reload();
-  await expect(page.getByRole('button', { name: 'ログイン', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '管理画面 — browser_owner', exact: true })).toBeVisible();
   expect(errors).toEqual([]);
 });
