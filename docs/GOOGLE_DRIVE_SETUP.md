@@ -15,9 +15,15 @@ Driveは投稿ZIPの保管・審査用です。公開ゲームのHTMLホステ�
    - `GOOGLE_SERVICE_ACCOUNT_JSON`: サービスアカウントJSON全体を1行の値として設定
    - `GOOGLE_DRIVE_PENDING_FOLDER_ID`、`GOOGLE_DRIVE_APPROVED_FOLDER_ID`、`GOOGLE_DRIVE_REJECTED_FOLDER_ID`: 手順4のID
 
-6. Edge Function `portal` を、このリポジトリの `supabase/functions/portal/` で再デプロイします。次のSQL migrationもSupabase SQL Editorで適用します。
+6. Edge Function `portal` を、このリポジトリの `supabase/functions/portal/` で再デプロイします。既存プロジェクトでは、未適用の次のSQL migrationを番号順にSupabase SQL Editorで適用します。
 
    - `supabase/migrations/202609140004_private_game_submissions.sql`
+   - `supabase/migrations/202609160005_submission_review.sql`
+   - `supabase/migrations/202609170006_rebind_portal_api_admin_actions.sql`
+   - `supabase/migrations/202609170008_account_profile.sql`
+   - `supabase/migrations/202609170009_user_submission_management.sql`
+   - `supabase/migrations/202609170010_private_game_preview.sql`
+   - `supabase/migrations/202609260011_trusted_submitters_and_review_admins.sql`
 
 7. super adminで管理画面へログインし、**投稿保管を確認**を押します。成功表示が出れば、サービスアカウントの鍵、Drive API、3フォルダーの共有設定がすべて接続済みです。エラーの場合はフォルダーをサービスアカウントへ編集者として共有し直してください。
 
