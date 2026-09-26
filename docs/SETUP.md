@@ -1,6 +1,6 @@
 # Phase 1・2・非公開投稿保管セットアップ
 
-`CODEX_TASK.md` が要件の正です。実装済み範囲は認証、セッション、アカウント、管理者によるユーザー管理、代替パスワード、KICK/BAN、監査ログ、投稿ZIPの非公開Drive保管です。管理画面での審査、承認／却下、公開自動化は後続作業です。
+`CODEX_TASK.md` が要件の正です。実装済み範囲は認証、セッション、アカウント、管理者によるユーザー管理、代替パスワード、KICK/BAN、監査ログ、投稿ZIPの非公開Drive保管、審査管理者、信頼済み投稿者です。公開自動化は後続作業です。
 
 ## 1. 所有者が行う必要がある手順：Supabase
 
@@ -16,7 +16,7 @@ supabase db push --dry-run
 supabase db push
 ```
 
-SQLはmigration番号順に適用します。現在は`202609130001_foundation.sql`から`202609170008_account_profile.sql`までです。既存プロジェクトで同名スキーマ/関数がある場合は先に競合を調べます。移行済みSQLの書き換えではなく、新しいmigrationで変更してください。
+SQLはmigration番号順に適用します。現在は`202609130001_foundation.sql`から`202609260011_trusted_submitters_and_review_admins.sql`までです。既存プロジェクトで同名スキーマ/関数がある場合は先に競合を調べます。移行済みSQLの書き換えではなく、新しいmigrationで変更してください。
 
 6. パスワードマネージャー等で32バイト以上の暗号学的乱数を生成し、`SESSION_TOKEN_PEPPER`に使います。例の値を使い回さないでください。ローカルの`.env.edge`を作成し、以下の2項目だけを設定します。
 
@@ -64,7 +64,9 @@ node --env-file=.env.bootstrap scripts/bootstrap-admin.mjs
 revoke execute on function public.portal_bootstrap(text,text) from service_role;
 ```
 
-管理者パスワード変更・追加管理者UIは今回の範囲外です。初期パスワードを紛失した場合は、先に `202609170007_admin_password_recovery.sql` を適用し、端末の非共有ディレクトリに次の秘密ファイルを作成して実行します。値をチャット、Issue、コマンド引数、SQL Editor、READMEへ貼らないでください。
+super adminは管理画面から審査管理者を追加できます。審査管理者は投稿の承認・却下を行えますが、管理者の追加や信頼済み投稿者の指定はできません。初期パスワードを紛失した場合は、先に `202609170007_admin_password_recovery.sql` を適用し、端末の非共有ディレクトリに次の秘密ファイルを作成して実行します。値をチャット、Issue、コマンド引数、SQL Editor、READMEへ貼らないでください。
+
+信頼済み投稿者は、super adminが一般ユーザー作成・権限変更画面で指定します。投稿ZIPは通常と同じく非公開Google Driveへ保管されますが、保存に成功すると審査待ちを飛ばして`approved`になります。これはGitHub Pagesへの自動公開ではありません。
 
 ```dotenv
 SUPABASE_URL=https://PROJECT_REF.supabase.co

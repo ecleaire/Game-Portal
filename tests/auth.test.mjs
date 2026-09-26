@@ -240,6 +240,19 @@ test('submitters can manage only their own pending and rejected game metadata', 
   assert.equal((await api('user.submission.update', { submission_id: made.submission.id, title: 'Again', engine: 'godot', description: '', version: '3', controls: '' }, owner.hash)).error, 'conflict');
   assert.notEqual(created.user.id, uid);
 });
+test('super admins can create review admins and trusted uploaders skip only the review queue', async () => {
+  const reviewer = await api('admin.admin.create', { username: 'reviewer', password: 'reviewer-password' }, adminToken);
+  assert.equal(reviewer.admin.role, 'admin');
+  const reviewerSession = await login('reviewer', 'reviewer-password', true);
+  assert.equal(reviewerSession.admin.role, 'admin');
+  assert.equal((await api('admin.admin.create', { username: 'forbidden_admin', password: 'forbidden-password' }, reviewerSession.hash)).error, 'forbidden');
+  const trusted = await api('admin.create', { username: 'trusted_submitter', password: 'trusted-password', role: 'trusted_uploader' }, adminToken);
+  const trustedSession = await login('trusted_submitter', 'trusted-password');
+  const made = await api('user.submission.create', { title: 'Trusted game', engine: 'godot', description: '', version: '1.0.0', controls: '' }, trustedSession.hash);
+  const complete = await api('user.submission.complete', { submission_id: made.submission.id, drive_file_id: 'trusted-file', package_name: 'trusted.zip', package_size: '100' }, trustedSession.hash);
+  assert.equal(complete.submission.status, 'approved');
+  assert.equal((await api('admin.role', { user_id: trusted.user.id, role: 'trusted_uploader' }, reviewerSession.hash)).error, 'forbidden');
+});
 test('expired and deactivated admin sessions cannot perform management', async () => {
   const next = await login('owner', adminPassword, true);
   await db.query("update portal_private.sessions set expires_at=now()-interval '1 second' where token_hash=$1", [next.hash]);

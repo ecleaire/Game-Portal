@@ -8,7 +8,7 @@ alter default privileges in schema portal_private revoke execute on functions fr
 create table portal_private.users (
   id uuid primary key default gen_random_uuid(),
   username text not null unique check (username ~ '^[a-z0-9_]{3,32}$'),
-  role text not null default 'player' check (role in ('player', 'uploader')),
+  role text not null default 'player' check (role in ('player', 'uploader', 'trusted_uploader')),
   status text not null default 'active' check (status in ('active', 'disabled')),
   is_banned boolean not null default false,
   banned_until timestamptz,

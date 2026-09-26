@@ -102,7 +102,10 @@ const username = () => field('username', 'ユーザー名', 'text', { autocomple
 const password = (name = 'password', title = 'パスワード', fresh = true) => field(name, title, 'password', {
   autocomplete: fresh ? 'new-password' : 'current-password', minlength: '5', maxlength: '72',
 });
-const role = () => field('role', 'ユーザー権限', 'select', { choices: [['player', '一般ユーザー'], ['uploader', '投稿可能ユーザー']] });
+const role = (allowTrusted = false) => field('role', 'ユーザー権限', 'select', { choices: [
+  ['player', '一般ユーザー'], ['uploader', '投稿可能ユーザー'],
+  ...(allowTrusted ? [['trusted_uploader', '信頼済み投稿者（審査省略）']] : []),
+] });
 const avatars = [
   ['gamepad', '🎮 ゲームパッド'], ['star', '⭐ スター'], ['rocket', '🚀 ロケット'],
   ['puzzle', '🧩 パズル'], ['palette', '🎨 パレット'], ['lightning', '⚡ ライトニング'],
@@ -232,9 +235,16 @@ async function dashboard() {
   const top = section(`管理画面 — ${admin.username}`);
   logoutButton(top);
   const create = section('ユーザー作成');
-  form(create, [username(), password('password', '初期の本人用パスワード'), role()], '作成', async data => {
+  form(create, [username(), password('password', '初期の本人用パスワード'), role(admin.role === 'super_admin')], '作成', async data => {
     await api('admin.create', data); await dashboard(); notice('ユーザーを作成しました。');
   });
+  if (admin.role === 'super_admin') {
+    const administrators = section('審査管理者を作成');
+    administrators.append(el('p', '作成した管理者は投稿の承認・却下を行えます。管理者アカウントの作成と信頼済み投稿者の指定はsuper adminだけが行えます。', { class: 'muted' }));
+    form(administrators, [username(), password('password', '初期管理者パスワード')], '管理者を作成', async data => {
+      await api('admin.admin.create', data); await dashboard(); notice('審査管理者を作成しました。');
+    });
+  }
   const list = section('ユーザー一覧');
   list.append(el('p', `${offset + 1}件目から表示（最大100件）`, { class: 'muted' }));
   if (!users.length) list.append(el('p', 'ユーザーがいません。'));
@@ -249,7 +259,7 @@ async function dashboard() {
   if (users.length === 100) button(pages, '次の100件', async () => { offset += 100; await dashboard(); notice('一覧を更新しました。'); });
   button(pages, '更新', async () => { await dashboard(); notice('更新しました。'); }); list.append(pages);
   const user = users.find(u => u.id === selected);
-  if (user) await manage(user);
+  if (user) await manage(user, admin.role === 'super_admin');
   const reviews = section('ゲーム投稿の審査');
   if (!submissions.length) reviews.append(el('p', '投稿はありません。'));
   for (const game of submissions) {
@@ -270,14 +280,14 @@ async function dashboard() {
   const audit = section('管理操作の監査ログ');
   button(audit, '最新の100件', async () => { auditBefore = undefined; await showAudit(audit); notice('監査ログを表示しました。'); });
 }
-async function manage(user) {
+async function manage(user, allowTrusted = false) {
   const s = section(`${user.username} の管理`); s.id = 'selected-user';
   s.append(el('p', `アカウント状態: ${user.status}`, { class: 'muted' }));
   const change = async (action, data = {}) => {
     await api(action, { ...data, user_id: user.id }); await dashboard(); notice('変更を保存しました。');
   };
   form(s, [{ ...username(), value: user.username }], '名前を変更', data => change('admin.rename', data));
-  form(s, [{ ...role(), value: user.role }], '権限を変更', data => change('admin.role', data));
+  form(s, [{ ...role(allowTrusted), value: user.role }], '権限を変更', data => change('admin.role', data));
   const actions = el('div', null, { class: 'actions' }); s.append(actions);
   button(actions, 'KICK（全端末をログアウト）', async () => {
     if (confirm(`${user.username} の全セッションを失効させますか？再ログインは可能です。`)) await change('admin.kick'); else notice('キャンセルしました。');
