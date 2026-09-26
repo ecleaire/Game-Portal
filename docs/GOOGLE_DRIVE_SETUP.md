@@ -19,6 +19,8 @@ Driveは投稿ZIPの保管・審査用です。公開ゲームのHTMLホステ�
 
    - `supabase/migrations/202609140004_private_game_submissions.sql`
 
+7. super adminで管理画面へログインし、**投稿保管を確認**を押します。成功表示が出れば、サービスアカウントの鍵、Drive API、3フォルダーの共有設定がすべて接続済みです。エラーの場合はフォルダーをサービスアカウントへ編集者として共有し直してください。
+
 ## 保管時の制約
 
 - 投稿者は`uploader`権限、active状態、非BANである必要があります。

@@ -63,6 +63,12 @@ test('private ZIP upload requires an authenticated session and server-only Drive
   assert.equal((await handler(requestUpload())).status, 401);
   assert.equal((await handler(requestUpload({ 'x-portal-session': token() }))).status, 503);
 });
+test('storage health check requires an administrator session and complete server-only Drive configuration', async () => {
+  const health = headers => new Request('https://example.supabase.co/functions/v1/portal/storage-health', { method: 'POST', headers: { origin: settings.allowedOrigins, ...headers } });
+  const handler = createHandler({ ...settings, fetcher: async () => { throw new Error('must not contact a service'); } });
+  assert.equal((await handler(health())).status, 401);
+  assert.deepEqual(await (await handler(health({ 'x-portal-session': token() }))).json(), { error: 'drive_unavailable' });
+});
 test('revoked sessions and DB errors are sanitized; secrets are never reflected', async () => {
   for (const [databaseResult, upstreamStatus, expected] of [
     [{ error: 'unauthorized' }, 200, 401], [{ error: 'rate_limited' }, 200, 429],

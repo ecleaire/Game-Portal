@@ -1,5 +1,5 @@
 import { digest, token, readBody, statusFor } from './security.mjs';
-import { downloadPrivateZip, movePrivateZip, storePrivateZip } from './drive.mjs';
+import { checkPrivateFolders, downloadPrivateZip, movePrivateZip, storePrivateZip } from './drive.mjs';
 
 const bytes = value => new TextEncoder().encode(value);
 const b64url = value => btoa(String.fromCharCode(...value)).replaceAll('+','-').replaceAll('/','_').replaceAll('=','');
@@ -79,6 +79,18 @@ export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleS
         const uploadError = name === 'invalid_upload' ? 'invalid_request' : name === 'drive_unavailable' ? 'drive_unavailable' : 'unavailable';
         return reply({ error: uploadError }, uploadError === 'invalid_request' ? 400 : 503);
       }
+    }
+    if (requestUrl.pathname.endsWith('/storage-health')) {
+      const supplied = request.headers.get('x-portal-session');
+      if (!/^[a-f0-9]{64}$/.test(supplied ?? '')) return reply({ error: 'unauthorized' }, 401);
+      if (!googleServiceAccountJson || !googlePendingFolderId || !googleApprovedFolderId || !googleRejectedFolderId) return reply({ error: 'drive_unavailable' }, 503);
+      try {
+        const checked = await rpc('admin.me', {}, supplied);
+        const failed = internalError(checked); if (failed) return failed;
+        await checkPrivateFolders({ serviceAccountJson: googleServiceAccountJson,
+          folderIds: [googlePendingFolderId, googleApprovedFolderId, googleRejectedFolderId], fetcher });
+        return reply({ ok: true });
+      } catch { return reply({ error: 'drive_unavailable' }, 503); }
     }
     // Review and download never expose a Drive ID to the browser. They invoke
     // internal RPC actions, which the JSON API allowlist does not accept.

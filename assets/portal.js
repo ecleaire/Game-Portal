@@ -234,6 +234,7 @@ async function dashboard() {
   root.replaceChildren();
   const top = section(`管理画面 — ${admin.username}`);
   logoutButton(top);
+  button(top, '投稿保管を確認', checkStorageHealth);
   const create = section('ユーザー作成');
   form(create, [username(), password('password', '初期の本人用パスワード'), role(admin.role === 'super_admin')], '作成', async data => {
     await api('admin.create', data); await dashboard(); notice('ユーザーを作成しました。');
@@ -332,6 +333,13 @@ async function uploadPackage(submissionId, file, refresh = upload) {
       headers: { ...(config.anonKey ? { apikey: config.anonKey } : {}), 'X-Portal-Session': session.token }, body, signal: AbortSignal.timeout(120000) });
     const result = await response.json(); if (!response.ok || result.error) throw new Error(result.error ?? 'unavailable');
     await refresh(); notice('非公開で保管しました。審査待ちです。');
+}
+async function checkStorageHealth() {
+  const response = await fetch(`${config.supabaseUrl.replace(/\/$/, '')}/functions/v1/portal/storage-health`, { method: 'POST', credentials: 'omit',
+    headers: { ...(config.anonKey ? { apikey: config.anonKey } : {}), 'X-Portal-Session': session.token }, signal: AbortSignal.timeout(30000) });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || result.error) throw new Error(result.error ?? 'drive_unavailable');
+  notice('Google Driveの非公開保管フォルダーへ接続できます。');
 }
 async function reviewSubmission(submissionId, decision, reason = '') {
   const response = await fetch(`${config.supabaseUrl.replace(/\/$/, '')}/functions/v1/portal/review`, { method: 'POST', credentials: 'omit',

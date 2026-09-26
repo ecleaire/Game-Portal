@@ -97,3 +97,17 @@ export async function downloadPrivateZip({ serviceAccountJson, fileId, fetcher =
   if (!response.ok || !response.body) throw new Error('drive_unavailable');
   return response;
 }
+
+// Confirms that the service account can read all private folders without
+// exposing their IDs, names, or any Drive content to the browser.
+export async function checkPrivateFolders({ serviceAccountJson, folderIds, fetcher = fetch }) {
+  if (!Array.isArray(folderIds) || folderIds.length !== 3 || folderIds.some(id => !id)) throw new Error('drive_unavailable');
+  const access = await accessToken(serviceAccountJson, fetcher);
+  for (const folderId of folderIds) {
+    const response = await fetcher(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(folderId)}?fields=id,mimeType&supportsAllDrives=true`, {
+      headers: { Authorization: `Bearer ${access}` }, signal: AbortSignal.timeout(15000),
+    });
+    const result = await response.json().catch(() => null);
+    if (!response.ok || result?.mimeType !== 'application/vnd.google-apps.folder') throw new Error('drive_unavailable');
+  }
+}
