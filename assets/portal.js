@@ -201,6 +201,18 @@ function submissionManager(parent, game) {
       await api('user.submission.update', { ...data, submission_id: game.id }); await account(); notice(game.status === 'rejected' ? '修正を再審査へ送りました。' : '投稿情報を更新しました。');
     }).classList.add('stacked-form');
   }
+  if (game.status === 'uploading') {
+    row.append(el('p', 'ZIPはまだ保管されていません。ファイルを選び直して、この投稿へ再送できます。', { class: 'muted' }));
+    const retryForm = form(row, [], 'ZIPを再送して審査へ送る', async () => {
+      const file = retryForm.elements.package?.files?.[0];
+      await uploadPackage(game.id, file, account);
+    });
+    retryForm.classList.add('stacked-form');
+    const packageLabel = el('label', 'ゲームZIP（最大50MB）');
+    const packageInput = el('input', null, { type: 'file', name: 'package', accept: '.zip,application/zip', required: 'required' });
+    packageLabel.append(packageInput);
+    retryForm.querySelector('button[type=submit]').before(packageLabel);
+  }
   if (['pending', 'approved', 'rejected'].includes(game.status)) button(row, '非公開でプレイ', () => previewSubmission(game.id));
   if (['uploading', 'pending', 'rejected', 'approved'].includes(game.status)) button(row, '投稿を取り下げる', async () => {
     if (!confirm(`「${game.title}」を取り下げますか？`)) { notice('キャンセルしました。'); return; }
@@ -303,13 +315,13 @@ async function showAudit(parent) {
   parent.append(results);
 }
 
-async function uploadPackage(submissionId, file) {
+async function uploadPackage(submissionId, file, refresh = upload) {
     if (!file) throw new Error('invalid_request');
     const body = new FormData(); body.set('submission_id', submissionId); body.set('package', file);
     const response = await fetch(`${config.supabaseUrl.replace(/\/$/, '')}/functions/v1/portal/upload`, { method: 'POST', credentials: 'omit',
       headers: { ...(config.anonKey ? { apikey: config.anonKey } : {}), 'X-Portal-Session': session.token }, body, signal: AbortSignal.timeout(120000) });
     const result = await response.json(); if (!response.ok || result.error) throw new Error(result.error ?? 'unavailable');
-    await upload(); notice('非公開で保管しました。審査待ちです。');
+    await refresh(); notice('非公開で保管しました。審査待ちです。');
 }
 async function reviewSubmission(submissionId, decision, reason = '') {
   const response = await fetch(`${config.supabaseUrl.replace(/\/$/, '')}/functions/v1/portal/review`, { method: 'POST', credentials: 'omit',
