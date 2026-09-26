@@ -359,7 +359,7 @@ async function downloadSubmission(submissionId) {
 async function upload() {
   const { user } = await api('user.me'); root.replaceChildren();
   const s = section('ゲーム投稿'); logoutButton(s);
-  if (user.role !== 'uploader') { s.append(el('p', 'このアカウントには投稿権限がありません。管理者に投稿可能ユーザーへの変更を依頼してください。')); return; }
+  if (!['uploader', 'trusted_uploader'].includes(user.role)) { s.append(el('p', 'このアカウントには投稿権限がありません。管理者に投稿可能ユーザーへの変更を依頼してください。')); return; }
   const steps = el('ol', null, { class: 'steps' });
   for (const text of ['ゲーム情報を入力', 'この画面でZIPを選択・送信', '非公開で保管・管理者の審査を待つ']) steps.append(el('li', text));
   s.append(steps);

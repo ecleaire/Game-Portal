@@ -1,6 +1,6 @@
 export const actions = new Set([
   'user.login', 'admin.login', 'logout', 'user.me', 'user.profile', 'user.rename', 'user.password',
-  'admin.me', 'admin.users', 'admin.audit', 'admin.create', 'admin.rename', 'admin.role',
+  'admin.me', 'admin.users', 'admin.audit', 'admin.create', 'admin.admin.create', 'admin.rename', 'admin.role',
   'admin.passwords', 'admin.password.add', 'admin.password.revoke', 'admin.kick',
   'admin.ban', 'admin.unban', 'admin.disable', 'admin.enable',
   'admin.submissions',
