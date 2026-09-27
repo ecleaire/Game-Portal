@@ -1,5 +1,17 @@
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
-const DRIVE_UPLOAD_URL = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,size';
+const DRIVE_UPLOAD_URL = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,name,size';
+
+// Reflect only stable reason codes, never Google's response or credential values.
+export function driveError(error) {
+  return ['drive_shared_drive_required', 'drive_permission_denied', 'drive_quota_exceeded', 'drive_reconnect_required'].includes(error?.message)
+    ? error.message : 'drive_unavailable';
+}
+function apiError(result) {
+  const reasons = result?.error?.errors?.map(item => item.reason) ?? [];
+  if (reasons.includes('storageQuotaExceeded')) return new Error('drive_quota_exceeded');
+  if (reasons.includes('insufficientFilePermissions')) return new Error('drive_permission_denied');
+  return new Error('drive_unavailable');
+}
 
 function base64url(bytes) {
   let text = btoa(String.fromCharCode(...bytes));
@@ -10,7 +22,22 @@ function pemBytes(pem) {
   const binary = atob(text);
   return Uint8Array.from(binary, c => c.charCodeAt(0));
 }
-export async function accessToken(serviceAccountJson, fetcher = fetch) {
+export async function accessToken(serviceAccountJson, fetcher = fetch, oauthJson = '') {
+  if (oauthJson) {
+    let credentials;
+    try { credentials = JSON.parse(oauthJson); } catch { throw new Error('drive_unavailable'); }
+    const { client_id, client_secret, refresh_token } = credentials ?? {};
+    if (![client_id, client_secret, refresh_token].every(value => typeof value === 'string' && value.length > 0)) throw new Error('drive_unavailable');
+    const response = await fetcher(GOOGLE_TOKEN_URL, { method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'refresh_token', client_id, client_secret, refresh_token }),
+      signal: AbortSignal.timeout(15000) });
+    const result = await response.json().catch(() => null);
+    if (!response.ok || typeof result?.access_token !== 'string') {
+      throw new Error(result?.error === 'invalid_grant' ? 'drive_reconnect_required' : 'drive_unavailable');
+    }
+    return result.access_token;
+  }
   let account;
   try { account = JSON.parse(serviceAccountJson); } catch { throw new Error('drive_unavailable'); }
   if (!account.client_email || !account.private_key) throw new Error('drive_unavailable');
@@ -62,11 +89,11 @@ export function validateZip(bytes) {
   if (at !== u32(bytes, eocd + 16) + directorySize || !html) throw new Error('invalid_upload');
 }
 
-export async function storePrivateZip({ serviceAccountJson, pendingFolderId, submissionId, file, fetcher = fetch }) {
+export async function storePrivateZip({ serviceAccountJson, oauthJson = '', pendingFolderId, submissionId, file, fetcher = fetch }) {
   if (!pendingFolderId || !file || file.size < 1 || file.size > 52428800 || !/\.zip$/i.test(file.name)) throw new Error('invalid_upload');
   const bytes = new Uint8Array(await file.arrayBuffer());
   validateZip(bytes);
-  const access = await accessToken(serviceAccountJson, fetcher);
+  const access = await accessToken(serviceAccountJson, fetcher, oauthJson);
   const boundary = `portal-${crypto.randomUUID()}`;
   const metadata = JSON.stringify({ name: `${submissionId}.zip`, parents: [pendingFolderId], mimeType: 'application/zip' });
   const prefix = new TextEncoder().encode(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n--${boundary}\r\nContent-Type: application/zip\r\n\r\n`);
@@ -75,39 +102,44 @@ export async function storePrivateZip({ serviceAccountJson, pendingFolderId, sub
   body.set(prefix); body.set(bytes, prefix.length); body.set(suffix, prefix.length + bytes.length);
   const response = await fetcher(DRIVE_UPLOAD_URL, { method: 'POST', headers: { Authorization: `Bearer ${access}`, 'Content-Type': `multipart/related; boundary=${boundary}` }, body });
   const result = await response.json().catch(() => null);
-  if (!response.ok || typeof result?.id !== 'string') throw new Error('drive_unavailable');
+  if (!response.ok || typeof result?.id !== 'string') throw apiError(result);
   return { id: result.id, name: file.name, size: file.size };
 }
 
-export async function movePrivateZip({ serviceAccountJson, fileId, fromFolderId, toFolderId, fetcher = fetch }) {
+export async function movePrivateZip({ serviceAccountJson, oauthJson = '', fileId, fromFolderId, toFolderId, fetcher = fetch }) {
   if (!fileId || !fromFolderId || !toFolderId) throw new Error('drive_unavailable');
-  const access = await accessToken(serviceAccountJson, fetcher);
-  const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?addParents=${encodeURIComponent(toFolderId)}&removeParents=${encodeURIComponent(fromFolderId)}&fields=id`;
+  const access = await accessToken(serviceAccountJson, fetcher, oauthJson);
+  const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?addParents=${encodeURIComponent(toFolderId)}&removeParents=${encodeURIComponent(fromFolderId)}&supportsAllDrives=true&fields=id`;
   const response = await fetcher(url, { method: 'PATCH', headers: { Authorization: `Bearer ${access}` } });
   const result = await response.json().catch(() => null);
-  if (!response.ok || result?.id !== fileId) throw new Error('drive_unavailable');
+  if (!response.ok || result?.id !== fileId) throw apiError(result);
 }
 
-export async function downloadPrivateZip({ serviceAccountJson, fileId, fetcher = fetch }) {
+export async function downloadPrivateZip({ serviceAccountJson, oauthJson = '', fileId, fetcher = fetch }) {
   if (!fileId) throw new Error('drive_unavailable');
-  const access = await accessToken(serviceAccountJson, fetcher);
-  const response = await fetcher(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`, {
+  const access = await accessToken(serviceAccountJson, fetcher, oauthJson);
+  const response = await fetcher(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media&supportsAllDrives=true`, {
     headers: { Authorization: `Bearer ${access}` }, signal: AbortSignal.timeout(30000),
   });
   if (!response.ok || !response.body) throw new Error('drive_unavailable');
   return response;
 }
 
-// Confirms that the service account can read all private folders without
+// Confirms folder visibility and write capabilities without
 // exposing their IDs, names, or any Drive content to the browser.
-export async function checkPrivateFolders({ serviceAccountJson, folderIds, fetcher = fetch }) {
-  if (!Array.isArray(folderIds) || folderIds.length !== 3 || folderIds.some(id => !id)) throw new Error('drive_unavailable');
-  const access = await accessToken(serviceAccountJson, fetcher);
+export async function checkPrivateFolders({ serviceAccountJson, oauthJson = '', folderIds, fetcher = fetch }) {
+  if (!Array.isArray(folderIds) || folderIds.length !== 3 || folderIds.some(id => !id) || new Set(folderIds).size !== 3) throw new Error('drive_unavailable');
+  const access = await accessToken(serviceAccountJson, fetcher, oauthJson);
+  let sharedDrive;
   for (const folderId of folderIds) {
-    const response = await fetcher(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(folderId)}?fields=id,mimeType&supportsAllDrives=true`, {
+    const response = await fetcher(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(folderId)}?fields=id,mimeType,driveId,capabilities(canAddChildren,canRemoveChildren)&supportsAllDrives=true`, {
       headers: { Authorization: `Bearer ${access}` }, signal: AbortSignal.timeout(15000),
     });
     const result = await response.json().catch(() => null);
     if (!response.ok || result?.mimeType !== 'application/vnd.google-apps.folder') throw new Error('drive_unavailable');
+    if (!oauthJson && !result.driveId) throw new Error('drive_shared_drive_required');
+    if (folderId === folderIds[0]) sharedDrive = result.driveId;
+    else if (result.driveId !== sharedDrive) throw new Error('drive_unavailable');
+    if (result.capabilities?.canAddChildren !== true || (folderId === folderIds[0] && result.capabilities?.canRemoveChildren !== true)) throw new Error('drive_permission_denied');
   }
 }

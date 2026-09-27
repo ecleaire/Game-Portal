@@ -1,5 +1,5 @@
 import { digest, token, readBody, statusFor } from './security.mjs';
-import { checkPrivateFolders, downloadPrivateZip, movePrivateZip, storePrivateZip } from './drive.mjs';
+import { checkPrivateFolders, driveError, downloadPrivateZip, movePrivateZip, storePrivateZip } from './drive.mjs';
 
 const bytes = value => new TextEncoder().encode(value);
 const b64url = value => btoa(String.fromCharCode(...value)).replaceAll('+','-').replaceAll('/','_').replaceAll('=','');
@@ -12,7 +12,7 @@ async function unpack(entry) { if(entry.method===0) return entry.raw; if(entry.m
 const mime = path => ({html:'text/html; charset=utf-8',htm:'text/html; charset=utf-8',js:'text/javascript; charset=utf-8',mjs:'text/javascript; charset=utf-8',css:'text/css; charset=utf-8',wasm:'application/wasm',json:'application/json',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',webp:'image/webp',svg:'image/svg+xml',mp3:'audio/mpeg',ogg:'audio/ogg',wav:'audio/wav'}[path.split('.').pop().toLowerCase()] ?? 'application/octet-stream');
 
 // Dependency injection keeps the actual HTTP boundary testable without deployed secrets.
-export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleServiceAccountJson = '', googlePendingFolderId = '', googleApprovedFolderId = '', googleRejectedFolderId = '', fetcher = fetch }) {
+export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleServiceAccountJson = '', googleDriveOAuthJson = '', googlePendingFolderId = '', googleApprovedFolderId = '', googleRejectedFolderId = '', fetcher = fetch }) {
   const origins = new Set(allowedOrigins.split(',').map(s => s.trim()).filter(Boolean));
   return async request => {
     const requestUrl = new URL(request.url);
@@ -27,7 +27,7 @@ export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleS
     headers['Access-Control-Allow-Headers'] = 'content-type, x-portal-session, apikey';
     headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS';
     if (requestUrl.pathname.includes('/preview/')) {
-      try { const [token, ...parts]=requestUrl.pathname.split('/preview/')[1].split('/'); const preview=await openPreview(token,pepper); if (!preview?.fileId || !Number.isFinite(preview.exp) || preview.exp<Date.now()) throw new Error('invalid_preview'); const path=decodeURIComponent(parts.join('/') || 'index.html'); if (!path || path.includes('..') || path.includes('\\')) throw new Error('invalid_preview'); const zip=await downloadPrivateZip({serviceAccountJson:googleServiceAccountJson,fileId:preview.fileId,fetcher}); const entry=zipEntry(new Uint8Array(await new Response(zip.body).arrayBuffer()),path); return new Response(await unpack(entry),{headers:{'Content-Type':mime(path),'Cache-Control':'no-store','Content-Security-Policy':"sandbox allow-scripts; default-src 'self' data: blob:; connect-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline';"}}); } catch { return new Response('Not found',{status:404,headers:{'Cache-Control':'no-store'}}); }
+      try { const [token, ...parts]=requestUrl.pathname.split('/preview/')[1].split('/'); const preview=await openPreview(token,pepper); if (!preview?.fileId || !Number.isFinite(preview.exp) || preview.exp<Date.now()) throw new Error('invalid_preview'); const path=decodeURIComponent(parts.join('/') || 'index.html'); if (!path || path.includes('..') || path.includes('\\')) throw new Error('invalid_preview'); const zip=await downloadPrivateZip({serviceAccountJson:googleServiceAccountJson,oauthJson:googleDriveOAuthJson,fileId:preview.fileId,fetcher}); const entry=zipEntry(new Uint8Array(await new Response(zip.body).arrayBuffer()),path); return new Response(await unpack(entry),{headers:{'Content-Type':mime(path),'Cache-Control':'no-store','Content-Security-Policy':"sandbox allow-scripts; default-src 'self' data: blob:; connect-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline';"}}); } catch { return new Response('Not found',{status:404,headers:{'Cache-Control':'no-store'}}); }
     }
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers });
     if (request.method !== 'POST') return reply({ error: 'method_not_allowed' }, 405);
@@ -55,13 +55,13 @@ export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleS
     // ZIPs are accepted only through this authenticated server path. They are
     // stored in a Drive folder shared with the service account, never published.
     if (requestUrl.pathname.endsWith('/preview')) {
-      const supplied=request.headers.get('x-portal-session'); if (!/^[a-f0-9]{64}$/.test(supplied ?? '') || !googleServiceAccountJson) return reply({error:'unauthorized'},401);
+      const supplied=request.headers.get('x-portal-session'); if (!/^[a-f0-9]{64}$/.test(supplied ?? '') || !(googleServiceAccountJson || googleDriveOAuthJson)) return reply({error:'unauthorized'},401);
       try { const {submission_id:submissionId}=await privateJson(); if(typeof submissionId!=='string') return reply({error:'invalid_request'},400); const prepared=await rpc('user.submission.preview',{submission_id:submissionId},supplied); const failed=internalError(prepared); if(failed)return failed; const token=await sealPreview({fileId:prepared.result.submission.drive_file_id,exp:Date.now()+5*60*1000},pepper); return reply({url:`${url.replace(/\/$/,'')}/functions/v1/portal/preview/${token}/index.html`}); } catch { return reply({error:'unavailable'},503); }
     }
     if (requestUrl.pathname.endsWith('/upload')) {
       const supplied = request.headers.get('x-portal-session');
       if (!/^[a-f0-9]{64}$/.test(supplied ?? '')) return reply({ error: 'unauthorized' }, 401);
-      if (!googleServiceAccountJson || !googlePendingFolderId) return reply({ error: 'unavailable' }, 503);
+      if (!(googleServiceAccountJson || googleDriveOAuthJson) || !googlePendingFolderId) return reply({ error: 'unavailable' }, 503);
       const length = Number(request.headers.get('content-length') ?? 0);
       if (length > 52428800 + 8192) return reply({ error: 'body_too_large' }, 413);
       try {
@@ -70,34 +70,34 @@ export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleS
         if (typeof submissionId !== 'string' || !(file instanceof File)) return reply({ error: 'invalid_request' }, 400);
         const before = await rpc('user.submission.prepare', { submission_id: submissionId }, supplied);
         if (!before.response.ok || before.result?.error) return reply({ error: before.result?.error ?? 'unavailable' }, statusFor(before.result?.error ?? 'unavailable'));
-        const stored = await storePrivateZip({ serviceAccountJson: googleServiceAccountJson, pendingFolderId: googlePendingFolderId, submissionId, file, fetcher });
+        const stored = await storePrivateZip({ serviceAccountJson: googleServiceAccountJson, oauthJson: googleDriveOAuthJson, pendingFolderId: googlePendingFolderId, submissionId, file, fetcher });
         const after = await rpc('user.submission.complete', { submission_id: submissionId, drive_file_id: stored.id, package_name: stored.name, package_size: String(stored.size) }, supplied);
         if (!after.response.ok || after.result?.error) return reply({ error: after.result?.error ?? 'unavailable' }, statusFor(after.result?.error ?? 'unavailable'));
         return reply(after.result);
       } catch (error) {
         const name = error?.message;
-        const uploadError = name === 'invalid_upload' ? 'invalid_request' : name === 'drive_unavailable' ? 'drive_unavailable' : 'unavailable';
+        const uploadError = name === 'invalid_upload' ? 'invalid_request' : name?.startsWith('drive_') ? driveError(error) : 'unavailable';
         return reply({ error: uploadError }, uploadError === 'invalid_request' ? 400 : 503);
       }
     }
     if (requestUrl.pathname.endsWith('/storage-health')) {
       const supplied = request.headers.get('x-portal-session');
       if (!/^[a-f0-9]{64}$/.test(supplied ?? '')) return reply({ error: 'unauthorized' }, 401);
-      if (!googleServiceAccountJson || !googlePendingFolderId || !googleApprovedFolderId || !googleRejectedFolderId) return reply({ error: 'drive_unavailable' }, 503);
       try {
         const checked = await rpc('admin.me', {}, supplied);
         const failed = internalError(checked); if (failed) return failed;
-        await checkPrivateFolders({ serviceAccountJson: googleServiceAccountJson,
+        if (!(googleServiceAccountJson || googleDriveOAuthJson) || !googlePendingFolderId || !googleApprovedFolderId || !googleRejectedFolderId) return reply({ error: 'drive_unavailable' }, 503);
+        await checkPrivateFolders({ serviceAccountJson: googleServiceAccountJson, oauthJson: googleDriveOAuthJson,
           folderIds: [googlePendingFolderId, googleApprovedFolderId, googleRejectedFolderId], fetcher });
         return reply({ ok: true });
-      } catch { return reply({ error: 'drive_unavailable' }, 503); }
+      } catch (error) { return reply({ error: driveError(error) }, 503); }
     }
     // Review and download never expose a Drive ID to the browser. They invoke
     // internal RPC actions, which the JSON API allowlist does not accept.
     if (new URL(request.url).pathname.endsWith('/review')) {
       const supplied = request.headers.get('x-portal-session');
       if (!/^[a-f0-9]{64}$/.test(supplied ?? '')) return reply({ error: 'unauthorized' }, 401);
-      if (!googleServiceAccountJson || !googlePendingFolderId || !googleApprovedFolderId || !googleRejectedFolderId) return reply({ error: 'unavailable' }, 503);
+      if (!(googleServiceAccountJson || googleDriveOAuthJson) || !googlePendingFolderId || !googleApprovedFolderId || !googleRejectedFolderId) return reply({ error: 'unavailable' }, 503);
       try {
         const { submission_id: submissionId, decision, reason = '' } = await privateJson();
         if (typeof submissionId !== 'string' || !['approved', 'rejected'].includes(decision) || typeof reason !== 'string' || reason.length > 500) return reply({ error: 'invalid_request' }, 400);
@@ -105,7 +105,7 @@ export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleS
         const failed = internalError(prepared); if (failed) return failed;
         const fileId = prepared.result.submission?.drive_file_id;
         if (typeof fileId !== 'string') return reply({ error: 'unavailable' }, 503);
-        await movePrivateZip({ serviceAccountJson: googleServiceAccountJson, fileId, fromFolderId: googlePendingFolderId,
+        await movePrivateZip({ serviceAccountJson: googleServiceAccountJson, oauthJson: googleDriveOAuthJson, fileId, fromFolderId: googlePendingFolderId,
           toFolderId: decision === 'approved' ? googleApprovedFolderId : googleRejectedFolderId, fetcher });
         const completed = await rpc('admin.submission.complete', { submission_id: submissionId, status: decision, reason }, supplied);
         const completionError = internalError(completed); if (completionError) return completionError;
@@ -115,14 +115,14 @@ export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleS
     if (new URL(request.url).pathname.endsWith('/download')) {
       const supplied = request.headers.get('x-portal-session');
       if (!/^[a-f0-9]{64}$/.test(supplied ?? '')) return reply({ error: 'unauthorized' }, 401);
-      if (!googleServiceAccountJson) return reply({ error: 'unavailable' }, 503);
+      if (!(googleServiceAccountJson || googleDriveOAuthJson)) return reply({ error: 'unavailable' }, 503);
       try {
         const { submission_id: submissionId } = await privateJson();
         if (typeof submissionId !== 'string') return reply({ error: 'invalid_request' }, 400);
         const prepared = await rpc('admin.submission.download', { submission_id: submissionId }, supplied);
         const failed = internalError(prepared); if (failed) return failed;
         const submission = prepared.result.submission;
-        const response = await downloadPrivateZip({ serviceAccountJson: googleServiceAccountJson, fileId: submission?.drive_file_id, fetcher });
+        const response = await downloadPrivateZip({ serviceAccountJson: googleServiceAccountJson, oauthJson: googleDriveOAuthJson, fileId: submission?.drive_file_id, fetcher });
         const safeName = String(submission?.package_name ?? 'submission.zip').replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 120) || 'submission.zip';
         return new Response(response.body, { status: 200, headers: { ...headers, 'Content-Type': 'application/zip',
           'Content-Disposition': `attachment; filename="${safeName}"`, 'Access-Control-Expose-Headers': 'Content-Disposition' } });

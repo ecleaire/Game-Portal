@@ -34,7 +34,7 @@ supabase functions deploy portal
 
 Supabaseホスト環境は`SUPABASE_URL`と`SUPABASE_SERVICE_ROLE_KEY`をEdge Functionへ自動注入します。`SUPABASE_`接頭辞の値を`secrets set`で上書きする必要はありません。`config.toml`の`verify_jwt = false`は、この独自セッション方式に必要です。関数自身が保護操作すべてでDB上のセッションと権限を検証します。
 
-投稿ZIPを使う場合は、[Google Driveの管理者専用保管領域の設定](GOOGLE_DRIVE_SETUP.md)を先に完了します。`GOOGLE_SERVICE_ACCOUNT_JSON`と`GOOGLE_DRIVE_PENDING_FOLDER_ID`は`.env.edge`ではなくSupabase Edge Function Secretsへ設定してください。これらの値をGitHub Variablesや`assets/config.js`へ入れてはいけません。
+投稿ZIPを使う場合は、[Google Driveの管理者専用保管領域の設定](GOOGLE_DRIVE_SETUP.md)を先に完了します。個人のマイドライブは[所有者OAuth](GOOGLE_DRIVE_OAUTH.md)、Workspaceの共有ドライブはサービスアカウントを使います。`GOOGLE_DRIVE_OAUTH_JSON`または`GOOGLE_SERVICE_ACCOUNT_JSON`とフォルダーIDはSupabase Edge Function Secretsへ設定してください。GitHub Variablesや`assets/config.js`へ入れてはいけません。
 
 ## 2. 所有者が行う必要がある手順：初期super admin
 

@@ -6,9 +6,11 @@ Driveは投稿ZIPの保管・審査用です。公開ゲームのHTMLホステ�
 
 ## 所有者が行う設定
 
+**個人のマイドライブの場合は、[所有者OAuthの設定手順](GOOGLE_DRIVE_OAUTH.md)を使ってください。以下はGoogle Workspaceの共有ドライブ専用です。** サービスアカウントにはDriveの保存容量がなく、ファイルを所有できません。個人フォルダーへの編集者共有だけでは投稿できません。[Google公式仕様](https://developers.google.com/workspace/drive/api/guides/about-shareddrives)
+
 1. Google Cloud Consoleで所有者管理のプロジェクトを作成し、**Google Drive API**を有効にします。
 2. **サービス アカウント**を1つ作成します。鍵をJSON形式で一度だけ生成し、安全なパスワードマネージャーまたは秘密管理に保管します。鍵ファイルをリポジトリ、Google Drive、GitHub Actions、GitHub Pagesに置かないでください。
-3. Google Driveで `Game-Portal/pending`、`Game-Portal/approved`、`Game-Portal/rejected` の3フォルダーを作成します。すべての一般アクセスを「制限付き」のままにし、作成したサービスアカウントのメールアドレスだけを**編集者**として追加します。一般ユーザーや「リンクを知っている全員」には共有しません。
+3. Google Workspaceの専用**共有ドライブ**内に `Game-Portal/pending`、`Game-Portal/approved`、`Game-Portal/rejected` を作成します。マイドライブの共有フォルダーとは異なります。メンバーは管理者だけに限定し、サービスアカウントにファイル追加・移動ができる権限（例：Content manager）を与えます。一般ユーザーや「リンクを知っている全員」には共有しません。
 4. 3つのフォルダーのURLからfolder IDを取得します。
 5. Supabase Dashboard → Edge Functions → `portal` → Secretsに、次を設定します。値を画面やソースコードへ貼り付けないでください。
 
@@ -25,7 +27,7 @@ Driveは投稿ZIPの保管・審査用です。公開ゲームのHTMLホステ�
    - `supabase/migrations/202609170010_private_game_preview.sql`
    - `supabase/migrations/202609260011_trusted_submitters_and_review_admins.sql`
 
-7. super adminで管理画面へログインし、**投稿保管を確認**を押します。成功表示が出れば、サービスアカウントの鍵、Drive API、3フォルダーの共有設定がすべて接続済みです。エラーの場合はフォルダーをサービスアカウントへ編集者として共有し直してください。
+7. 管理画面で**投稿保管を確認**を押します。3フォルダーへの接続、保存権限、pendingからの移動権限、共有ドライブ所属を確認します。成功しても保存容量や実際のZIP保存の成功は保証しません。小さなゲームZIPを投稿し、審査待ち・ダウンロード・承認まで確認してください。3フォルダーは同じ共有ドライブに置く必要があります。
 
 ## 保管時の制約
 

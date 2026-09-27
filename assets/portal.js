@@ -25,6 +25,10 @@ const errors = {
   not_found: '対象が見つかりません。画面を更新してください。',
   unavailable: 'サーバーに接続できません。設定を確認し、しばらくして再試行してください。',
   drive_unavailable: '投稿用のGoogle Driveに接続できません。管理者がGoogle Drive API、サービスアカウント、投稿先フォルダーの共有設定を確認してください。',
+  drive_shared_drive_required: 'サービスアカウントではマイドライブへ保存できません。管理者が共有ドライブ、または所有者OAuth認証を設定してください。',
+  drive_permission_denied: '投稿保管フォルダーに保存・移動する権限がありません。管理者がGoogle Driveの権限を確認してください。',
+  drive_quota_exceeded: 'Google Driveの保存容量が不足しています。管理者が保管先と空き容量を確認してください。',
+  drive_reconnect_required: 'Google Driveの所有者認証が失効しています。管理者が認証をやり直してください。',
 };
 function el(tag, text, attrs = {}) {
   const node = document.createElement(tag);
@@ -332,14 +336,16 @@ async function uploadPackage(submissionId, file, refresh = upload) {
     const response = await fetch(`${config.supabaseUrl.replace(/\/$/, '')}/functions/v1/portal/upload`, { method: 'POST', credentials: 'omit',
       headers: { ...(config.anonKey ? { apikey: config.anonKey } : {}), 'X-Portal-Session': session.token }, body, signal: AbortSignal.timeout(120000) });
     const result = await response.json(); if (!response.ok || result.error) throw new Error(result.error ?? 'unavailable');
-    await refresh(); notice('非公開で保管しました。審査待ちです。');
+    await refresh(); notice(result.submission?.status === 'approved'
+      ? '非公開で保管しました。信頼済み投稿者のため審査を省略しました。'
+      : '非公開で保管しました。審査待ちです。');
 }
 async function checkStorageHealth() {
   const response = await fetch(`${config.supabaseUrl.replace(/\/$/, '')}/functions/v1/portal/storage-health`, { method: 'POST', credentials: 'omit',
-    headers: { ...(config.anonKey ? { apikey: config.anonKey } : {}), 'X-Portal-Session': session.token }, signal: AbortSignal.timeout(30000) });
+    headers: { ...(config.anonKey ? { apikey: config.anonKey } : {}), 'X-Portal-Session': session.token }, signal: AbortSignal.timeout(90000) });
   const result = await response.json().catch(() => ({}));
   if (!response.ok || result.error) throw new Error(result.error ?? 'drive_unavailable');
-  notice('Google Driveの非公開保管フォルダーへ接続できます。');
+  notice('保管フォルダーの接続と保存・移動権限を確認しました。実際の保存はZIP投稿で確認してください。');
 }
 async function reviewSubmission(submissionId, decision, reason = '') {
   const response = await fetch(`${config.supabaseUrl.replace(/\/$/, '')}/functions/v1/portal/review`, { method: 'POST', credentials: 'omit',
