@@ -1,5 +1,5 @@
 import { config } from './config.js';
-import { checkWebGameZip, unpackPrivateZip, privatePreviewDocument } from './private-preview.js';
+import { checkWebGameZip, unpackPrivateZip, privatePreviewDocument } from './private-preview.js?v=20260929a';
 
 const root = document.querySelector('#portal');
 const message = document.querySelector('#message');
