@@ -81,12 +81,13 @@ export function validateZip(bytes) {
     let name; try { name = decoder.decode(bytes.slice(at + 46, at + 46 + nameLength)); } catch { throw new Error('invalid_upload'); }
     const unixMode = external >>> 16;
     if (!name || name.includes('\\') || name.startsWith('/') || /^[A-Za-z]:/.test(name) || name.split('/').includes('..') || (unixMode & 0xf000) === 0xa000) throw new Error('invalid_upload');
-    if (/\.html?$/i.test(name)) html = true;
+    if (name === 'index.html') html = true;
     total += uncompressed;
     if (!Number.isSafeInteger(total) || total > 209715200) throw new Error('invalid_upload');
     at = end;
   }
-  if (at !== u32(bytes, eocd + 16) + directorySize || !html) throw new Error('invalid_upload');
+  if (at !== u32(bytes, eocd + 16) + directorySize) throw new Error('invalid_upload');
+  if (!html) throw new Error('web_export_required');
 }
 
 export async function storePrivateZip({ serviceAccountJson, oauthJson = '', pendingFolderId, submissionId, file, fetcher = fetch }) {

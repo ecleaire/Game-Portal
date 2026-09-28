@@ -1,5 +1,5 @@
 import { config } from './config.js';
-import { unpackPrivateZip, privatePreviewDocument } from './private-preview.js';
+import { checkWebGameZip, unpackPrivateZip, privatePreviewDocument } from './private-preview.js';
 
 const root = document.querySelector('#portal');
 const message = document.querySelector('#message');
@@ -31,6 +31,8 @@ const errors = {
   drive_quota_exceeded: 'Google Driveの保存容量が不足しています。管理者が保管先と空き容量を確認してください。',
   drive_reconnect_required: 'Google Driveの所有者認証が失効しています。管理者が認証をやり直してください。',
   invalid_preview: 'ZIP内のindex.htmlまたはゲームファイルを確認してください。',
+  invalid_upload: 'ZIP形式またはサイズを確認してください（最大50MB）。Web書き出しのindex.htmlがZIPの一番上に必要です。',
+  web_export_required: 'このZIPはブラウザ用ではありません。Godotの「Web」書き出しで生成したindex.html・.js・.wasm・.pckをまとめてZIPにしてください。「PCK/ZIP」書き出しだけではプレイできません。',
   preview_unsupported: 'このブラウザーはZIPプレビューに対応していません。ブラウザーを更新してください。',
 };
 function el(tag, text, attrs = {}) {
@@ -144,8 +146,6 @@ function login() {
   syncLoginLink();
   root.replaceChildren();
   const s = section(adminMode ? '管理者ログイン' : 'ユーザーログイン');
-  s.append(el('p', 'アカウントは管理者が作成します。メールアドレスは不要です。', { class: 'muted' }));
-  s.append(el('p', 'ログイン状態は、このブラウザの同じタブ内でページを切り替えても維持されます。', { class: 'muted' }));
   form(s, [username(), password('password', 'パスワード', false)], 'ログイン', async data => {
     saveSession(await api(adminMode ? 'admin.login' : 'user.login', data));
     syncLoginLink();
@@ -212,7 +212,7 @@ function submissionManager(parent, game) {
     }).classList.add('stacked-form');
   }
   if (game.status === 'uploading') {
-    row.append(el('p', 'ZIPはまだ保管されていません。ファイルを選び直して、この投稿へ再送できます。', { class: 'muted' }));
+    row.append(el('p', 'ZIPはまだ保管されていません。審査・プレイはできません。Web書き出しZIPを選び直して、この投稿へ再送してください。', { class: 'muted' }));
     const retryForm = form(row, [], 'ZIPを再送して審査へ送る', async () => {
       const file = retryForm.elements.package?.files?.[0];
       await uploadPackage(game.id, file, account);
@@ -277,9 +277,10 @@ async function dashboard() {
   for (const game of submissions) {
     const row = el('div', null, { class: 'row' });
     row.append(el('p', `${game.title} / 投稿者: ${game.username} / ${game.engine} / ${game.version} / ${game.status}`));
+    if (game.status === 'uploading') row.append(el('p', 'ZIP未保管。投稿者がWeb書き出しZIPを再送するまで審査・公開できません。', { class: 'muted' }));
     if (game.description) row.append(el('p', game.description, { class: 'muted' }));
     if (game.review_reason) row.append(el('p', `審査メモ: ${game.review_reason}`, { class: 'muted' }));
-    button(row, 'ZIPを安全にダウンロード', () => downloadSubmission(game.id));
+    if (['pending', 'approved', 'rejected'].includes(game.status)) button(row, 'ZIPを安全にダウンロード', () => downloadSubmission(game.id));
     if (game.status === 'pending') {
       button(row, '承認（非公開で保管を継続）', () => reviewSubmission(game.id, 'approved'));
       button(row, '却下', async () => {
@@ -339,13 +340,30 @@ async function showAudit(parent) {
 
 async function uploadPackage(submissionId, file, refresh = upload) {
     if (!file) throw new Error('invalid_request');
+    await checkWebGameZip(file);
+    notice('ZIPを非公開保管先へ送信中…完了までこの画面を閉じないでください。');
     const body = new FormData(); body.set('submission_id', submissionId); body.set('package', file);
     const response = await fetch(`${config.supabaseUrl.replace(/\/$/, '')}/functions/v1/portal/upload`, { method: 'POST', credentials: 'omit',
       headers: { ...(config.anonKey ? { apikey: config.anonKey } : {}), 'X-Portal-Session': session.token }, body, signal: AbortSignal.timeout(120000) });
-    const result = await response.json(); if (!response.ok || result.error) throw new Error(result.error ?? 'unavailable');
-    await refresh(); notice(result.submission?.status === 'approved'
+    const result = await response.json().catch(() => ({})); if (!response.ok || result.error) throw new Error(result.error ?? 'unavailable');
+    if (refresh) await refresh(); notice(result.submission?.status === 'approved'
       ? '非公開で保管しました。信頼済み投稿者のため審査を省略しました。'
       : '非公開で保管しました。審査待ちです。');
+    return result.submission;
+}
+function uploadComplete(submission) {
+  root.replaceChildren();
+  const done = section('投稿が完了しました');
+  done.append(el('p', submission?.status === 'approved'
+    ? 'ZIPを非公開で保管しました。信頼済み投稿者のため審査は省略されました。まだ一般公開はされていません。'
+    : 'ZIPを非公開で保管し、管理者の審査へ送りました。まだ一般公開はされていません。'));
+  done.append(el('p', 'アカウント画面の「投稿したゲームの管理」から非公開でプレイできます。', { class: 'muted' }));
+  const actions = el('div', null, { class: 'actions' });
+  button(actions, '投稿したゲームを確認・プレイ', account);
+  button(actions, '別のゲームを投稿', upload);
+  done.append(actions);
+  notice('投稿が完了しました。');
+  window.scrollTo(0, 0);
 }
 async function checkStorageHealth() {
   const response = await fetch(`${config.supabaseUrl.replace(/\/$/, '')}/functions/v1/portal/storage-health`, { method: 'POST', credentials: 'omit',
@@ -373,13 +391,15 @@ async function upload() {
   const { user } = await api('user.me'); root.replaceChildren();
   const s = section('ゲーム投稿'); logoutButton(s);
   if (!['uploader', 'trusted_uploader'].includes(user.role)) { s.append(el('p', 'このアカウントには投稿権限がありません。管理者に投稿可能ユーザーへの変更を依頼してください。')); return; }
-  const steps = el('ol', null, { class: 'steps' });
-  for (const text of ['ゲーム情報を入力', 'この画面でZIPを選択・送信', '非公開で保管・管理者の審査を待つ']) steps.append(el('li', text));
-  s.append(steps);
-  s.append(el('h3', '1. ゲーム情報を入力'));
-  s.append(el('p', '上から順番でなくても入力できます。説明と操作説明は任意です。', { class: 'muted' }));
+  s.append(el('p', 'Godotは「Web」書き出しを使い、index.html・.js・.wasm・.pckをZIPの一番上に入れてください。「PCK/ZIP」書き出しだけではブラウザで遊べません。', { class: 'muted' }));
+  let pendingSubmissionId;
   const submissionForm = form(s, [field('title', 'ゲーム名', 'text', { maxlength: '120' }), field('engine', 'エンジン', 'select', { choices: [['godot','Godot'],['scratch','Scratch / TurboWarp'],['other','その他']] }), field('description', '説明（任意）', 'text', { maxlength: '4000', optional: true }), field('version', 'バージョン', 'text', { value: '1.0.0', maxlength: '80' }), field('controls', '操作説明（任意）', 'text', { maxlength: '2000', optional: true })], '投稿して審査へ送る', async data => {
-    const file = submissionForm.elements.package?.files?.[0]; delete data.package; const { submission } = await api('user.submission.create', data); await uploadPackage(submission.id, file);
+    const file = submissionForm.elements.package?.files?.[0]; delete data.package;
+    await checkWebGameZip(file);
+    if (!pendingSubmissionId) { const { submission } = await api('user.submission.create', data); pendingSubmissionId = submission.id; }
+    const completed = await uploadPackage(pendingSubmissionId, file, null);
+    pendingSubmissionId = null;
+    uploadComplete(completed);
   });
   submissionForm.classList.add('stacked-form');
   const packageLabel = el('label', 'ゲームZIP（最大50MB）');

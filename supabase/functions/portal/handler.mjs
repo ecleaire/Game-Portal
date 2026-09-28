@@ -73,8 +73,8 @@ export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleS
         return reply(after.result);
       } catch (error) {
         const name = error?.message;
-        const uploadError = name === 'invalid_upload' ? 'invalid_request' : name?.startsWith('drive_') ? driveError(error) : 'unavailable';
-        return reply({ error: uploadError }, uploadError === 'invalid_request' ? 400 : 503);
+        const uploadError = ['invalid_upload', 'web_export_required'].includes(name) ? name : name?.startsWith('drive_') ? driveError(error) : 'unavailable';
+        return reply({ error: uploadError }, ['invalid_upload', 'web_export_required'].includes(uploadError) ? 400 : 503);
       }
     }
     if (requestUrl.pathname.endsWith('/storage-health')) {

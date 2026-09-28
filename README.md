@@ -23,6 +23,8 @@ https://ecleaire.github.io/Game-Portal/
 
 `uploader`権限のユーザーは`/upload/`から最大50MBのZIPを投稿できます。ZIPは公開されないGoogle Driveの`pending`フォルダーに保存され、投稿者にはDriveのURLやIDを返しません。所有者の設定は[Google Driveの管理者専用保管領域の設定](docs/GOOGLE_DRIVE_SETUP.md)を参照してください。
 
+Godotの投稿は**Web書き出し**を選び、生成された`index.html`、同名の`.js`、`.wasm`、`.pck`などをまとめてZIPにしてください。`index.html`はZIP直下に置きます。「PCK/ZIP」書き出しはブラウザ用ではなく、投稿できません。可能ならWeb書き出しはシングルスレッドにしてください。投稿後は完了画面が表示され、アカウント画面から非公開プレビューできます。失敗して`uploading`に残った既存投稿は、アカウント画面で正しいZIPを再送できます。新しい投稿を繰り返し作る必要はありません。[Godot公式のWeb書き出し手順](https://docs.godotengine.org/ja/4.x/tutorials/export/exporting_for_web.html)も参照してください。
+
 `npm ci` → `npm test` → `npm run build` → `npm run dev`でローカル確認できます（Node.js 22以上）。公開値が未設定でも既存ゲームは動作します。GitHub Pagesは`dist/`の公開ファイルだけを配信します。
 
 追加URLは`login/`、`account/`、`admin/`、`upload/`です。ログイン状態はブラウザの同じタブ内でページを切り替えても維持されます。タブを閉じると消去され、各操作時にサーバーで有効性を確認するため、KICK・BAN・失効も直ちに反映されます。管理者は投稿ZIPを隔離環境で確認し、承認または却下できます。承認済みファイルは非公開Driveに保管され、公開自動化はまだ行いません。未信頼ゲームを公開する前に、ゲームと管理画面のorigin分離が必要です。

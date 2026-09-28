@@ -53,6 +53,7 @@ test('CORS, methods, size, malformed input and missing sessions fail before data
 });
 test('ZIP validation permits a normal web archive and rejects traversal or symlinks', () => {
   assert.doesNotThrow(() => validateZip(zip()));
+  assert.throws(() => validateZip(zip('jumpmaster.pck')), /web_export_required/);
   assert.throws(() => validateZip(zip('../index.html')), /invalid_upload/);
   assert.throws(() => validateZip(zip('index.html', 0xa0000000)), /invalid_upload/);
 });

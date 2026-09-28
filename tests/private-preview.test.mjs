@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { deflateRawSync } from 'node:zlib';
-import { unpackPrivateZip } from '../assets/private-preview.js';
+import { checkWebGameZip, unpackPrivateZip } from '../assets/private-preview.js';
 
 function archive(name, content, compress = false) {
   const filename = Buffer.from(name), body = Buffer.from(content), packed = compress ? deflateRawSync(body) : body;
@@ -24,4 +24,11 @@ test('private ZIP preview unpacks stored and deflated HTML with size checks', as
   }
   await assert.rejects(unpackPrivateZip(archive('../index.html', '<h1>bad</h1>')), /invalid_preview/);
   await assert.rejects(unpackPrivateZip(archive('other.html', '<h1>bad</h1>')), /invalid_preview/);
+});
+
+test('submission rejects Godot PCK/ZIP exports before creating a record', async () => {
+  const packageOnly = new File([archive('jumpmaster.pck', 'game')], 'jumpmaster.zip');
+  await assert.rejects(checkWebGameZip(packageOnly), /web_export_required/);
+  const webExport = new File([archive('index.html', '<h1>Game</h1>')], 'jumpmaster-web.zip');
+  await assert.doesNotReject(checkWebGameZip(webExport));
 });

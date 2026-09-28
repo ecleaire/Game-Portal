@@ -10,6 +10,34 @@ const mimeTypes = { html: 'text/html', htm: 'text/html', js: 'text/javascript', 
   wav: 'audio/wav', mp4: 'video/mp4', woff: 'font/woff', woff2: 'font/woff2' };
 const mime = name => mimeTypes[name.split('.').pop().toLowerCase()] ?? 'application/octet-stream';
 
+// Validate the Web export before creating a database submission.
+export async function checkWebGameZip(file) {
+  if (!file || !/\.zip$/i.test(file.name) || file.size < 22 || file.size > MAX_ZIP) throw new Error('invalid_upload');
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const view = new DataView(bytes.buffer);
+  const u16 = at => view.getUint16(at, true);
+  const u32 = at => view.getUint32(at, true);
+  let end = -1;
+  for (let at = bytes.length - 22; at >= Math.max(0, bytes.length - 65557); at--) {
+    if (u32(at) === 0x06054b50) { end = at; break; }
+  }
+  if (end < 0 || u16(end + 4) || u16(end + 6)) throw new Error('invalid_upload');
+  const count = u16(end + 10), size = u32(end + 12), start = u32(end + 16);
+  if (!count || count > 5000 || start + size > end) throw new Error('invalid_upload');
+  let at = start, hasIndex = false;
+  for (let n = 0; n < count; n++) {
+    if (at + 46 > end || u32(at) !== 0x02014b50) throw new Error('invalid_upload');
+    const nameLength = u16(at + 28), extraLength = u16(at + 30), commentLength = u16(at + 32);
+    const next = at + 46 + nameLength + extraLength + commentLength;
+    if (next > end) throw new Error('invalid_upload');
+    const name = decoder.decode(bytes.subarray(at + 46, at + 46 + nameLength));
+    if (name === 'index.html') hasIndex = true;
+    at = next;
+  }
+  if (at !== start + size) throw new Error('invalid_upload');
+  if (!hasIndex) throw new Error('web_export_required');
+}
+
 async function inflate(raw, expected) {
   if (typeof DecompressionStream !== 'function') throw new Error('preview_unsupported');
   const reader = new Blob([raw]).stream().pipeThrough(new DecompressionStream('deflate-raw')).getReader();

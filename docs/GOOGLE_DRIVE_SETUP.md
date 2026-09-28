@@ -32,7 +32,7 @@ Driveは投稿ZIPの保管・審査用です。公開ゲームのHTMLホステ�
 ## 保管時の制約
 
 - 投稿者は`uploader`権限、active状態、非BANである必要があります。
-- ZIPは最大50MBです。ZIP形式、エントリー数、展開後合計200MB、HTMLエントリーの存在を検査し、パストラバーサル、絶対パス、Windows区切り、symlink、暗号化ZIPを拒否します。ZIPを展開して実行する処理はありません。
+- ZIPは最大50MBです。ZIP形式、エントリー数、展開後合計200MB、ZIP直下の`index.html`を検査し、パストラバーサル、絶対パス、Windows区切り、symlink、暗号化ZIPを拒否します。「PCK/ZIP」だけのGodot書き出しはWebゲームではないため拒否します。ZIPをサーバーで展開して実行する処理はありません。
 - Edge Functionがセッションを確認してからDriveへ送信し、DBにはDrive file IDを非公開値として記録します。
 - 投稿者には投稿状態だけを返し、DriveのファイルID・閲覧リンクは返しません。
 - 投稿者本人の「非公開でプレイ」は、本人の有効なセッションを再確認してZIPをブラウザーへ返し、ブラウザー内で展開します。ゲームは`allow-scripts`のみを許可した隔離iframe内で動き、ポータルのログイン情報へアクセスできません。ZIPにはルートの`index.html`が必要です。大きなZIPは端末のメモリーを使います。Supabase Edge FunctionsはHTMLを`text/plain`へ書き換えるため、Edge FunctionのURLをゲームのWebホスティングとして直接埋め込まないでください。
