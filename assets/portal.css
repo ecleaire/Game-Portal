@@ -21,6 +21,10 @@
 .portal .avatar { display: grid; place-items: center; flex: 0 0 72px; width: 72px; height: 72px; font-size: 2.25rem; background: var(--panel-2); border: 1px solid var(--line); border-radius: 50%; }
 .portal .steps { display: grid; gap: 8px; padding: 14px 14px 14px 36px; background: var(--panel-2); border-radius: 10px; line-height: 1.6; }
 .portal .steps li::marker { color: var(--accent); font-weight: 700; }
+.portal .export-guide { max-width: 680px; padding: 14px 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); }
+.portal .export-guide summary { cursor: pointer; font-weight: 700; }
+.portal .export-guide ol { margin: 14px 0 0; padding-left: 1.5em; line-height: 1.7; }
+.portal .export-guide li + li { margin-top: 8px; }
 .portal form.stacked-form { display: grid; max-width: 680px; gap: 20px; padding: 20px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; align-items: stretch; }
 .portal form.stacked-form label { display: grid; gap: 9px; font-weight: 600; }
 .portal form.stacked-form input, .portal form.stacked-form select { background: var(--bg); }

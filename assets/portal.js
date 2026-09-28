@@ -391,7 +391,18 @@ async function upload() {
   const { user } = await api('user.me'); root.replaceChildren();
   const s = section('ゲーム投稿'); logoutButton(s);
   if (!['uploader', 'trusted_uploader'].includes(user.role)) { s.append(el('p', 'このアカウントには投稿権限がありません。管理者に投稿可能ユーザーへの変更を依頼してください。')); return; }
-  s.append(el('p', 'Godotは「Web」書き出しを使い、index.html・.js・.wasm・.pckをZIPの一番上に入れてください。「PCK/ZIP」書き出しだけではブラウザで遊べません。', { class: 'muted' }));
+  const guide = el('details', null, { class: 'export-guide' });
+  guide.append(el('summary', 'GodotのWeb書き出し・ZIP作成手順'));
+  const steps = el('ol', null);
+  for (const step of [
+    'Godotでプロジェクトを開き、「プロジェクト」→「エクスポート」を選びます。',
+    '「追加」から「Web」を選びます。書き出しテンプレートを求められたら、Godotの画面に沿ってインストールします。',
+    'Webの設定で「Use Threads」をオフにし、「プロジェクトをエクスポート」で空のフォルダーへ index.html という名前で書き出します。',
+    '生成された index.html・.js・.wasm・.pck・画像などをすべて選んでZIPにします。フォルダーごとではなく、ZIPを開いた一番上に index.html が見える形にしてください。',
+    '下のフォームでそのZIPを選び、投稿します。「PCK/ZIP」だけの書き出しではブラウザで遊べません。',
+  ]) steps.append(el('li', step));
+  guide.append(steps);
+  s.append(guide);
   let pendingSubmissionId;
   const submissionForm = form(s, [field('title', 'ゲーム名', 'text', { maxlength: '120' }), field('engine', 'エンジン', 'select', { choices: [['godot','Godot'],['scratch','Scratch / TurboWarp'],['other','その他']] }), field('description', '説明（任意）', 'text', { maxlength: '4000', optional: true }), field('version', 'バージョン', 'text', { value: '1.0.0', maxlength: '80' }), field('controls', '操作説明（任意）', 'text', { maxlength: '2000', optional: true })], '投稿して審査へ送る', async data => {
     const file = submissionForm.elements.package?.files?.[0]; delete data.package;
