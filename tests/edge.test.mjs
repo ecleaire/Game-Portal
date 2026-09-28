@@ -69,6 +69,30 @@ test('storage health check requires an administrator session and complete server
   assert.equal((await handler(health())).status, 401);
   assert.deepEqual(await (await handler(health({ 'x-portal-session': token() }))).json(), { error: 'drive_unavailable' });
 });
+test('private preview package requires owner session and never reveals Drive identifiers', async () => {
+  const preview = headers => new Request('https://example.supabase.co/functions/v1/portal/preview-package', {
+    method: 'POST', headers: { origin: settings.allowedOrigins, 'content-type': 'application/json', ...headers },
+    body: JSON.stringify({ submission_id: crypto.randomUUID() }),
+  });
+  let driveCalls = 0;
+  const handler = createHandler({ ...settings, googleDriveOAuthJson: JSON.stringify({ client_id: 'test', client_secret: 'test', refresh_token: 'test' }),
+    fetcher: async (url) => {
+      if (url.endsWith('/rest/v1/rpc/portal_api')) return Response.json({ submission: { drive_file_id: 'private-file' } });
+      if (url.includes('oauth2.googleapis.com')) return Response.json({ access_token: 'temporary' });
+      if (url.includes('/drive/v3/files/private-file')) { driveCalls++; return new Response(zip(), { headers: { 'content-type': 'application/zip' } }); }
+      throw new Error('unexpected request');
+    },
+  });
+  assert.equal((await handler(preview())).status, 401);
+  assert.equal(driveCalls, 0);
+  const response = await handler(preview({ 'x-portal-session': token() }));
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('content-type'), 'application/zip');
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  assert.equal(driveCalls, 1);
+  assert.ok(!JSON.stringify(Object.fromEntries(response.headers)).includes('private-file'));
+  assert.deepEqual(new Uint8Array(await response.arrayBuffer()), zip());
+});
 test('revoked sessions and DB errors are sanitized; secrets are never reflected', async () => {
   for (const [databaseResult, upstreamStatus, expected] of [
     [{ error: 'unauthorized' }, 200, 401], [{ error: 'rate_limited' }, 200, 429],

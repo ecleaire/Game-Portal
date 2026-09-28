@@ -32,7 +32,7 @@ supabase secrets set --env-file .env.edge
 supabase functions deploy portal
 ```
 
-Supabaseホスト環境は`SUPABASE_URL`と`SUPABASE_SERVICE_ROLE_KEY`をEdge Functionへ自動注入します。`SUPABASE_`接頭辞の値を`secrets set`で上書きする必要はありません。`config.toml`の`verify_jwt = false`は、この独自セッション方式に必要です。関数自身が保護操作すべてでDB上のセッションと権限を検証します。
+Supabaseホスト環境は`SUPABASE_URL`と`SUPABASE_SERVICE_ROLE_KEY`をEdge Functionへ自動注入します。`SUPABASE_`接頭辞の値を`secrets set`で上書きする必要はありません。`config.toml`の`verify_jwt = false`は、この独自セッション方式に必要です。Dashboardから関数をデプロイした場合は **Edge Functions → portal → Settings → Verify JWT with legacy secret をOFF** にしてください。Dashboardでのデプロイは`config.toml`の値を反映しないことがあります。関数自身が保護操作すべてでDB上のセッションと権限を検証します。投稿者の非公開プレビューも本人のセッションと投稿IDを確認してからZIPを返します。
 
 投稿ZIPを使う場合は、[Google Driveの管理者専用保管領域の設定](GOOGLE_DRIVE_SETUP.md)を先に完了します。個人のマイドライブは[所有者OAuth](GOOGLE_DRIVE_OAUTH.md)、Workspaceの共有ドライブはサービスアカウントを使います。`GOOGLE_DRIVE_OAUTH_JSON`または`GOOGLE_SERVICE_ACCOUNT_JSON`とフォルダーIDはSupabase Edge Function Secretsへ設定してください。GitHub Variablesや`assets/config.js`へ入れてはいけません。
 

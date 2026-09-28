@@ -1,4 +1,5 @@
 import { config } from './config.js';
+import { unpackPrivateZip, privatePreviewDocument } from './private-preview.js';
 
 const root = document.querySelector('#portal');
 const message = document.querySelector('#message');
@@ -29,6 +30,8 @@ const errors = {
   drive_permission_denied: '投稿保管フォルダーに保存・移動する権限がありません。管理者がGoogle Driveの権限を確認してください。',
   drive_quota_exceeded: 'Google Driveの保存容量が不足しています。管理者が保管先と空き容量を確認してください。',
   drive_reconnect_required: 'Google Driveの所有者認証が失効しています。管理者が認証をやり直してください。',
+  invalid_preview: 'ZIP内のindex.htmlまたはゲームファイルを確認してください。',
+  preview_unsupported: 'このブラウザーはZIPプレビューに対応していません。ブラウザーを更新してください。',
 };
 function el(tag, text, attrs = {}) {
   const node = document.createElement(tag);
@@ -228,10 +231,14 @@ function submissionManager(parent, game) {
   parent.append(row);
 }
 async function previewSubmission(submissionId) {
-  const response = await fetch(`${config.supabaseUrl.replace(/\/$/, '')}/functions/v1/portal/preview`, { method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'application/json', ...(config.anonKey ? { apikey: config.anonKey } : {}), 'X-Portal-Session': session.token }, body: JSON.stringify({ submission_id: submissionId }), signal: AbortSignal.timeout(30000) });
-  const result = await response.json(); if (!response.ok || result.error || typeof result.url !== 'string') throw new Error(result.error ?? 'unavailable');
-  const frame = el('iframe', null, { src: result.url, title: '非公開ゲームプレビュー', sandbox: 'allow-scripts', referrerpolicy: 'no-referrer' }); frame.className = 'private-preview';
-  root.replaceChildren(section('非公開ゲームプレビュー'), frame); notice('このプレビューは本人専用で、5分後にURLは失効します。');
+  const response = await fetch(`${config.supabaseUrl.replace(/\/$/, '')}/functions/v1/portal/preview-package`, { method: 'POST', credentials: 'omit',
+    headers: { 'Content-Type': 'application/json', ...(config.anonKey ? { apikey: config.anonKey } : {}), 'X-Portal-Session': session.token },
+    body: JSON.stringify({ submission_id: submissionId }), signal: AbortSignal.timeout(90000) });
+  if (!response.ok) { const result = await response.json().catch(() => ({})); throw new Error(result.error ?? 'unavailable'); }
+  const files = await unpackPrivateZip(await response.arrayBuffer());
+  const frame = el('iframe', null, { title: '非公開ゲームプレビュー', sandbox: 'allow-scripts', referrerpolicy: 'no-referrer' });
+  frame.className = 'private-preview'; frame.srcdoc = privatePreviewDocument(files);
+  root.replaceChildren(section('非公開ゲームプレビュー'), frame); notice('このゲームは本人専用の隔離された画面で実行しています。');
 }
 async function dashboard() {
   const [{ admin }, { users }, { submissions }] = await Promise.all([api('admin.me'), api('admin.users', { offset }), api('admin.submissions', { offset: 0 })]);
@@ -395,6 +402,7 @@ async function start() {
     return;
   }
   if (!restoreSession()) { login(); return; }
+  syncLoginLink();
   if (location.hash === '#logout') { await logout(); return; }
   try {
     if (adminMode) { await api('admin.me'); offset = 0; selected = null; await dashboard(); }

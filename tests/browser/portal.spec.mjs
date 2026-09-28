@@ -24,6 +24,23 @@ test('existing listing, search and public game player work without backend confi
   await expect(page.getByRole('heading', { name: '投稿サービスは未設定です' })).toBeVisible();
 });
 
+test('private HTML preview runs local ZIP assets inside an opaque sandbox', async ({ page }) => {
+  await goto(page, './');
+  await page.evaluate(async () => {
+    const { privatePreviewDocument } = await import('./assets/private-preview.js');
+    const encode = text => new TextEncoder().encode(text);
+    const files = new Map([
+      ['index.html', encode('<!doctype html><html><head><script src="game.js"></script></head><body>loading</body></html>')],
+      ['game.js', encode("try { parent.document.body } catch { document.documentElement.dataset.isolated = 'yes' }; fetch('state.json').then(r => r.json()).then(x => { document.body.textContent = x.message; });")],
+      ['state.json', encode('{"message":"Private game works"}')],
+    ]);
+    const frame = document.createElement('iframe'); frame.setAttribute('sandbox', 'allow-scripts');
+    frame.srcdoc = privatePreviewDocument(files); document.body.append(frame);
+  });
+  await expect(page.frameLocator('iframe').locator('body')).toHaveText('Private game works');
+  await expect(page.frameLocator('iframe').locator('html')).toHaveAttribute('data-isolated', 'yes');
+});
+
 test('browser flows connect to the real Edge handler and migrated database', async ({ context, page }) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -59,6 +76,7 @@ test('browser flows connect to the real Edge handler and migrated database', asy
   expect(await user.evaluate(() => ({ local: localStorage.length, session: sessionStorage.length }))).toEqual({ local: 0, session: 1 });
   await user.reload();
   await expect(user.getByRole('button', { name: 'パスワードを変更', exact: true })).toBeVisible();
+  await expect(user.getByRole('navigation', { name: 'アカウント' }).getByRole('link', { name: 'ログアウト' })).toBeVisible();
 
   page.on('dialog', dialog => dialog.accept());
   await selected.getByRole('button', { name: 'KICK（全端末をログアウト）' }).click();
@@ -89,5 +107,6 @@ test('browser flows connect to the real Edge handler and migrated database', asy
   await page.screenshot({ path: 'test-results/admin-mobile.png', fullPage: true });
   await page.reload();
   await expect(page.getByRole('heading', { name: '管理画面 — browser_owner', exact: true })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'アカウント' }).getByRole('link', { name: 'ログアウト' })).toBeVisible();
   expect(errors).toEqual([]);
 });
