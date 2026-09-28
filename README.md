@@ -21,10 +21,10 @@ https://ecleaire.github.io/Game-Portal/
 - [API仕様](docs/API.md)
 - [Google Driveの所有者設定とPhase 3への引き継ぎ](docs/GOOGLE_DRIVE_SETUP.md)
 
-`uploader`権限のユーザーは`/upload/`から最大50MBのZIPを投稿できます。ZIPは公開されないGoogle Driveの`pending`フォルダーに保存され、投稿者にはDriveのURLやIDを返しません。所有者の設定は[Google Driveの管理者専用保管領域の設定](docs/GOOGLE_DRIVE_SETUP.md)を参照してください。
+`uploader`権限のユーザーは`/upload/`から最大50MBのWebゲームZIP、またはWeb書き出しの複数ファイルを投稿できます。ゲームZIPは管理者だけが扱うGoogle Driveへ保管し、配信用コピーは非公開Supabase Storageへ保存します。投稿者にはDriveのURLやIDを返しません。所有者の設定は[Google Driveの管理者専用保管領域の設定](docs/GOOGLE_DRIVE_SETUP.md)と[公開機能の有効化](docs/PUBLISHING.md)を参照してください。
 
-Godotの投稿は**Web書き出し**を選び、生成された`index.html`、同名の`.js`、`.wasm`、`.pck`などをまとめてZIPにしてください。`index.html`はZIP直下に置きます。「PCK/ZIP」書き出しはブラウザ用ではなく、投稿できません。可能ならWeb書き出しはシングルスレッドにしてください。投稿後は完了画面が表示され、アカウント画面から非公開プレビューできます。失敗して`uploading`に残った既存投稿は、アカウント画面で正しいZIPを再送できます。新しい投稿を繰り返し作る必要はありません。[Godot公式のWeb書き出し手順](https://docs.godotengine.org/ja/4.x/tutorials/export/exporting_for_web.html)も参照してください。
+Godotでは**Web**プリセットから「プロジェクトをエクスポート」し、生成されたHTML、同名の`.js`、`.wasm`、`.pck`などをまとめてください。HTML名は`index.html`に限らず`jump.html`などでも構いません。ZIP内に1つの親フォルダーがあっても受け付けます。「PCK/ZIPのエクスポート」だけではブラウザーで遊べません。Godot 4.7.2では`Thread Support`をオフにしてください。投稿後は完了画面が表示され、アカウント画面から本人だけのプレビューができます。失敗して`uploading`に残った既存投稿は、アカウント画面でZIPを再送できます。[Godot公式のWeb書き出し手順](https://docs.godotengine.org/ja/4.x/tutorials/export/exporting_for_web.html)も参照してください。
 
 `npm ci` → `npm test` → `npm run build` → `npm run dev`でローカル確認できます（Node.js 22以上）。公開値が未設定でも既存ゲームは動作します。GitHub Pagesは`dist/`の公開ファイルだけを配信します。
 
-追加URLは`login/`、`account/`、`admin/`、`upload/`です。ログイン状態はブラウザの同じタブ内でページを切り替えても維持されます。タブを閉じると消去され、各操作時にサーバーで有効性を確認するため、KICK・BAN・失効も直ちに反映されます。管理者は投稿ZIPを隔離環境で確認し、承認または却下できます。承認済みファイルは非公開Driveに保管され、公開自動化はまだ行いません。未信頼ゲームを公開する前に、ゲームと管理画面のorigin分離が必要です。
+追加URLは`login/`、`account/`、`admin/`、`upload/`です。ログイン状態はブラウザの同じタブ内でページを切り替えても維持されます。タブを閉じると消去され、各操作時にサーバーで有効性を確認するため、KICK・BAN・失効も直ちに反映されます。投稿者は**下書き・限定公開・公開**と公開日時を選べます。下書きは審査不要で本人のみ閲覧できます。限定公開は承認後に共有URLから、公開は承認後に一覧からも閲覧できます。未来の公開日時はサーバーで判定するため、予約時刻まで表示・配信されません。管理者は審査と公開停止ができます。ゲームはZIPのまま非公開Storageへ保存し、ブラウザー内の隔離iframeで実行します。設定順と制約は[公開機能の有効化](docs/PUBLISHING.md)を参照してください。

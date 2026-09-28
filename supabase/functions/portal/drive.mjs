@@ -1,5 +1,6 @@
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const DRIVE_UPLOAD_URL = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,name,size';
+import { webArchiveLayout } from '../../../assets/private-preview.js';
 
 // Reflect only stable reason codes, never Google's response or credential values.
 export function driveError(error) {
@@ -70,8 +71,8 @@ export function validateZip(bytes) {
   for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65557); i--) if (u32(bytes, i) === 0x06054b50) { eocd = i; break; }
   if (eocd < 0 || u16(bytes, eocd + 4) !== 0 || u16(bytes, eocd + 6) !== 0) throw new Error('invalid_upload');
   const count = u16(bytes, eocd + 10); const directorySize = u32(bytes, eocd + 12); let at = u32(bytes, eocd + 16);
-  if (count === 0 || count === 0xffff || directorySize === 0xffffffff || count > 5000 || at + directorySize > eocd) throw new Error('invalid_upload');
-  const decoder = new TextDecoder('utf-8', { fatal: true }); let total = 0; let html = false;
+  if (count === 0 || count === 0xffff || directorySize === 0xffffffff || count > 500 || at + directorySize > eocd) throw new Error('invalid_upload');
+  const decoder = new TextDecoder('utf-8', { fatal: true }); let total = 0; const names = [];
   for (let entry = 0; entry < count; entry++) {
     if (at + 46 > eocd || u32(bytes, at) !== 0x02014b50) throw new Error('invalid_upload');
     const flags = u16(bytes, at + 8); const uncompressed = u32(bytes, at + 24); const nameLength = u16(bytes, at + 28);
@@ -81,18 +82,18 @@ export function validateZip(bytes) {
     let name; try { name = decoder.decode(bytes.slice(at + 46, at + 46 + nameLength)); } catch { throw new Error('invalid_upload'); }
     const unixMode = external >>> 16;
     if (!name || name.includes('\\') || name.startsWith('/') || /^[A-Za-z]:/.test(name) || name.split('/').includes('..') || (unixMode & 0xf000) === 0xa000) throw new Error('invalid_upload');
-    if (name === 'index.html') html = true;
+    names.push(name);
     total += uncompressed;
     if (!Number.isSafeInteger(total) || total > 209715200) throw new Error('invalid_upload');
     at = end;
   }
   if (at !== u32(bytes, eocd + 16) + directorySize) throw new Error('invalid_upload');
-  if (!html) throw new Error('web_export_required');
+  if (!webArchiveLayout(names)) throw new Error('web_export_required');
 }
 
-export async function storePrivateZip({ serviceAccountJson, oauthJson = '', pendingFolderId, submissionId, file, fetcher = fetch }) {
+export async function storePrivateZip({ serviceAccountJson, oauthJson = '', pendingFolderId, submissionId, file, bytes: suppliedBytes, fetcher = fetch }) {
   if (!pendingFolderId || !file || file.size < 1 || file.size > 52428800 || !/\.zip$/i.test(file.name)) throw new Error('invalid_upload');
-  const bytes = new Uint8Array(await file.arrayBuffer());
+  const bytes = suppliedBytes ?? new Uint8Array(await file.arrayBuffer());
   validateZip(bytes);
   const access = await accessToken(serviceAccountJson, fetcher, oauthJson);
   const boundary = `portal-${crypto.randomUUID()}`;

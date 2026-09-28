@@ -23,7 +23,8 @@ test('private ZIP preview unpacks stored and deflated HTML with size checks', as
     assert.equal(new TextDecoder().decode(files.get('index.html')), '<h1>Private game</h1>');
   }
   await assert.rejects(unpackPrivateZip(archive('../index.html', '<h1>bad</h1>')), /invalid_preview/);
-  await assert.rejects(unpackPrivateZip(archive('other.html', '<h1>bad</h1>')), /invalid_preview/);
+  const named = await unpackPrivateZip(archive('test1/jump.html', '<h1>Game</h1>'));
+  assert.equal(new TextDecoder().decode(named.get('index.html')), '<h1>Game</h1>');
 });
 
 test('submission rejects Godot PCK/ZIP exports before creating a record', async () => {
@@ -31,4 +32,6 @@ test('submission rejects Godot PCK/ZIP exports before creating a record', async 
   await assert.rejects(checkWebGameZip(packageOnly), /web_export_required/);
   const webExport = new File([archive('index.html', '<h1>Game</h1>')], 'jumpmaster-web.zip');
   await assert.doesNotReject(checkWebGameZip(webExport));
+  const customName = new File([archive('test1/jump.html', '<h1>Game</h1>')], 'test1.zip');
+  await assert.doesNotReject(checkWebGameZip(customName));
 });

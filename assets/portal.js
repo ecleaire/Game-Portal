@@ -1,5 +1,6 @@
 import { config } from './config.js';
 import { checkWebGameZip, unpackPrivateZip, privatePreviewDocument } from './private-preview.js?v=20260929a';
+import { packageWebFiles } from './zip-upload.js?v=20260929a';
 
 const root = document.querySelector('#portal');
 const message = document.querySelector('#message');
@@ -13,6 +14,7 @@ const sessionKey = `game-portal.${adminMode ? 'admin' : 'user'}.session.v1`;
 let session = null;
 let selected = null;
 let offset = 0;
+let submissionOffset = 0;
 let auditBefore;
 let busy = false;
 const errors = {
@@ -30,9 +32,11 @@ const errors = {
   drive_permission_denied: '投稿保管フォルダーに保存・移動する権限がありません。管理者がGoogle Driveの権限を確認してください。',
   drive_quota_exceeded: 'Google Driveの保存容量が不足しています。管理者が保管先と空き容量を確認してください。',
   drive_reconnect_required: 'Google Driveの所有者認証が失効しています。管理者が認証をやり直してください。',
-  invalid_preview: 'ZIP内のindex.htmlまたはゲームファイルを確認してください。',
-  invalid_upload: 'ZIP形式またはサイズを確認してください（最大50MB）。Web書き出しのindex.htmlがZIPの一番上に必要です。',
-  web_export_required: 'このZIPはブラウザ用ではありません。Godotの「Web」書き出しで生成したindex.html・.js・.wasm・.pckをまとめてZIPにしてください。「PCK/ZIP」書き出しだけではプレイできません。',
+  invalid_preview: 'ZIP内のHTMLまたはゲームファイルを確認してください。',
+  invalid_upload: 'ZIP形式・ファイル構成またはサイズを確認してください（最大50MB）。',
+  web_export_required: 'ブラウザーで遊べるHTMLが見つかりません。Godotの「Web」書き出しで生成したHTML・.js・.wasm・.pckをまとめてください。「PCK/ZIP」書き出しだけではプレイできません。',
+  invalid_thumbnail: 'サムネイルはPNG・JPEG・WebPの5MB以下を選んでください。',
+  storage_unavailable: '公開用の保管先に接続できません。管理者にSupabase Storageの設定確認を依頼してください。',
   preview_unsupported: 'このブラウザーはZIPプレビューに対応していません。ブラウザーを更新してください。',
 };
 function el(tag, text, attrs = {}) {
@@ -196,10 +200,13 @@ async function account() {
 }
 function submissionManager(parent, game) {
   const row = el('div', null, { class: 'row submission-manager' });
+  if (game.has_thumbnail) showSubmissionThumbnail(row, game.id, 'user');
   row.append(el('h3', game.title));
-  row.append(el('p', `${game.engine} / バージョン ${game.version} / ${game.status}`, { class: 'muted' }));
+  row.append(el('p', `${game.engine} / バージョン ${game.version} / ${statusLabel(game.status)} / ${visibilityLabel(game.visibility)}`, { class: 'muted' }));
+  if (game.is_published) row.append(el('a', 'ゲームページを開く・共有する', { href: `../game.html?slug=${encodeURIComponent(game.public_slug)}` }));
+  else if (game.status === 'approved' && game.visibility !== 'draft' && game.published_at) row.append(el('p', `予約公開: ${new Date(game.published_at).toLocaleString('ja-JP')}`, { class: 'muted' }));
   if (game.review_reason) row.append(el('p', `審査メモ: ${game.review_reason}`, { class: 'muted' }));
-  const editable = ['uploading', 'pending', 'rejected'].includes(game.status);
+  const editable = ['uploading', 'draft', 'pending', 'rejected'].includes(game.status);
   if (editable) {
     form(row, [
       field('title', 'ゲーム名', 'text', { value: game.title, maxlength: '120' }),
@@ -209,6 +216,17 @@ function submissionManager(parent, game) {
       field('controls', '操作説明（任意）', 'text', { value: game.controls, maxlength: '2000', optional: true }),
     ], game.status === 'rejected' ? '修正して再審査へ' : '変更を保存', async data => {
       await api('user.submission.update', { ...data, submission_id: game.id }); await account(); notice(game.status === 'rejected' ? '修正を再審査へ送りました。' : '投稿情報を更新しました。');
+    }).classList.add('stacked-form');
+  }
+  if (!['unpublished'].includes(game.status)) {
+    form(row, [
+      field('visibility', '公開範囲', 'select', { value: game.visibility, choices: visibilityChoices }),
+      field('published_at', '公開日時（空欄で即時）', 'datetime-local', {
+        value: game.published_at ? localDateTime(game.published_at) : '', optional: true }),
+    ], '公開設定を保存', async data => {
+      await api('user.submission.visibility', { submission_id: game.id, visibility: data.visibility,
+        published_at: data.published_at ? new Date(data.published_at).toISOString() : '' });
+      await account(); notice('公開設定を保存しました。');
     }).classList.add('stacked-form');
   }
   if (game.status === 'uploading') {
@@ -223,12 +241,20 @@ function submissionManager(parent, game) {
     packageLabel.append(packageInput);
     retryForm.querySelector('button[type=submit]').before(packageLabel);
   }
-  if (['pending', 'approved', 'rejected'].includes(game.status)) button(row, '非公開でプレイ', () => previewSubmission(game.id));
-  if (['uploading', 'pending', 'rejected', 'approved'].includes(game.status)) button(row, '投稿を取り下げる', async () => {
+  if (['draft', 'pending', 'approved', 'rejected'].includes(game.status)) button(row, '自分だけでプレイ', () => previewSubmission(game.id));
+  if (['uploading', 'draft', 'pending', 'rejected', 'approved'].includes(game.status)) button(row, '投稿を取り下げる', async () => {
     if (!confirm(`「${game.title}」を取り下げますか？`)) { notice('キャンセルしました。'); return; }
     await api('user.submission.withdraw', { submission_id: game.id }); await account(); notice('投稿を取り下げました。');
   }, true);
   parent.append(row);
+}
+const visibilityChoices = [['draft', '下書き（自分だけ）'], ['unlisted', '限定公開（URLを知る人）'], ['public', '公開（一覧に表示）']];
+const visibilityLabel = value => ({ draft: '下書き', unlisted: '限定公開', public: '公開' }[value] ?? value);
+const statusLabel = value => ({ uploading: 'ZIP未保存', draft: '下書き', pending: '審査待ち',
+  approved: '承認済み', rejected: '却下', unpublished: '公開停止' }[value] ?? value);
+function localDateTime(value) {
+  const date = new Date(value);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 }
 async function previewSubmission(submissionId) {
   const response = await fetch(`${config.supabaseUrl.replace(/\/$/, '')}/functions/v1/portal/preview-package`, { method: 'POST', credentials: 'omit',
@@ -240,8 +266,21 @@ async function previewSubmission(submissionId) {
   frame.className = 'private-preview'; frame.srcdoc = privatePreviewDocument(files);
   root.replaceChildren(section('非公開ゲームプレビュー'), frame); notice('このゲームは本人専用の隔離された画面で実行しています。');
 }
+async function showSubmissionThumbnail(parent, submissionId, mode) {
+  try {
+    const response = await fetch(`${config.supabaseUrl.replace(/\/$/, '')}/functions/v1/portal/submission-thumbnail`, {
+      method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'application/json',
+        ...(config.anonKey ? { apikey: config.anonKey } : {}), 'X-Portal-Session': session.token },
+      body: JSON.stringify({ submission_id: submissionId, mode }) });
+    if (!response.ok) return;
+    const url = URL.createObjectURL(await response.blob());
+    const image = el('img', null, { class: 'thumbnail-preview', alt: 'ゲームサムネイル', src: url });
+    image.onload = () => URL.revokeObjectURL(url);
+    parent.prepend(image);
+  } catch { /* Thumbnail is optional; metadata and moderation remain usable. */ }
+}
 async function dashboard() {
-  const [{ admin }, { users }, { submissions }] = await Promise.all([api('admin.me'), api('admin.users', { offset }), api('admin.submissions', { offset: 0 })]);
+  const [{ admin }, { users }, { submissions }] = await Promise.all([api('admin.me'), api('admin.users', { offset }), api('admin.submissions', { offset: submissionOffset })]);
   root.replaceChildren();
   const top = section(`管理画面 — ${admin.username}`);
   logoutButton(top);
@@ -273,23 +312,36 @@ async function dashboard() {
   const user = users.find(u => u.id === selected);
   if (user) await manage(user, admin.role === 'super_admin');
   const reviews = section('ゲーム投稿の審査');
+  reviews.append(el('p', `${submissionOffset + 1}件目から表示（最大100件）。下書きは投稿者本人だけに表示します。`, { class: 'muted' }));
   if (!submissions.length) reviews.append(el('p', '投稿はありません。'));
   for (const game of submissions) {
     const row = el('div', null, { class: 'row' });
-    row.append(el('p', `${game.title} / 投稿者: ${game.username} / ${game.engine} / ${game.version} / ${game.status}`));
+    row.append(el('p', `${game.title} / 投稿者: ${game.username} / ${game.engine} / ${game.version} / ${statusLabel(game.status)} / ${visibilityLabel(game.visibility)}`));
+    if (game.is_published) row.append(el('a', '公開ページ', { href: `../game.html?slug=${encodeURIComponent(game.public_slug)}` }));
     if (game.status === 'uploading') row.append(el('p', 'ZIP未保管。投稿者がWeb書き出しZIPを再送するまで審査・公開できません。', { class: 'muted' }));
     if (game.description) row.append(el('p', game.description, { class: 'muted' }));
     if (game.review_reason) row.append(el('p', `審査メモ: ${game.review_reason}`, { class: 'muted' }));
+    if (game.status === 'approved' && !game.package_ready) button(row, '配信用ファイルを準備', () => repairPublication(game.id));
     if (['pending', 'approved', 'rejected'].includes(game.status)) button(row, 'ZIPを安全にダウンロード', () => downloadSubmission(game.id));
     if (game.status === 'pending') {
-      button(row, '承認（非公開で保管を継続）', () => reviewSubmission(game.id, 'approved'));
+      button(row, '承認して公開設定を反映', () => reviewSubmission(game.id, 'approved'));
       button(row, '却下', async () => {
         const reason = prompt('却下理由（任意・500文字まで）', '');
         if (reason !== null) await reviewSubmission(game.id, 'rejected', reason);
       }, true);
     }
+    if (game.status === 'approved') button(row, '公開を停止', async () => {
+      const reason = prompt('公開停止の理由（任意・500文字まで）', '');
+      if (reason === null) return;
+      await api('admin.submission.unpublish', { submission_id: game.id, reason });
+      await dashboard(); notice('公開を停止しました。');
+    }, true);
     reviews.append(row);
   }
+  const reviewPages = el('div', null, { class: 'actions' });
+  if (submissionOffset > 0) button(reviewPages, '前の100件', async () => { submissionOffset -= 100; await dashboard(); });
+  if (submissions.length === 100) button(reviewPages, '次の100件', async () => { submissionOffset += 100; await dashboard(); });
+  button(reviewPages, '投稿一覧を更新', dashboard); reviews.append(reviewPages);
   const audit = section('管理操作の監査ログ');
   button(audit, '最新の100件', async () => { auditBefore = undefined; await showAudit(audit); notice('監査ログを表示しました。'); });
 }
@@ -338,15 +390,16 @@ async function showAudit(parent) {
   parent.append(results);
 }
 
-async function uploadPackage(submissionId, file, refresh = upload) {
+async function uploadPackage(submissionId, file, refresh = upload, thumbnail = null) {
     if (!file) throw new Error('invalid_request');
     await checkWebGameZip(file);
     notice('ZIPを非公開保管先へ送信中…完了までこの画面を閉じないでください。');
     const body = new FormData(); body.set('submission_id', submissionId); body.set('package', file);
+    if (thumbnail?.size) body.set('thumbnail', thumbnail);
     const response = await fetch(`${config.supabaseUrl.replace(/\/$/, '')}/functions/v1/portal/upload`, { method: 'POST', credentials: 'omit',
       headers: { ...(config.anonKey ? { apikey: config.anonKey } : {}), 'X-Portal-Session': session.token }, body, signal: AbortSignal.timeout(120000) });
     const result = await response.json().catch(() => ({})); if (!response.ok || result.error) throw new Error(result.error ?? 'unavailable');
-    if (refresh) await refresh(); notice(result.submission?.status === 'approved'
+    if (refresh) await refresh(); notice(result.submission?.status === 'draft' ? '下書きに保存しました。自分だけがプレイできます。' : result.submission?.status === 'approved'
       ? '非公開で保管しました。信頼済み投稿者のため審査を省略しました。'
       : '非公開で保管しました。審査待ちです。');
     return result.submission;
@@ -354,9 +407,9 @@ async function uploadPackage(submissionId, file, refresh = upload) {
 function uploadComplete(submission) {
   root.replaceChildren();
   const done = section('投稿が完了しました');
-  done.append(el('p', submission?.status === 'approved'
-    ? 'ZIPを非公開で保管しました。信頼済み投稿者のため審査は省略されました。まだ一般公開はされていません。'
-    : 'ZIPを非公開で保管し、管理者の審査へ送りました。まだ一般公開はされていません。'));
+  done.append(el('p', submission?.status === 'draft' ? '下書きに保存しました。自分だけが閲覧・プレイできます。審査には送られていません。'
+    : submission?.status === 'approved' ? '審査を省略して保存しました。公開設定と公開日時に従って表示されます。'
+    : 'ゲームを保存し、管理者の審査へ送りました。承認後、公開設定が反映されます。'));
   done.append(el('p', 'アカウント画面の「投稿したゲームの管理」から非公開でプレイできます。', { class: 'muted' }));
   const actions = el('div', null, { class: 'actions' });
   button(actions, '投稿したゲームを確認・プレイ', account);
@@ -377,7 +430,7 @@ async function reviewSubmission(submissionId, decision, reason = '') {
     headers: { 'Content-Type': 'application/json', ...(config.anonKey ? { apikey: config.anonKey } : {}), 'X-Portal-Session': session.token },
     body: JSON.stringify({ submission_id: submissionId, decision, reason }), signal: AbortSignal.timeout(30000) });
   const result = await response.json(); if (!response.ok || result.error) throw new Error(result.error ?? 'unavailable');
-  await dashboard(); notice(decision === 'approved' ? '承認しました。公開はまだ行われません。' : '却下しました。');
+  await dashboard(); notice(decision === 'approved' ? '承認しました。公開設定と日時に従って表示されます。' : '却下しました。');
 }
 async function downloadSubmission(submissionId) {
   const response = await fetch(`${config.supabaseUrl.replace(/\/$/, '')}/functions/v1/portal/download`, { method: 'POST', credentials: 'omit',
@@ -397,33 +450,79 @@ async function upload() {
   for (const step of [
     'Godotでプロジェクトを開き、「プロジェクト」→「エクスポート」を選びます。',
     '「追加」から「Web」を選びます。書き出しテンプレートを求められたら、Godotの画面に沿ってインストールします。',
-    'Webの設定で「Use Threads」をオフにし、「プロジェクトをエクスポート」で空のフォルダーへ index.html という名前で書き出します。',
-    '生成された index.html・.js・.wasm・.pck・画像などをすべて選んでZIPにします。フォルダーごとではなく、ZIPを開いた一番上に index.html が見える形にしてください。',
-    '下のフォームでそのZIPを選び、投稿します。「PCK/ZIP」だけの書き出しではブラウザで遊べません。',
+    'Godot 4.7.2ではWebプリセットの「Thread Support」をオフにし、「Extensions Support」も使わないならオフにします。',
+    '「プロジェクトをエクスポート」で空のフォルダーへ書き出します。HTML名はindex.htmlでもjump.htmlでも構いません。生成後に名前を変更しないでください。',
+    'HTML・同名の.js・.wasm・.pck・画像など、書き出されたファイル一式をZIPにするか、この画面へまとめてドラッグ＆ドロップします。ZIP内に1つの親フォルダーがあっても受け付けます。',
+    '「PCK/ZIPのエクスポート」だけではブラウザーで遊べません。必ず「プロジェクトをエクスポート」でWeb一式を作成してください。',
   ]) steps.append(el('li', step));
   guide.append(steps);
   s.append(guide);
-  let pendingSubmissionId;
-  const submissionForm = form(s, [field('title', 'ゲーム名', 'text', { maxlength: '120' }), field('engine', 'エンジン', 'select', { choices: [['godot','Godot'],['scratch','Scratch / TurboWarp'],['other','その他']] }), field('description', '説明（任意）', 'text', { maxlength: '4000', optional: true }), field('version', 'バージョン', 'text', { value: '1.0.0', maxlength: '80' }), field('controls', '操作説明（任意）', 'text', { maxlength: '2000', optional: true })], '投稿して審査へ送る', async data => {
-    const file = submissionForm.elements.package?.files?.[0]; delete data.package;
+  let pendingSubmissionId, selectedFiles = [], thumbnailUrl;
+  const submissionForm = form(s, [field('title', 'ゲーム名', 'text', { maxlength: '120' }),
+    field('engine', 'エンジン', 'select', { choices: [['godot','Godot'],['scratch','Scratch / TurboWarp'],['other','その他']] }),
+    field('description', '説明（任意）', 'text', { maxlength: '4000', optional: true }),
+    field('version', 'バージョン', 'text', { value: '1.0.0', maxlength: '80' }),
+    field('controls', '操作説明（任意）', 'text', { maxlength: '2000', optional: true }),
+    field('visibility', '公開範囲', 'select', { value: 'draft', choices: visibilityChoices }),
+    field('published_at', '公開日時（空欄で即時公開）', 'datetime-local', { optional: true }),
+  ], 'ゲームを保存', async data => {
+    const thumbnail = submissionForm.elements.thumbnail?.files?.[0];
+    delete data.package; delete data.thumbnail;
+    data.published_at = data.published_at ? new Date(data.published_at).toISOString() : '';
+    const file = await packageWebFiles(selectedFiles);
     await checkWebGameZip(file);
     if (!pendingSubmissionId) { const { submission } = await api('user.submission.create', data); pendingSubmissionId = submission.id; }
-    const completed = await uploadPackage(pendingSubmissionId, file, null);
+    const completed = await uploadPackage(pendingSubmissionId, file, null, thumbnail);
     pendingSubmissionId = null;
     uploadComplete(completed);
   });
   submissionForm.classList.add('stacked-form');
-  const packageLabel = el('label', 'ゲームZIP（最大50MB）');
-  const packageInput = el('input', null, { type: 'file', name: 'package', accept: '.zip,application/zip', required: 'required' });
-  packageLabel.append(packageInput); submissionForm.querySelector('button[type=submit]').before(packageLabel);
+  const visibilityHelp = el('p', '下書きは自分だけが閲覧でき、審査はありません。限定公開は承認後にURLを知る人だけ、公開は承認後にサイトの一覧にも表示されます。未来の公開日時を指定すると、その時刻まで閲覧できません。', { class: 'muted' });
+  submissionForm.elements.visibility.closest('label').append(visibilityHelp);
+  const thumbnailLabel = el('label', 'ゲームサムネイル（任意・5MB以下）');
+  const thumbnailInput = el('input', null, { type: 'file', name: 'thumbnail', accept: 'image/png,image/jpeg,image/webp' });
+  const thumbnailPreview = el('img', null, { class: 'thumbnail-preview', alt: 'サムネイルのプレビュー', hidden: '' });
+  thumbnailInput.addEventListener('change', () => {
+    if (thumbnailUrl) URL.revokeObjectURL(thumbnailUrl);
+    const image = thumbnailInput.files?.[0];
+    if (image && image.size <= 5242880 && ['image/png','image/jpeg','image/webp'].includes(image.type)) {
+      thumbnailUrl = URL.createObjectURL(image); thumbnailPreview.src = thumbnailUrl; thumbnailPreview.hidden = false;
+    } else { thumbnailPreview.hidden = true; if (image) notice(errors.invalid_thumbnail); }
+  });
+  thumbnailLabel.append(thumbnailInput, thumbnailPreview);
+  submissionForm.prepend(thumbnailLabel);
+  const dropZone = el('div', null, { class: 'upload-dropzone' });
+  dropZone.append(el('strong', 'ゲームファイルをドラッグ＆ドロップ'));
+  dropZone.append(el('p', 'ZIPファイル1つ、またはWeb書き出しの複数ファイルを選べます。最大50MB。', { class: 'muted' }));
+  const packageInput = el('input', null, { type: 'file', name: 'package', multiple: '',
+    'aria-label': 'ゲームファイルを選択' });
+  const selection = el('p', 'ファイルはまだ選択されていません', { class: 'muted' });
+  const setFiles = files => { selectedFiles = [...files]; selection.textContent = selectedFiles.length
+    ? selectedFiles.length === 1 ? selectedFiles[0].name : `${selectedFiles.length}ファイルを選択中` : 'ファイルはまだ選択されていません'; };
+  packageInput.addEventListener('change', () => setFiles(packageInput.files));
+  dropZone.addEventListener('dragover', event => { event.preventDefault(); dropZone.classList.add('is-dragging'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('is-dragging'));
+  dropZone.addEventListener('drop', event => { event.preventDefault(); dropZone.classList.remove('is-dragging'); setFiles(event.dataTransfer.files); });
+  dropZone.append(packageInput, selection);
+  submissionForm.querySelector('button[type=submit]').before(dropZone);
   const { submissions } = await api('user.submissions');
   const history = section('投稿履歴');
   if (!submissions.length) history.append(el('p', '投稿はまだありません。'));
   for (const game of submissions) {
     const row = el('div', null, { class: 'row' });
+    if (game.has_thumbnail) showSubmissionThumbnail(row, game.id, 'admin');
     row.append(el('p', `${game.title} / ${game.status} / ${game.created_at}`));
     const link = el('a', 'アカウントで管理', { href: '../account/' }); row.append(link); history.append(row);
   }
+}
+async function repairPublication(submissionId) {
+  const response = await fetch(`${config.supabaseUrl.replace(/\/$/, '')}/functions/v1/portal/publish-package`, {
+    method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'application/json',
+      ...(config.anonKey ? { apikey: config.anonKey } : {}), 'X-Portal-Session': session.token },
+    body: JSON.stringify({ submission_id: submissionId }), signal: AbortSignal.timeout(90000) });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || result.error) throw new Error(result.error ?? 'unavailable');
+  await dashboard(); notice('配信用ファイルを準備しました。公開設定と日時が反映されます。');
 }
 
 async function start() {

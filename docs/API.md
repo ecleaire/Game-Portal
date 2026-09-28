@@ -13,6 +13,8 @@
 | user.rename | username | 一般セッション / user |
 | user.password | current_password, password | 本人用パスワード照合 / ok, reauthenticate |
 | user.submissions | なし | 一般セッション / 自分の投稿一覧（最大100件） |
+| user.submission.create | title, engine, version, description, controls, visibility, published_at | 投稿権限 / uploading状態の投稿を作成。下書き・限定公開・公開を選択 |
+| user.submission.visibility | submission_id, visibility, published_at | 投稿者本人 / 公開範囲・予約日時を更新。承認済みZIPの変更は伴わない |
 | user.submission.update | submission_id, title, engine, description（任意）, version, controls（任意） | 一般セッション / 自分の未完了・審査待ち・却下投稿を更新。却下投稿は再審査待ちへ戻る |
 | user.submission.withdraw | submission_id | 一般セッション / 自分の投稿を取り下げ。ZIPは非公開保管を継続 |
 | admin.me | なし | 管理セッション / admin |
@@ -30,8 +32,11 @@
 | admin.disable | user_id | 管理 / user |
 | admin.enable | user_id | 管理 / user |
 | admin.submissions | offset（任意、非負整数） | 管理 / submissions（Drive IDは返さない） |
+| admin.submission.unpublish | submission_id, reason（任意） | 管理 / 承認済みゲームの公開停止と監査ログ |
 
 投稿ZIPのアップロード・審査・ダウンロードは、通常のJSON API actionではありません。Edge Function内でセッションを再検証してから、非公開Driveファイルを操作します。Drive file IDはブラウザーへ返しません。
+
+`POST /catalog`は一覧公開中のゲームだけを返します。`POST /public-game`、`/public-package`、`/public-thumbnail`は`{"slug":"…"}`を受け、承認済みかつ限定公開/公開で、予約時刻を過ぎたゲームだけを返します。投稿者本人の下書きプレビューは`/preview-package`で有効な本人セッションを検証します。`/submission-thumbnail`も本人または管理者セッションを検証します。配信用ZIPはPrivate StorageからEdge Function経由で返し、Driveを公開Webホストにしません。[公開機能の設定](PUBLISHING.md)
 
 失敗応答は`{ "error": "code" }`。401=セッション無効、403=権限不足、404=対象なし、409=ユーザー名重複、429=rate limit、503=バックエンド未設定/一時障害、それ以外の入力/資格情報エラーは400です。データベースの生エラーを返しません。
 

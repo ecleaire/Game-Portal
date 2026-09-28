@@ -53,6 +53,7 @@ test('CORS, methods, size, malformed input and missing sessions fail before data
 });
 test('ZIP validation permits a normal web archive and rejects traversal or symlinks', () => {
   assert.doesNotThrow(() => validateZip(zip()));
+  assert.doesNotThrow(() => validateZip(zip('test1/jump.html')));
   assert.throws(() => validateZip(zip('jumpmaster.pck')), /web_export_required/);
   assert.throws(() => validateZip(zip('../index.html')), /invalid_upload/);
   assert.throws(() => validateZip(zip('index.html', 0xa0000000)), /invalid_upload/);
@@ -63,6 +64,35 @@ test('private ZIP upload requires an authenticated session and server-only Drive
   const handler = createHandler({ ...settings, fetcher: async () => { throw new Error('must not call database'); } });
   assert.equal((await handler(requestUpload())).status, 401);
   assert.equal((await handler(requestUpload({ 'x-portal-session': token() }))).status, 503);
+});
+test('public package checks publication before reading private Storage', async () => {
+  const slug = 'a'.repeat(36); let storageReads = 0;
+  const handler = createHandler({ ...settings, fetcher: async (target, options) => {
+    if (target.endsWith('/rpc/portal_public_game')) {
+      assert.equal(options.headers.apikey, settings.serviceKey);
+      return Response.json(null);
+    }
+    storageReads++; return new Response(zip(), { headers: { 'content-type': 'application/zip' } });
+  } });
+  const response = await handler(new Request('https://example.supabase.co/functions/v1/portal/public-package', {
+    method: 'POST', headers: { origin: settings.allowedOrigins, 'content-type': 'application/json' },
+    body: JSON.stringify({ slug }),
+  }));
+  assert.equal(response.status, 404); assert.equal(storageReads, 0);
+});
+test('public game metadata does not reveal private Storage keys', async () => {
+  const slug = 'b'.repeat(36);
+  const handler = createHandler({ ...settings, fetcher: async () => Response.json({ slug, title: 'Game',
+    package_storage_key: 'private-package.zip', thumbnail_key: 'private-thumb.png' }) });
+  const response = await handler(new Request('https://example.supabase.co/functions/v1/portal/public-game', {
+    method: 'POST', headers: { origin: settings.allowedOrigins, 'content-type': 'application/json' },
+    body: JSON.stringify({ slug }),
+  }));
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.game.has_thumbnail, true);
+  assert.ok(!JSON.stringify(body).includes('private-package'));
+  assert.ok(!JSON.stringify(body).includes('private-thumb'));
 });
 test('storage health check requires an administrator session and complete server-only Drive configuration', async () => {
   const health = headers => new Request('https://example.supabase.co/functions/v1/portal/storage-health', { method: 'POST', headers: { origin: settings.allowedOrigins, ...headers } });

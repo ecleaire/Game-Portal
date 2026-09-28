@@ -10,6 +10,18 @@ const mimeTypes = { html: 'text/html', htm: 'text/html', js: 'text/javascript', 
   wav: 'audio/wav', mp4: 'video/mp4', woff: 'font/woff', woff2: 'font/woff2' };
 const mime = name => mimeTypes[name.split('.').pop().toLowerCase()] ?? 'application/octet-stream';
 
+// A Web export may use any HTML basename and may be wrapped in one folder.
+// Keep that basename intact: Godot expects the matching .js/.wasm/.pck names.
+export function webArchiveLayout(names) {
+  const files = names.filter(name => !name.endsWith('/'));
+  const root = files.length && files.every(name => name.includes('/') && name.startsWith(files[0].split('/')[0] + '/'))
+    ? files[0].split('/')[0] + '/' : '';
+  const paths = files.map(name => root ? name.slice(root.length) : name);
+  const html = paths.filter(name => !name.includes('/') && /\.html?$/i.test(name));
+  const entry = html.find(name => name.toLowerCase() === 'index.html') ?? (html.length === 1 ? html[0] : null);
+  return entry ? { root, entry } : null;
+}
+
 // Validate the Web export before creating a database submission.
 export async function checkWebGameZip(file) {
   if (!file || !/\.zip$/i.test(file.name) || file.size < 22 || file.size > MAX_ZIP) throw new Error('invalid_upload');
@@ -23,19 +35,20 @@ export async function checkWebGameZip(file) {
   }
   if (end < 0 || u16(end + 4) || u16(end + 6)) throw new Error('invalid_upload');
   const count = u16(end + 10), size = u32(end + 12), start = u32(end + 16);
-  if (!count || count > 5000 || start + size > end) throw new Error('invalid_upload');
-  let at = start, hasIndex = false;
+  if (!count || count > MAX_ENTRIES || start + size > end) throw new Error('invalid_upload');
+  let at = start; const names = [];
   for (let n = 0; n < count; n++) {
     if (at + 46 > end || u32(at) !== 0x02014b50) throw new Error('invalid_upload');
     const nameLength = u16(at + 28), extraLength = u16(at + 30), commentLength = u16(at + 32);
     const next = at + 46 + nameLength + extraLength + commentLength;
     if (next > end) throw new Error('invalid_upload');
     const name = decoder.decode(bytes.subarray(at + 46, at + 46 + nameLength));
-    if (name === 'index.html') hasIndex = true;
+    if (!name || name.startsWith('/') || name.includes('\\') || name.split('/').includes('..') || name.includes(':')) throw new Error('invalid_upload');
+    names.push(name);
     at = next;
   }
   if (at !== start + size) throw new Error('invalid_upload');
-  if (!hasIndex) throw new Error('web_export_required');
+  if (!webArchiveLayout(names)) throw new Error('web_export_required');
 }
 
 async function inflate(raw, expected) {
@@ -87,8 +100,11 @@ export async function unpackPrivateZip(buffer) {
     if (content.length !== size) throw new Error('invalid_preview');
     files.set(name, content);
   }
-  if (!files.has('index.html')) throw new Error('invalid_preview');
-  return files;
+  const layout = webArchiveLayout([...files.keys()]);
+  if (!layout) throw new Error('invalid_preview');
+  const normalized = new Map([...files].map(([name, content]) => [name.slice(layout.root.length), content]));
+  normalized.set('index.html', normalized.get(layout.entry));
+  return normalized;
 }
 
 function dataUrl(bytes, type) {
@@ -127,7 +143,7 @@ export function privatePreviewDocument(files) {
   csp.content = "default-src 'none'; script-src 'unsafe-inline' data: blob: 'wasm-unsafe-eval'; connect-src data: blob:; img-src data: blob:; style-src 'unsafe-inline' data: blob:; font-src data: blob:; media-src data: blob:; worker-src blob:";
   const shim = doc.createElement('script');
   const manifest = JSON.stringify(Object.fromEntries(resource)).replaceAll('<', '\\u003c');
-  shim.textContent = `const portalFiles=${manifest}; const portalFetch=window.fetch.bind(window); window.fetch=(input,init)=>{const raw=typeof input==='string'?input:input.url; if(/^(data:|blob:)/.test(raw))return portalFetch(input,init); try{const base=new URL(document.baseURI),url=new URL(raw,base); if(url.origin!==base.origin)throw 0; let path=decodeURIComponent(url.pathname); path=path.startsWith(base.pathname)?path.slice(base.pathname.length):path.replace(/^\\/+/, ''); if(portalFiles[path])return portalFetch(portalFiles[path],init);}catch{} return Promise.reject(new TypeError('Private preview resource unavailable'));};`;
+  shim.textContent = `const portalFiles=${manifest}; const portalFetch=window.fetch.bind(window); window.fetch=(input,init)=>{const raw=typeof input==='string'?input:input.url; if(/^(data:|blob:)/.test(raw))return portalFetch(input,init); try{const base=new URL(document.baseURI),url=new URL(raw,base); if(url.origin!==base.origin)throw 0; const directory=base.pathname.endsWith('/')?base.pathname:base.pathname.slice(0,base.pathname.lastIndexOf('/')+1); let path=decodeURIComponent(url.pathname); path=path.startsWith(directory)?path.slice(directory.length):path.replace(/^\\/+/, ''); if(portalFiles[path])return portalFetch(portalFiles[path],init);}catch{} return Promise.reject(new TypeError('Game resource unavailable'));};`;
   doc.head.prepend(csp, shim);
   return '<!doctype html>\n' + doc.documentElement.outerHTML;
 }

@@ -33,4 +33,9 @@
 .portal .ban-panel h3 { margin-top: 0; }
 .portal .ban-panel.is-banned { border-color: #fda4af; }
 .portal .private-preview { width: 100%; min-height: 70vh; border: 1px solid var(--line); border-radius: 12px; background: #000; }
+.portal .thumbnail-preview { display: block; width: min(100%, 360px); aspect-ratio: 16 / 9; object-fit: cover; border: 1px solid var(--line); border-radius: 10px; }
+.portal .upload-dropzone { display: grid; gap: 10px; justify-items: center; padding: 28px 18px; border: 2px dashed var(--accent); border-radius: 12px; text-align: center; background: var(--bg); }
+.portal .upload-dropzone.is-dragging { background: var(--panel); }
+.portal .upload-dropzone p { margin: 0; }
+.portal form.stacked-form label p { margin: 0; font-weight: 400; font-size: .9rem; }
 [hidden] { display: none !important; }

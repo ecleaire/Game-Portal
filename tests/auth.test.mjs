@@ -213,7 +213,7 @@ test('private game submission metadata hides Drive identifiers from users', asyn
   assert.equal(adminList.submissions.find(item => item.id === made.submission.id).drive_file_id, undefined);
   const prepared = await api('admin.submission.prepare', { submission_id: made.submission.id }, adminToken);
   assert.equal(prepared.submission.drive_file_id, 'private-drive-file-id');
-  const reviewed = await api('admin.submission.complete', { submission_id: made.submission.id, status: 'approved', reason: 'checked' }, adminToken);
+  const reviewed = await api('admin.submission.complete', { submission_id: made.submission.id, status: 'approved', reason: 'checked', package_storage_key: 'test.zip' }, adminToken);
   assert.equal(reviewed.submission.status, 'approved');
   const listed = await api('user.submissions', {}, session.hash);
   assert.equal(listed.submissions[0].drive_file_id, undefined);
@@ -252,6 +252,34 @@ test('super admins can create review admins and trusted uploaders skip only the 
   const complete = await api('user.submission.complete', { submission_id: made.submission.id, drive_file_id: 'trusted-file', package_name: 'trusted.zip', package_size: '100' }, trustedSession.hash);
   assert.equal(complete.submission.status, 'approved');
   assert.equal((await api('admin.role', { user_id: trusted.user.id, role: 'trusted_uploader' }, reviewerSession.hash)).error, 'forbidden');
+});
+test('drafts bypass review, unlisted links stay out of catalog, and future releases are gated', async () => {
+  await api('admin.create', { username: 'publisher', password: 'publisher-password', role: 'uploader' }, adminToken);
+  const owner = await login('publisher', 'publisher-password');
+  const made = await api('user.submission.create', { title: 'Scheduled game', engine: 'godot', version: '1.0', visibility: 'draft' }, owner.hash);
+  const id = made.submission.id, slug = made.submission.public_slug;
+  const completed = await api('user.submission.complete', { submission_id: id, drive_file_id: 'draft-drive', package_name: 'game.zip', package_size: '100', package_storage_key: `${id}.zip` }, owner.hash);
+  assert.equal(completed.submission.status, 'draft');
+  assert.equal((await api('admin.submissions', {}, adminToken)).submissions.some(item => item.id === id), false);
+  assert.equal((await api('user.submission.preview', { submission_id: id }, owner.hash)).submission.drive_file_id, 'draft-drive');
+  const future = new Date(Date.now() + 86400000).toISOString();
+  const unlisted = await api('user.submission.visibility', { submission_id: id, visibility: 'unlisted', published_at: future }, owner.hash);
+  assert.equal(unlisted.submission.status, 'pending');
+  const reviewed = await api('admin.submission.complete', { submission_id: id, status: 'approved', package_storage_key: `${id}.zip` }, adminToken);
+  assert.equal(reviewed.submission.status, 'approved');
+  assert.equal((await db.query('select public.portal_public_game($1) as game', [slug])).rows[0].game, null);
+  await api('user.submission.visibility', { submission_id: id, visibility: 'public', published_at: '' }, owner.hash);
+  const publicGame = (await db.query('select public.portal_public_game($1) as game', [slug])).rows[0].game;
+  assert.equal(publicGame.title, 'Scheduled game');
+  assert.ok((await db.query('select public.portal_catalog() as games')).rows[0].games.some(game => game.slug === slug));
+  await api('user.submission.visibility', { submission_id: id, visibility: 'unlisted', published_at: '' }, owner.hash);
+  assert.equal((await db.query('select public.portal_catalog() as games')).rows[0].games.some(game => game.slug === slug), false);
+  assert.equal((await db.query('select public.portal_public_game($1) as game', [slug])).rows[0].game.slug, slug);
+  await api('user.submission.visibility', { submission_id: id, visibility: 'draft', published_at: '' }, owner.hash);
+  assert.equal((await db.query('select public.portal_public_game($1) as game', [slug])).rows[0].game, null);
+  await api('user.submission.visibility', { submission_id: id, visibility: 'public', published_at: '' }, owner.hash);
+  assert.equal((await api('admin.submission.unpublish', { submission_id: id, reason: 'moderation' }, adminToken)).submission.status, 'unpublished');
+  assert.equal((await db.query('select public.portal_public_game($1) as game', [slug])).rows[0].game, null);
 });
 test('expired and deactivated admin sessions cannot perform management', async () => {
   const next = await login('owner', adminPassword, true);

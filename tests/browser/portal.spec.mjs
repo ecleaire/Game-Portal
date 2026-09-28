@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { packageWebFiles } from '../../assets/zip-upload.js';
 
 async function goto(page, path) {
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -39,6 +40,25 @@ test('private HTML preview runs local ZIP assets inside an opaque sandbox', asyn
   });
   await expect(page.frameLocator('iframe').locator('body')).toHaveText('Private game works');
   await expect(page.frameLocator('iframe').locator('html')).toHaveAttribute('data-isolated', 'yes');
+});
+
+test('published ZIP game opens through the isolated public player', async ({ context, page }) => {
+  const slug = 'c'.repeat(36);
+  const archive = await packageWebFiles([
+    new File(['<html><head><script src="jump.js"></script></head><body>Loading</body></html>'], 'jump.html'),
+    new File(["addEventListener('DOMContentLoaded', () => { try { parent.document.body } catch { document.documentElement.dataset.isolated = 'yes' }; document.body.textContent = 'Published game works'; });"], 'jump.js'),
+  ]);
+  const bytes = Buffer.from(await archive.arrayBuffer());
+  await context.route('**/assets/config.js', route => route.fulfill({ contentType: 'text/javascript',
+    body: 'export const config = { supabaseUrl: "http://127.0.0.1:54321", anonKey: "" };' }));
+  await context.route('**/functions/v1/portal/public-game', route => route.fulfill({ json: { game: {
+    slug, title: 'Published test', description: '', engine: 'godot', version: '1.0', controls: '' } } }));
+  await context.route('**/functions/v1/portal/public-package', route => route.fulfill({
+    body: bytes, contentType: 'application/zip' }));
+  await page.goto(`game.html?slug=${slug}`);
+  await expect(page.getByRole('heading', { name: 'Published test' })).toBeVisible();
+  await expect(page.frameLocator('#gameFrame').locator('body')).toHaveText('Published game works');
+  await expect(page.frameLocator('#gameFrame').locator('html')).toHaveAttribute('data-isolated', 'yes');
 });
 
 test('browser flows connect to the real Edge handler and migrated database', async ({ context, page }) => {

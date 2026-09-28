@@ -1,3 +1,4 @@
+import { config } from './config.js';
 let games = [];
 let activeFilter = "all";
 
@@ -42,10 +43,21 @@ function render() {
         <span class="game-type">${escapeHTML(game.engine)}</span>
         <h4>${escapeHTML(game.title)}</h4>
         <p>${escapeHTML(game.description)}</p>
-        <a class="play-link" href="game.html?id=${encodeURIComponent(game.id)}">遊ぶ ▶</a>
+        <a class="play-link" href="game.html?${game.slug ? `slug=${encodeURIComponent(game.slug)}` : `id=${encodeURIComponent(game.id)}`}">遊ぶ ▶</a>
       </div>
     `;
     grid.appendChild(card);
+    if (game.slug && game.has_thumbnail && config.supabaseUrl) {
+      fetch(`${config.supabaseUrl}/functions/v1/portal/public-thumbnail`, { method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(config.anonKey ? { apikey: config.anonKey } : {}) },
+        body: JSON.stringify({ slug: game.slug }) })
+        .then(response => response.ok ? response.blob() : null)
+        .then(blob => { if (blob && card.isConnected) {
+          const image = document.createElement('img'); image.src = URL.createObjectURL(blob);
+          image.alt = `${game.title} のサムネイル`; image.onload = () => URL.revokeObjectURL(image.src);
+          card.querySelector('.game-thumb').replaceChildren(image);
+        } }).catch(console.error);
+    }
   }
 }
 
@@ -61,17 +73,20 @@ document.getElementById("filters").addEventListener("click", event => {
 
 searchInput.addEventListener("input", render);
 
-fetch("games.json")
-  .then(res => {
-    if (!res.ok) throw new Error("games.json の読み込みに失敗しました");
-    return res.json();
-  })
-  .then(data => {
-    games = data;
-    render();
-  })
-  .catch(error => {
-    console.error(error);
-    emptyMessage.hidden = false;
-    emptyMessage.textContent = "ゲーム情報を読み込めませんでした。";
+async function loadGames() {
+  const legacy = await fetch('games.json').then(response => {
+    if (!response.ok) throw new Error('games.json の読み込みに失敗しました');
+    return response.json();
   });
+  games = legacy; render();
+  if (!config.supabaseUrl) return;
+  try {
+    const response = await fetch(`${config.supabaseUrl}/functions/v1/portal/catalog`, { method: 'POST',
+      headers: config.anonKey ? { apikey: config.anonKey } : {} });
+    if (!response.ok) throw new Error('公開ゲームの読み込みに失敗しました');
+    const { games: published } = await response.json();
+    games = [...legacy, ...published.map(game => ({ ...game, id: game.slug }))]; render();
+  } catch (error) { console.error(error); }
+}
+loadGames().catch(error => { console.error(error); emptyMessage.hidden = false;
+  emptyMessage.textContent = 'ゲーム情報を読み込めませんでした。'; });

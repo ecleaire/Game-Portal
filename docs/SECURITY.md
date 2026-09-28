@@ -26,9 +26,9 @@ Rate limitはDBのatomic upsertで実装し、失敗応答を例外にせずカ�
 
 ## 公開ゲームと管理画面のorigin
 
-現在のGitHub Pages版はゲームHTMLと管理画面が同一originです。ログイン継続のためタブ限定の`sessionStorage`に不透明トークンを置くため、**悪意ある同一originのゲームから管理画面を完全隔離することはできません**。同一originのスクリプト、window参照やService Workerからの窃取もリスクです。現段階では所有者が信頼する既存ゲームだけを公開してください。公開投稿ゲームを扱う前に、ゲームと管理画面のoriginを分離してください。
+従来の`games/`内の静的ゲームは管理画面と同じGitHub Pages originにあります。所有者が信頼する既存ゲームだけをここに置いてください。投稿ZIPは同じoriginにHTML/JSとして展開しません。非公開Supabase StorageからEdge Function経由でZIPを取得し、ブラウザー内で展開して、`allow-scripts`のみのsandbox iframe（`allow-same-origin`なし）で実行します。iframe内のゲームスクリプトは親ページの`sessionStorage`を読み取れません。
 
-第三者ZIP公開のPhase 3/4へ進む前に、ゲームの配信を別originへ分離し、管理originに未信頼HTML/JSやService Workerを配信しない設計が必須です。管理画面のプレビューでZIP内HTMLを直接実行しません。追加ページのCSPとtextContentによる描画は追加防御であり、同一origin問題の解決ではありません。
+管理画面のプレビューでもZIP内HTMLを同一originで直接実行しません。公開条件はEdge Functionではなく、service_role限定のDB関数でも判定します。Storage bucketはPrivateです。ZIP取得済みのブラウザー内コピーは公開停止後も直ちには消せません。第三者ゲームの機能互換性と隔離の有効性は、公開規模を広げる前にブラウザーテストとセキュリティレビューを続けてください。
 
 ## 監査・秘密・復旧
 
