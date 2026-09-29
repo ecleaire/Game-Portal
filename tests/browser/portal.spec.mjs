@@ -96,7 +96,32 @@ test('browser flows connect to the real Edge handler and migrated database', asy
   expect(await user.evaluate(() => ({ local: localStorage.length, session: sessionStorage.length }))).toEqual({ local: 0, session: 1 });
   await user.reload();
   await expect(user.getByRole('button', { name: 'パスワードを変更', exact: true })).toBeVisible();
-  await expect(user.getByRole('navigation', { name: 'アカウント' }).getByRole('link', { name: 'ログアウト' })).toBeVisible();
+  await expect(user.getByRole('navigation', { name: 'メインメニュー' }).getByRole('link', { name: 'ログアウト' })).toBeVisible();
+  const created = await user.evaluate(async () => {
+    const response = await fetch('http://127.0.0.1:54321/functions/v1/portal', {
+      method: 'POST', headers: { 'Content-Type': 'application/json',
+        'X-Portal-Session': sessionStorage.getItem('game-portal.user.session.v1') },
+      body: JSON.stringify({ action: 'user.submission.create', data: {
+        title: '編集テスト', engine: 'godot', description: '', version: '1.0.0', controls: '', visibility: 'draft', published_at: '' } }),
+    });
+    return response.json();
+  });
+  expect(created.submission?.id).toBeTruthy();
+  await user.reload();
+  await user.getByRole('link', { name: '管理・編集する →' }).click();
+  await expect(user.getByRole('heading', { name: '投稿したゲームの管理' })).toBeVisible();
+  await user.getByLabel('ゲーム名').fill('編集後のタイトル');
+  await user.getByRole('button', { name: '変更を保存' }).click();
+  await expect(user.getByRole('heading', { name: '編集後のタイトル' })).toBeVisible();
+  await user.getByLabel('公開範囲').selectOption('unlisted');
+  await expect(user.getByLabel('公開日時（空欄で即時）')).toBeVisible();
+  await user.getByLabel('公開範囲').selectOption('draft');
+  await expect(user.getByLabel('公開日時（空欄で即時）')).toBeHidden();
+  await user.setViewportSize({ width: 390, height: 844 });
+  expect(await user.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await user.screenshot({ path: 'test-results/user-editor-mobile.png', fullPage: true });
+  await user.getByRole('link', { name: '投稿一覧に戻る' }).click();
+  await expect(user.getByRole('heading', { name: '編集後のタイトル' })).toBeVisible();
 
   page.on('dialog', dialog => dialog.accept());
   await selected.getByRole('button', { name: 'KICK（全端末をログアウト）' }).click();
@@ -127,6 +152,6 @@ test('browser flows connect to the real Edge handler and migrated database', asy
   await page.screenshot({ path: 'test-results/admin-mobile.png', fullPage: true });
   await page.reload();
   await expect(page.getByRole('heading', { name: '管理画面 — browser_owner', exact: true })).toBeVisible();
-  await expect(page.getByRole('navigation', { name: 'アカウント' }).getByRole('link', { name: 'ログアウト' })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'メインメニュー' }).getByRole('link', { name: 'ログアウト' })).toBeVisible();
   expect(errors).toEqual([]);
 });

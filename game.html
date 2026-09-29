@@ -6,18 +6,19 @@
   <meta name="theme-color" content="#111827" />
   <title>GAME PORTAL</title>
   <link rel="stylesheet" href="assets/style.css" />
+  <link rel="stylesheet" href="assets/design.css" />
 </head>
 <body class="play-page">
   <header class="site-header">
     <div class="header-inner">
       <div><p class="eyebrow">MY GAME LIBRARY</p><h1><a href="./" aria-label="GAME PORTAL ホーム">GAME PORTAL</a></h1></div>
-      <nav aria-label="アカウント"><a href="login/" data-portal-login>ログイン</a> · <a href="account/" data-portal-account hidden>アカウント</a> · <a href="upload/">投稿</a> · <a href="admin/">管理</a></nav>
+      <nav class="site-nav" aria-label="メインメニュー"><a href="./">ホーム</a><a href="login/" data-portal-login>ログイン</a><a href="account/" data-portal-account hidden>アカウント</a><a href="upload/">ゲームを投稿</a><a href="admin/">管理画面</a></nav>
     </div>
   </header>
 
   <main class="play-container">
     <section class="game-info">
-      <button id="fullscreenButton" class="action-button">全画面</button>
+      <button id="fullscreenButton" class="action-button">全画面で遊ぶ</button>
       <div>
         <p id="engineLabel" class="engine-label"></p>
         <h1 id="gameTitle">Loading...</h1>

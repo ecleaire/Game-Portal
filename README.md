@@ -23,6 +23,8 @@ https://ecleaire.github.io/Game-Portal/
 
 `uploader`権限のユーザーは`/upload/`から最大50MBのWebゲームZIP、またはWeb書き出しの複数ファイルを投稿できます。ゲームZIPは管理者だけが扱うGoogle Driveへ保管し、配信用コピーは非公開Supabase Storageへ保存します。投稿者にはDriveのURLやIDを返しません。所有者の設定は[Google Driveの管理者専用保管領域の設定](docs/GOOGLE_DRIVE_SETUP.md)と[公開機能の有効化](docs/PUBLISHING.md)を参照してください。
 
+初めて使う場合はホームの「ゲームを探す」から公開作品を遊べます。投稿可能ユーザーは「ゲームを投稿」で作品情報・公開設定・ファイルを1ページで入力し、完了画面から作品の管理・プレビューへ進めます。後から編集する場合は「アカウント」→「投稿したゲーム」→「管理・編集する」を選びます。基本情報、公開範囲、公開日時を変更できます。承認済み作品の基本情報を保存すると公開ページにも反映されます。審査対象のゲームファイルはこの編集操作では変更されません。
+
 Godotでは**Web**プリセットから「プロジェクトをエクスポート」し、生成されたHTML、同名の`.js`、`.wasm`、`.pck`などをまとめてください。HTML名は`index.html`に限らず`jump.html`などでも構いません。ZIP内に1つの親フォルダーがあっても受け付けます。「PCK/ZIPのエクスポート」だけではブラウザーで遊べません。Godot 4.7.2では`Thread Support`をオフにしてください。投稿後は完了画面が表示され、アカウント画面から本人だけのプレビューができます。失敗して`uploading`に残った既存投稿は、アカウント画面でZIPを再送できます。[Godot公式のWeb書き出し手順](https://docs.godotengine.org/ja/4.x/tutorials/export/exporting_for_web.html)も参照してください。
 
 `npm ci` → `npm test` → `npm run build` → `npm run dev`でローカル確認できます（Node.js 22以上）。公開値が未設定でも既存ゲームは動作します。GitHub Pagesは`dist/`の公開ファイルだけを配信します。

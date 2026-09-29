@@ -25,7 +25,7 @@ function render() {
     return engineMatch && text.includes(keyword);
   });
 
-  count.textContent = `${filtered.length} games`;
+  count.textContent = `${filtered.length}作品`;
   grid.innerHTML = "";
   emptyMessage.hidden = filtered.length !== 0;
 
@@ -42,7 +42,7 @@ function render() {
       <div class="game-card-body">
         <span class="game-type">${escapeHTML(game.engine)}</span>
         <h4>${escapeHTML(game.title)}</h4>
-        <p>${escapeHTML(game.description)}</p>
+        <p>${escapeHTML(game.description || '作品の詳細を見る')}</p>
         <a class="play-link" href="game.html?${game.slug ? `slug=${encodeURIComponent(game.slug)}` : `id=${encodeURIComponent(game.id)}`}">遊ぶ ▶</a>
       </div>
     `;
@@ -66,8 +66,9 @@ document.getElementById("filters").addEventListener("click", event => {
   if (!button) return;
 
   activeFilter = button.dataset.filter;
-  document.querySelectorAll(".filter-button").forEach(btn => btn.classList.remove("active"));
+  document.querySelectorAll(".filter-button").forEach(btn => { btn.classList.remove("active"); btn.setAttribute('aria-pressed', 'false'); });
   button.classList.add("active");
+  button.setAttribute('aria-pressed', 'true');
   render();
 });
 

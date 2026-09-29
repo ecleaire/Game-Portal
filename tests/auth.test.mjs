@@ -215,6 +215,10 @@ test('private game submission metadata hides Drive identifiers from users', asyn
   assert.equal(prepared.submission.drive_file_id, 'private-drive-file-id');
   const reviewed = await api('admin.submission.complete', { submission_id: made.submission.id, status: 'approved', reason: 'checked', package_storage_key: 'test.zip' }, adminToken);
   assert.equal(reviewed.submission.status, 'approved');
+  const metadata = await api('user.submission.update', { submission_id: made.submission.id, title: 'Updated after approval', engine: 'godot', description: 'new text', version: '1.1', controls: 'arrows' }, session.hash);
+  assert.equal(metadata.submission.status, 'approved');
+  assert.equal(metadata.submission.title, 'Updated after approval');
+  assert.equal(metadata.submission.package_ready, true);
   const listed = await api('user.submissions', {}, session.hash);
   assert.equal(listed.submissions[0].drive_file_id, undefined);
   const { rows } = await db.query('select drive_file_id from portal_private.game_submissions where id=$1', [made.submission.id]);
