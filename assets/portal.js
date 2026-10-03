@@ -551,6 +551,24 @@ async function upload() {
   ]) steps.append(el('li', step));
   guide.append(steps);
   s.append(guide);
+  const turboGuide = el('details', null, { class: 'export-guide' });
+  turboGuide.append(el('summary', 'Scratch / TurboWarpのHTML書き出し・投稿手順'));
+  const packagerLink = el('p', null);
+  packagerLink.append(el('a', 'TurboWarp Packagerを開く ↗', {
+    href: 'https://packager.turbowarp.org/', target: '_blank', rel: 'noopener noreferrer',
+  }));
+  turboGuide.append(packagerLink);
+  const turboSteps = el('ol', null);
+  for (const step of [
+    'TurboWarp Packagerを開き、Scratch作品のURL、または保存した.sb3ファイルを読み込みます。',
+    '画面サイズや操作ボタンなどを設定し、出力形式で「Plain HTML」（HTML）を選びます。',
+    'パッケージを作成して、生成された.htmlファイルをダウンロードします。',
+    'ダウンロードしたHTMLをブラウザーで開き、ゲームが動くことを確認します。',
+    'この投稿フォームのエンジンを「Scratch / TurboWarp」にし、HTMLをファイル選択欄へドラッグ＆ドロップするか、「ファイルを選択」から選びます。ZIPにする必要はなく、HTML名もindex.htmlでなくて構いません。',
+    'ゲーム情報と公開範囲を設定し、「ゲームを保存」を押します。',
+  ]) turboSteps.append(el('li', step));
+  turboGuide.append(turboSteps, el('p', 'ZIP形式で書き出した場合は、HTMLと関連ファイルが入ったZIPをそのまま選べます。.sb3やWindows用の実行ファイルではなく、ブラウザー用のHTMLまたはZIPを投稿してください。', { class: 'muted' }));
+  s.append(turboGuide);
   let pendingSubmissionId, selectedFiles = [], thumbnailUrl;
   const submissionForm = form(s, [field('title', 'ゲーム名', 'text', { maxlength: '120' }),
     field('engine', 'エンジン', 'select', { choices: [['godot','Godot'],['scratch','Scratch / TurboWarp'],['other','その他']] }),
