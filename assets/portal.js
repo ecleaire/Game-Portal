@@ -1,6 +1,6 @@
 import { config } from './config.js';
 import { checkWebGameZip, unpackPrivateZip, privatePreviewDocument } from './private-preview.js?v=20260929a';
-import { packageWebFiles } from './zip-upload.js?v=20260929a';
+import { packageWebFiles } from './zip-upload.js?v=20261003a';
 import { sendUpload, uploadWithRecovery } from './upload-request.js?v=20261003a';
 
 const root = document.querySelector('#portal');
