@@ -130,6 +130,15 @@ export async function downloadPrivateZip({ serviceAccountJson, oauthJson = '', f
   return response;
 }
 
+export async function deletePrivateZip({ serviceAccountJson, oauthJson = '', fileId, fetcher = fetch }) {
+  if (!fileId) throw new Error('drive_unavailable');
+  const access = await accessToken(serviceAccountJson, fetcher, oauthJson);
+  const response = await fetcher(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?supportsAllDrives=true`, {
+    method: 'DELETE', headers: { Authorization: `Bearer ${access}` }, signal: AbortSignal.timeout(15000),
+  });
+  if (!response.ok && response.status !== 404) throw new Error('drive_unavailable');
+}
+
 // Confirms folder visibility and write capabilities without
 // exposing their IDs, names, or any Drive content to the browser.
 export async function checkPrivateFolders({ serviceAccountJson, oauthJson = '', folderIds, fetcher = fetch }) {

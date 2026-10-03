@@ -78,6 +78,51 @@ test('published ZIP game opens through the isolated public player', async ({ con
   await page.screenshot({ path: 'test-results/player-mobile.png', fullPage: true });
 });
 
+test('own game deletion requires both confirmations and returns to the updated list', async ({ context, page }) => {
+  const game = { id: 'delete-test', title: 'Delete test', engine: 'other', version: '1', visibility: 'draft', status: 'unpublished' };
+  const headers = { 'access-control-allow-origin': 'http://127.0.0.1:4173',
+    'access-control-allow-headers': 'content-type,x-portal-session', 'access-control-allow-methods': 'POST,OPTIONS' };
+  let deletions = 0;
+  await context.addInitScript(() => sessionStorage.setItem('game-portal.user.session.v1', 'a'.repeat(64)));
+  await context.route('**/assets/config.js', route => route.fulfill({ contentType: 'text/javascript',
+    body: 'export const config = { supabaseUrl: "http://127.0.0.1:54321", anonKey: "" };' }));
+  await context.route('**/functions/v1/portal', route => {
+    if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
+    const { action, data } = route.request().postDataJSON();
+    if (action === 'user.submission.delete') {
+      expect(data).toEqual({ submission_id: game.id, title: game.title, confirmation: 'delete' });
+      deletions++;
+    }
+    return route.fulfill({ headers, json: action === 'user.me' ? { user: { role: 'uploader' } }
+      : action === 'user.submission.delete' ? { deleted: true, cleanup_pending: false }
+      : { submissions: deletions ? [] : [game] } });
+  });
+  await page.goto('account/?game=delete-test');
+  const remove = page.getByRole('button', { name: 'ゲームを削除する', exact: true });
+  page.once('dialog', dialog => { expect(dialog.message()).toContain('1/2'); dialog.dismiss(); });
+  await remove.click();
+  await expect(page.locator('#message')).toContainText('キャンセル');
+  expect(deletions).toBe(0);
+  page.once('dialog', async dialog => {
+    expect(dialog.message()).toContain('1/2');
+    page.once('dialog', second => { expect(second.message()).toContain('2/2'); second.dismiss(); });
+    await dialog.accept();
+  });
+  await remove.click();
+  await expect(page.locator('#message')).toContainText('キャンセル');
+  expect(deletions).toBe(0);
+  page.once('dialog', async dialog => {
+    expect(dialog.message()).toContain('1/2');
+    page.once('dialog', second => { expect(second.message()).toContain('2/2'); second.accept(); });
+    await dialog.accept();
+  });
+  await remove.click();
+  await expect(page.locator('#message')).toHaveText('ゲームを削除しました。');
+  await expect(page).toHaveURL(/\/account\/$/);
+  await expect(remove).toHaveCount(0);
+  expect(deletions).toBe(1);
+});
+
 for (const retry of [false, true]) test(`HTML ${retry ? 'resend' : 'upload'} recovers a lost completion response`, async ({ context, page }) => {
   const submission = { id: 'upload-result', title: 'HTML upload test', engine: 'scratch', version: '1.0.0', visibility: 'draft', status: 'draft', package_ready: true };
   let saved = false; let release; let received;

@@ -4,13 +4,27 @@
 
 ## 所有者が行う必要がある手順（既存サイトの更新順）
 
-1. Supabase SQL Editorで、未適用のmigrationを番号順に適用します。今回の追加は[`202609290013_approved_submission_metadata.sql`](../supabase/migrations/202609290013_approved_submission_metadata.sql)です。既存のmigrationを再実行しないでください。`supabase db push`を使う場合は`--dry-run`で対象を確認します。
+1. Supabase SQL Editorで、未適用のmigrationを番号順に適用します。今回の追加は[`202610030014_submission_deletion.sql`](../supabase/migrations/202610030014_submission_deletion.sql)です。既存のmigrationを再実行しないでください。`supabase db push`を使う場合は`--dry-run`で対象を確認します。
 2. 同じSQL Editorで[`publication_buckets.sql`](../supabase/storage/publication_buckets.sql)を実行します。`portal-packages`と`portal-thumbnails`が **Private** であることをStorage画面で確認します。一般ユーザーにStorageの直接読み取りポリシーを追加しないでください。Freeプランのファイル上限は50MBです。投稿が失敗する場合はStorage Settingsのグローバル上限も確認します。[Supabase Storageの制限](https://supabase.com/docs/guides/storage/uploads/file-limits)
 3. Edge Function `portal`を、このリポジトリの最新コードへデプロイします。CLIなら`supabase functions deploy portal`です。Dashboardでコードを編集する場合は`handler.mjs`、`drive.mjs`、`security.mjs`と`assets/private-preview.js`への依存関係をすべて最新にします。`Verify JWT with legacy secret`はOFFのままです。service_role key、Google OAuth認証情報はSupabase Secretsだけに置き、GitHub PagesやGitHub Variablesへ移しません。
 4. Edge Functionで投稿、審査、公開一覧の動作を確認してからGitHub Pagesの新フロントエンドを公開します。反対の順序だと旧バックエンドに新しい投稿画面が接続して失敗します。
 5. 更新前から`approved`だったゲームは配信用コピーがありません。管理画面の「配信用ファイルを準備」を押します。公開範囲が「公開」なら一覧へ、「限定公開」なら共有URLだけに表示されます。公開日時が未来なら時刻到来までサーバーがアクセスを拒否します。
 
 ## 投稿と管理
+
+### 投稿の削除
+
+本人のアカウント → 投稿したゲーム → 管理・編集 → **ゲームを削除する**から削除します。ゲーム名を示す確認を二回表示し、どちらかでキャンセルすると削除APIは呼びません。下書き・審査待ち・公開中・公開停止中も削除できます。公開をやめるだけなら公開範囲を下書きにしてください。
+
+サーバーは毎回セッションの有効性と投稿者IDを確認します。投稿情報をDBから削除すると一覧・審査・共有URL・プレビューから取得できなくなります。その後、非公開Supabase StorageのZIPとサムネイル、Google Driveの原本を削除します。二段階確認は誤操作対策であり、権限検証の代わりではありません。既にダウンロードされたファイルや開いているゲームは遠隔削除できません。既存の`games.json`のゲームと管理者監査ログは削除対象外です。
+
+外部サービスの失敗時も投稿の削除は完了しますが、画面に「保管ファイルの削除は保留中」と表示します。未完了処理を`portal_private.submission_deletions`へ非公開で記録し、完了まで残します。所有者はSQL Editorで`select id, created_at from portal_private.submission_deletions order by created_at;`を確認し、保留中IDに対して次を実行します。環境ファイルには`SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`、`GOOGLE_DRIVE_OAUTH_JSON`（またはサービスアカウントJSON）を設定します。実値をGitやチャットへ保存しないでください。
+
+```powershell
+node --env-file="C:\path\to\private-cleanup.env" scripts/cleanup-deleted-submission.mjs "削除済み投稿のUUID"
+```
+
+このスクリプトは削除記録がある投稿だけを処理し、成功後に記録を消します。ファイルを復元する処理はありません。
 
 ### 送信が止まった場合
 

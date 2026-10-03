@@ -16,7 +16,8 @@
 | user.submission.create | title, engine, version, description, controls, visibility, published_at | 投稿権限 / uploading状態の投稿を作成。下書き・限定公開・公開を選択 |
 | user.submission.visibility | submission_id, visibility, published_at | 投稿者本人 / 公開範囲・予約日時を更新。承認済みZIPの変更は伴わない |
 | user.submission.update | submission_id, title, engine, description（任意）, version, controls（任意） | 一般セッション / 自分の未完了・審査待ち・却下投稿を更新。却下投稿は再審査待ちへ戻る |
-| user.submission.withdraw | submission_id | 一般セッション / 自分の投稿を取り下げ。ZIPは非公開保管を継続 |
+| user.submission.delete | submission_id, title, confirmation=`delete` | 一般セッション / 本人の投稿を削除。二段階の画面確認後に呼ぶ |
+| user.submission.withdraw | submission_id | 旧画面との互換用。新画面は公開設定または削除を使用 |
 | admin.me | なし | 管理セッション / admin |
 | admin.users | offset（任意、非負整数） | 管理 / users、最大100件 |
 | admin.audit | before_id（任意、非負整数） | 管理 / events、新しい順100件 |

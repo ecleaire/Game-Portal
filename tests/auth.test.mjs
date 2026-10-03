@@ -285,6 +285,41 @@ test('drafts bypass review, unlisted links stay out of catalog, and future relea
   assert.equal((await api('admin.submission.unpublish', { submission_id: id, reason: 'moderation' }, adminToken)).submission.status, 'unpublished');
   assert.equal((await db.query('select public.portal_public_game($1) as game', [slug])).rows[0].game, null);
 });
+test('only an active owner can delete a game; deletion removes every listing and preserves cleanup work', async () => {
+  await api('admin.create', { username: 'delete_owner', password: 'delete-password', role: 'uploader' }, adminToken);
+  const owner = await login('delete_owner', 'delete-password');
+  const other = await login('manager_other', 'other-manager-password');
+  for (const status of ['uploading','draft','pending','approved','rejected','unpublished']) {
+    const made = await api('user.submission.create', { title: `Delete ${status}`, engine: 'other', version: '1' }, owner.hash);
+    const id = made.submission.id;
+    await db.query('update portal_private.game_submissions set status=$2,package_storage_key=$3,drive_file_id=$4 where id=$1', [id,status,`${id}.zip`,`${id}-drive`]);
+    const data = { submission_id: id, title: made.submission.title, confirmation: 'delete' };
+    assert.equal((await api('user.submission.delete', data, other.hash)).error, 'not_found');
+    assert.equal((await api('user.submission.delete', { ...data, confirmation: '' }, owner.hash)).error, 'invalid_request');
+    assert.equal((await api('user.submission.delete', { ...data, title: 'stale title' }, owner.hash)).error, 'conflict');
+    assert.deepEqual(await api('user.submission.delete', data, owner.hash), { deleted: true });
+    assert.equal((await api('user.submissions', {}, owner.hash)).submissions.some(s => s.id === id), false);
+    assert.equal((await api('admin.submissions', {}, adminToken)).submissions.some(s => s.id === id), false);
+    assert.equal((await db.query('select public.portal_public_game($1) as game', [made.submission.public_slug])).rows[0].game, null);
+    assert.equal((await db.query('select public.portal_catalog() as games')).rows[0].games.some(g => g.slug === made.submission.public_slug), false);
+    assert.equal((await api('user.submission.preview', { submission_id: id }, owner.hash)).error, 'not_found');
+    assert.deepEqual(await api('user.submission.delete', data, owner.hash), { deleted: true });
+    const cleanup = (await db.query('select public.portal_submission_cleanup($1) as files', [id])).rows[0].files;
+    assert.equal(cleanup.drive_file_id, `${id}-drive`);
+    for (const role of ['anon','authenticated']) {
+      await db.exec(`set role ${role}`);
+      try { await assert.rejects(db.query('select public.portal_submission_cleanup($1)', [id]), /permission denied/); }
+      finally { await db.exec('reset role'); }
+    }
+    await db.query('select public.portal_submission_cleanup($1,true)', [id]);
+    assert.equal((await api('user.submission.delete', data, owner.hash)).error, 'not_found');
+  }
+  const made = await api('user.submission.create', { title: 'Keep banned game', engine: 'other', version: '1' }, owner.hash);
+  await api('admin.ban', { user_id: owner.user.id, reason: 'test' }, adminToken);
+  assert.equal((await api('user.submission.delete', { submission_id: made.submission.id, title: made.submission.title, confirmation: 'delete' }, owner.hash)).error, 'unauthorized');
+  assert.equal((await db.query('select id from portal_private.game_submissions where id=$1', [made.submission.id])).rows.length, 1);
+});
+
 test('expired and deactivated admin sessions cannot perform management', async () => {
   const next = await login('owner', adminPassword, true);
   await db.query("update portal_private.sessions set expires_at=now()-interval '1 second' where token_hash=$1", [next.hash]);

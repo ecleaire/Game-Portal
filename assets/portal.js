@@ -106,7 +106,7 @@ async function api(action, data = {}) {
     method: 'POST', cache: 'no-store', credentials: 'omit',
     headers: { 'Content-Type': 'application/json', ...(config.anonKey ? { apikey: config.anonKey } : {}),
       ...(session ? { 'X-Portal-Session': session.token } : {}) },
-    body: JSON.stringify({ action, data }), signal: AbortSignal.timeout(20000),
+    body: JSON.stringify({ action, data }), signal: AbortSignal.timeout(action === 'user.submission.delete' ? 60000 : 20000),
   });
   const result = await response.json();
   if (!response.ok || result.error) {
@@ -332,14 +332,17 @@ function submissionEditor(game) {
     packageLabel.append(packageInput);
     retryForm.querySelector('button[type=submit]').before(packageLabel);
   }
-  if (['uploading', 'draft', 'pending', 'rejected', 'approved'].includes(game.status)) {
-    const withdraw = section('投稿を取り下げる', grid);
-    withdraw.append(el('p', '取り下げると、この投稿は公開・審査の対象から外れます。', { class: 'muted' }));
-    button(withdraw, '投稿を取り下げる', async () => {
-    if (!confirm(`「${game.title}」を取り下げますか？`)) { notice('キャンセルしました。'); return; }
-    await api('user.submission.withdraw', { submission_id: game.id }); location.href = './';
-    }, true);
-  }
+  const removal = section('ゲームを削除する', grid);
+  removal.append(el('p', 'ゲーム情報とアップロードしたファイルを削除します。元に戻せません。公開をやめるだけなら、公開範囲を「下書き」に変更してください。', { class: 'muted' }));
+  button(removal, 'ゲームを削除する', async () => {
+    if (!confirm(`【確認 1/2】「${game.title}」を削除しますか？\n投稿一覧と公開ページから削除されます。`)) { notice('削除をキャンセルしました。'); return; }
+    if (!confirm(`【最終確認 2/2】「${game.title}」を本当に削除しますか？\nゲーム情報とファイルを削除します。この操作は元に戻せません。`)) { notice('削除をキャンセルしました。'); return; }
+    notice('ゲームを削除中…');
+    const result = await api('user.submission.delete', { submission_id: game.id, title: game.title, confirmation: 'delete' });
+    history.replaceState(null, '', './');
+    await account();
+    notice(result.cleanup_pending ? 'ゲームを削除しました。保管ファイルの削除は保留中です。管理者に連絡してください。' : 'ゲームを削除しました。');
+  }, true);
 }
 const visibilityChoices = [['draft', '下書き（自分だけ）'], ['unlisted', '限定公開（URLを知る人）'], ['public', '公開（一覧に表示）']];
 const visibilityLabel = value => ({ draft: '下書き', unlisted: '限定公開', public: '公開' }[value] ?? value);

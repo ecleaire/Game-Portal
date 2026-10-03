@@ -1,5 +1,5 @@
 import { digest, token, readBody, statusFor } from './security.mjs';
-import { checkPrivateFolders, driveError, downloadPrivateZip, movePrivateZip, storePrivateZip, validateZip } from './drive.mjs';
+import { checkPrivateFolders, deletePrivateZip, driveError, downloadPrivateZip, movePrivateZip, storePrivateZip, validateZip } from './drive.mjs';
 
 // Dependency injection keeps the actual HTTP boundary testable without deployed secrets.
 export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleServiceAccountJson = '', googleDriveOAuthJson = '', googlePendingFolderId = '', googleApprovedFolderId = '', googleRejectedFolderId = '', fetcher = fetch }) {
@@ -241,6 +241,30 @@ export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleS
       }
       if (!result || typeof result !== 'object') return reply({ error: 'unavailable' }, 503);
       if (result.error) return reply({ error: result.error }, statusFor(result.error));
+      if (input.action === 'user.submission.delete' && result.deleted === true) {
+        try {
+          const files = await publicRpc('portal_submission_cleanup', { p_id: input.data.submission_id });
+          if (files) {
+            const removeObject = async (bucket, key) => {
+              if (!key) return;
+              const removed = await fetcher(`${url.replace(/\/$/, '')}/storage/v1/object/${bucket}`, {
+                method: 'DELETE', headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prefixes: [key] }), signal: AbortSignal.timeout(15000),
+              });
+              if (!removed.ok && removed.status !== 404) throw new Error('storage_unavailable');
+            };
+            const removed = await Promise.allSettled([
+              removeObject('portal-packages', files.package_storage_key),
+              removeObject('portal-thumbnails', files.thumbnail_key),
+              ...(files.drive_file_id ? [deletePrivateZip({ serviceAccountJson: googleServiceAccountJson,
+                oauthJson: googleDriveOAuthJson, fileId: files.drive_file_id, fetcher })] : []),
+            ]);
+            if (removed.some(item => item.status === 'rejected')) throw new Error('cleanup_pending');
+            await publicRpc('portal_submission_cleanup', { p_id: input.data.submission_id, p_complete: true });
+          }
+          return reply({ deleted: true, cleanup_pending: false });
+        } catch { return reply({ deleted: true, cleanup_pending: true }); }
+      }
       return reply(fresh ? { ...result, token: fresh } : result);
     } catch { return reply({ error: 'unavailable' }, 503); }
   };

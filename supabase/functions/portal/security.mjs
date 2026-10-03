@@ -5,7 +5,7 @@ export const actions = new Set([
   'admin.ban', 'admin.unban', 'admin.disable', 'admin.enable',
   'admin.submissions', 'admin.submission.unpublish',
   'user.submissions', 'user.submission.create', 'user.submission.update', 'user.submission.visibility',
-  'user.submission.withdraw', 'user.submission.prepare',
+  'user.submission.withdraw', 'user.submission.prepare', 'user.submission.delete',
 ]);
 
 export function token() {

@@ -5,6 +5,33 @@ import { digest, token } from '../supabase/functions/portal/security.mjs';
 import { validateZip } from '../supabase/functions/portal/drive.mjs';
 
 const settings = { url: 'https://example.supabase.co', serviceKey: 'server-test-key', pepper: 'test-only-pepper'.repeat(3), allowedOrigins: 'https://ecleaire.github.io' };
+
+test('deletion cleans only authorized server identifiers and retains failed cleanup', async () => {
+  for (const denied of [true,false]) for (const fail of [true,false]) {
+    const calls = [];
+    const handler = createHandler({ ...settings, googleDriveOAuthJson: JSON.stringify({ client_id: 'test', client_secret: 'test', refresh_token: 'test' }), fetcher: async (url, options) => {
+      calls.push(url);
+      if (url.endsWith('/rpc/portal_api')) return Response.json(denied ? { error: 'not_found' } : { deleted: true });
+      if (url.endsWith('/rpc/portal_submission_cleanup')) {
+        if (JSON.parse(options.body).p_complete) return Response.json({ ok: true });
+        return Response.json({ drive_file_id: 'server-drive', package_storage_key: 'server.zip', thumbnail_key: 'server.png' });
+      }
+      if (url.includes('oauth2.googleapis.com')) return Response.json({ access_token: 'test-access' });
+      assert.equal(options.method, 'DELETE');
+      if (url.includes('/storage/')) assert.ok(['server.zip','server.png'].includes(JSON.parse(options.body).prefixes[0]));
+      else assert.ok(url.includes('/files/server-drive?'));
+      return new Response(null, { status: fail ? 503 : 204 });
+    } });
+    const response = await handler(request({ action: 'user.submission.delete', data: { submission_id: crypto.randomUUID(), title: 'Game', confirmation: 'delete', drive_file_id: 'attacker-file' } }, { 'x-portal-session': token() }));
+    const result = await response.json();
+    if (denied) { assert.equal(response.status, 404); assert.equal(calls.length, 1); }
+    else {
+      assert.deepEqual(result, { deleted: true, cleanup_pending: fail });
+      assert.equal(calls.filter(url => url.endsWith('/rpc/portal_submission_cleanup')).length, fail ? 1 : 2);
+      assert.ok(!JSON.stringify(result).includes('server-drive'));
+    }
+  }
+});
 function zip(name = 'index.html', mode = 0) {
   const encoded = Buffer.from(name); const data = Buffer.from('<');
   const local = Buffer.alloc(30); local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(20, 4); local.writeUInt32LE(1, 18); local.writeUInt32LE(1, 22); local.writeUInt16LE(encoded.length, 26);
