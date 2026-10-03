@@ -1,6 +1,7 @@
 import { config } from './config.js';
 import { checkWebGameZip, unpackPrivateZip, privatePreviewDocument } from './private-preview.js?v=20260929a';
 import { packageWebFiles } from './zip-upload.js?v=20260929a';
+import { sendUpload, uploadWithRecovery } from './upload-request.js?v=20261003a';
 
 const root = document.querySelector('#portal');
 const message = document.querySelector('#message');
@@ -27,6 +28,9 @@ const errors = {
   password_limit: '代替パスワードは最大5件です。',
   not_found: '対象が見つかりません。画面を更新してください。',
   unavailable: 'サーバーに接続できません。設定を確認し、しばらくして再試行してください。',
+  upload_timeout: '保存完了を確認できませんでした。アカウントの投稿一覧で状態を確認してください。「ZIP未保存」の場合は、同じゲームの編集画面から再送信できます。',
+  upload_network: '送信中に接続が途切れました。投稿一覧で保存状態を確認してください。未保存なら、接続を確認して再送信してください。',
+  upload_response: 'サーバーから保存結果を受け取れませんでした。投稿一覧で保存状態を確認してください。',
   drive_unavailable: '投稿用のGoogle Driveに接続できません。管理者がGoogle Drive API、サービスアカウント、投稿先フォルダーの共有設定を確認してください。',
   drive_shared_drive_required: 'サービスアカウントではマイドライブへ保存できません。管理者が共有ドライブ、または所有者OAuth認証を設定してください。',
   drive_permission_denied: '投稿保管フォルダーに保存・移動する権限がありません。管理者がGoogle Driveの権限を確認してください。',
@@ -483,16 +487,25 @@ async function showAudit(parent) {
 async function uploadPackage(submissionId, file, refresh = upload, thumbnail = null) {
     if (!file) throw new Error('invalid_request');
     await checkWebGameZip(file);
-    notice('ZIPを非公開保管先へ送信中…完了までこの画面を閉じないでください。');
+    notice('ゲームファイルを送信中…0%');
     const body = new FormData(); body.set('submission_id', submissionId); body.set('package', file);
     if (thumbnail?.size) body.set('thumbnail', thumbnail);
-    const response = await fetch(`${config.supabaseUrl.replace(/\/$/, '')}/functions/v1/portal/upload`, { method: 'POST', credentials: 'omit',
-      headers: { ...(config.anonKey ? { apikey: config.anonKey } : {}), 'X-Portal-Session': session.token }, body, signal: AbortSignal.timeout(120000) });
-    const result = await response.json().catch(() => ({})); if (!response.ok || result.error) throw new Error(result.error ?? 'unavailable');
-    if (refresh) await refresh(); notice(result.submission?.status === 'draft' ? '下書きに保存しました。自分だけがプレイできます。' : result.submission?.status === 'approved'
+    const started = Date.now(); let progress = 0; let checking = false;
+    const showProgress = () => notice(checking ? '保存結果を確認中…' : progress === 100
+      ? `ファイル送信完了。サーバーで保存中…（${Math.floor((Date.now() - started) / 1000)}秒経過）この画面を閉じずにお待ちください。`
+      : `ゲームファイルを送信中…${progress === null ? '' : `${progress}% `}（${Math.floor((Date.now() - started) / 1000)}秒経過）`);
+    const timer = setInterval(showProgress, 1000);
+    let submission;
+    try {
+      submission = await uploadWithRecovery(() => sendUpload(`${config.supabaseUrl.replace(/\/$/, '')}/functions/v1/portal/upload`, {
+        body, headers: { ...(config.anonKey ? { apikey: config.anonKey } : {}), 'X-Portal-Session': session.token },
+        onProgress: value => { progress = value; showProgress(); },
+      }), () => { checking = true; notice('保存結果を確認中…'); return api('user.submissions'); }, submissionId);
+    } finally { clearInterval(timer); }
+    if (refresh) await refresh(); notice(submission?.status === 'draft' ? '下書きに保存しました。自分だけがプレイできます。' : submission?.status === 'approved'
       ? '非公開で保管しました。信頼済み投稿者のため審査を省略しました。'
       : '非公開で保管しました。審査待ちです。');
-    return result.submission;
+    return submission;
 }
 function uploadComplete(submission) {
   root.replaceChildren();

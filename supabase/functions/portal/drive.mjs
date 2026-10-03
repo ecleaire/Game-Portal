@@ -54,7 +54,7 @@ export async function accessToken(serviceAccountJson, fetcher = fetch, oauthJson
   const signed = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(`${header}.${claims}`));
   const assertion = `${header}.${claims}.${base64url(new Uint8Array(signed))}`;
   const response = await fetcher(GOOGLE_TOKEN_URL, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion }) });
+    body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion }), signal: AbortSignal.timeout(15000) });
   const result = await response.json().catch(() => null);
   if (!response.ok || typeof result?.access_token !== 'string') throw new Error('drive_unavailable');
   return result.access_token;
@@ -102,7 +102,10 @@ export async function storePrivateZip({ serviceAccountJson, oauthJson = '', pend
   const suffix = new TextEncoder().encode(`\r\n--${boundary}--`);
   const body = new Uint8Array(prefix.length + bytes.length + suffix.length);
   body.set(prefix); body.set(bytes, prefix.length); body.set(suffix, prefix.length + bytes.length);
-  const response = await fetcher(DRIVE_UPLOAD_URL, { method: 'POST', headers: { Authorization: `Bearer ${access}`, 'Content-Type': `multipart/related; boundary=${boundary}` }, body });
+  let response;
+  try {
+    response = await fetcher(DRIVE_UPLOAD_URL, { method: 'POST', headers: { Authorization: `Bearer ${access}`, 'Content-Type': `multipart/related; boundary=${boundary}` }, body, signal: AbortSignal.timeout(45000) });
+  } catch { throw new Error('drive_unavailable'); }
   const result = await response.json().catch(() => null);
   if (!response.ok || typeof result?.id !== 'string') throw apiError(result);
   return { id: result.id, name: file.name, size: file.size };
@@ -112,7 +115,7 @@ export async function movePrivateZip({ serviceAccountJson, oauthJson = '', fileI
   if (!fileId || !fromFolderId || !toFolderId) throw new Error('drive_unavailable');
   const access = await accessToken(serviceAccountJson, fetcher, oauthJson);
   const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?addParents=${encodeURIComponent(toFolderId)}&removeParents=${encodeURIComponent(fromFolderId)}&supportsAllDrives=true&fields=id`;
-  const response = await fetcher(url, { method: 'PATCH', headers: { Authorization: `Bearer ${access}` } });
+  const response = await fetcher(url, { method: 'PATCH', headers: { Authorization: `Bearer ${access}` }, signal: AbortSignal.timeout(15000) });
   const result = await response.json().catch(() => null);
   if (!response.ok || result?.id !== fileId) throw apiError(result);
 }

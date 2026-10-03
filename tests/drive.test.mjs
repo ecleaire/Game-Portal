@@ -54,6 +54,7 @@ test('upload, review move and download support shared drives; errors expose stab
     if (url.includes('oauth2.googleapis.com')) return Response.json({ access_token: 'test-access' });
     assert.equal(new URL(url).searchParams.get('supportsAllDrives'), 'true');
     assert.equal(options.headers.Authorization, 'Bearer test-access');
+    assert.ok(options.signal instanceof AbortSignal);
     operation = { url, options };
     return new URL(url).searchParams.has('alt') ? new Response('zip-content') : Response.json({ id: 'private-test-id' });
   };
