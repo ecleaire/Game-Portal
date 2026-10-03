@@ -2,6 +2,7 @@ import { config } from './config.js';
 import { checkWebGameZip, unpackPrivateZip, privatePreviewDocument } from './private-preview.js?v=20260929a';
 import { packageWebFiles } from './zip-upload.js?v=20261003a';
 import { sendUpload, uploadWithRecovery } from './upload-request.js?v=20261003a';
+import { submissionList } from './submission-list.js?v=20261003a';
 
 const root = document.querySelector('#portal');
 const message = document.querySelector('#message');
@@ -224,12 +225,8 @@ async function account() {
   const gameActions = el('div', null, { class: 'actions' });
   gameActions.append(el('a', '新しいゲームを投稿する →', { href: '../upload/', class: 'editor-back' }));
   gamesSection.append(gameActions);
-  if (!submissions.length) gamesSection.append(el('p', '投稿したゲームはまだありません。上のリンクから最初の作品を投稿できます。', { class: 'muted' }));
-  else {
-    const list = el('div', null, { class: 'submission-list' });
-    for (const game of submissions) submissionCard(list, game);
-    gamesSection.append(list);
-  }
+  submissionList(gamesSection, submissions, { userId: user.id, statusLabel, visibilityLabel,
+    renderCard: game => submissionCard(game, './') });
   const profile = section('プロフィール');
   profile.append(el('p', '表示名とアイコンはゲーム投稿などで表示するための情報です。ログイン用ユーザー名やパスワードとは別に管理されます。', { class: 'muted' }));
   form(profile, [
@@ -257,15 +254,16 @@ function thumbnailOrFallback(parent, game) {
   parent.append(el('div', game.title.slice(0, 2).toUpperCase(), { class: 'summary-fallback', 'aria-hidden': 'true' }));
   if (game.has_thumbnail) showSubmissionThumbnail(parent, game.id, 'user');
 }
-function submissionCard(parent, game) {
+function submissionCard(game, accountPath) {
   const card = el('article', null, { class: 'row submission-summary' });
   const art = el('div', null); thumbnailOrFallback(art, game); card.append(art);
   const details = el('div', null);
   details.append(statusBadge(game), el('h3', game.title));
   details.append(el('p', `${game.engine.toUpperCase()} · バージョン ${game.version}`, { class: 'muted' }));
   if (game.status === 'uploading') details.append(el('p', 'ファイルの再送が必要です。', { class: 'muted' }));
-  details.append(el('a', '管理・編集する →', { href: `./?game=${encodeURIComponent(game.id)}` }));
-  card.append(details); parent.append(card);
+  if (game.created_at) details.append(el('p', `投稿日: ${new Date(game.created_at).toLocaleDateString('ja-JP')}`, { class: 'muted' }));
+  details.append(el('a', '管理・編集する →', { href: `${accountPath}?game=${encodeURIComponent(game.id)}` }));
+  card.append(details); return card;
 }
 function submissionEditor(game) {
   const editor = section('投稿したゲームの管理', root, 'submission-editor');
@@ -647,14 +645,8 @@ async function upload() {
   submissionForm.querySelector('button[type=submit]').before(dropZone);
   const { submissions } = await api('user.submissions');
   const history = section('投稿履歴');
-  if (!submissions.length) history.append(el('p', '投稿はまだありません。'));
-  for (const game of submissions) {
-    const row = el('div', null, { class: 'row' });
-    if (game.has_thumbnail) showSubmissionThumbnail(row, game.id, 'user');
-    row.append(statusBadge(game), el('h3', game.title));
-    row.append(el('p', `${game.engine.toUpperCase()} · バージョン ${game.version}`, { class: 'muted' }));
-    const link = el('a', '管理・編集する →', { href: `../account/?game=${encodeURIComponent(game.id)}`, class: 'editor-back' }); row.append(link); history.append(row);
-  }
+  submissionList(history, submissions, { userId: user.id, statusLabel, visibilityLabel,
+    renderCard: game => submissionCard(game, '../account/') });
 }
 async function repairPublication(submissionId) {
   const response = await fetch(`${config.supabaseUrl.replace(/\/$/, '')}/functions/v1/portal/publish-package`, {

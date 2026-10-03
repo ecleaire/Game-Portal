@@ -132,6 +132,19 @@ a, button, input, select { -webkit-tap-highlight-color: transparent; }
 .portal .status-badge.is-danger { border-color: rgba(255,147,158,.35); background: rgba(255,147,158,.1); color: #ffb8c2; }
 .portal .badge-row { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 12px; }
 .portal .submission-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.portal .submission-scroll { max-height: 580px; overflow-y: auto; scrollbar-gutter: stable; align-content: start; padding: 5px 10px 5px 5px; }
+.portal .submission-tools { display: grid; grid-template-columns: minmax(180px, 2fr) repeat(2, minmax(120px, 1fr)) minmax(90px, .6fr); gap: 12px; margin-top: 20px; }
+.portal .submission-tools label { font-size: .82rem; }
+.portal .submission-count { margin: 12px 0; font-size: .85rem; }
+.portal .submission-empty { grid-column: 1 / -1; padding: 20px; }
+.portal .submission-moves { display: flex; gap: 8px; margin-top: 12px; }
+.portal .submission-moves button { padding: 6px 12px; font-size: .8rem; }
+.portal .submission-moves button:disabled { cursor: default; }
+@media (max-width: 700px) {
+  .portal .submission-tools { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .portal .submission-tools label:first-child { grid-column: 1 / -1; }
+  .portal .submission-scroll { max-height: 65vh; }
+}
 .portal .submission-summary { display: grid; grid-template-columns: minmax(120px, 33%) 1fr; gap: 18px; align-items: start; min-height: 176px; }
 .portal .submission-summary .thumbnail-preview { width: 100%; margin: 0; }
 .portal .summary-fallback { display: grid; place-items: center; width: 100%; aspect-ratio: 16 / 9; border: 1px solid var(--line); border-radius: 12px; background: radial-gradient(circle at 26% 24%, rgba(115,231,209,.13), transparent 50%), #1e3047; color: #b7cfdd; font-size: 2rem; font-weight: 850; }

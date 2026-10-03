@@ -78,6 +78,50 @@ test('published ZIP game opens through the isolated public player', async ({ con
   await page.screenshot({ path: 'test-results/player-mobile.png', fullPage: true });
 });
 
+for (const path of ['account/', 'upload/']) test(`${path} submission history supports search, sorting, manual order and scrolling`, async ({ context, page }) => {
+  const games = Array.from({ length: 16 }, (_,index) => ({ id: `history-${index}`, title: `Game ${index + 1}`, engine: index % 2 ? 'scratch' : 'godot', version: `1.${index}`, description: index === 5 ? 'Special puzzle' : '', visibility: 'draft', status: index % 2 ? 'pending' : 'draft', created_at: new Date(2026,0,index+1).toISOString(), updated_at: new Date(2026,1,16-index).toISOString() }));
+  const headers = { 'access-control-allow-origin': 'http://127.0.0.1:4173',
+    'access-control-allow-headers': 'content-type,x-portal-session', 'access-control-allow-methods': 'POST,OPTIONS' };
+  await context.addInitScript(() => sessionStorage.setItem('game-portal.user.session.v1', 'a'.repeat(64)));
+  await context.route('**/assets/config.js', route => route.fulfill({ contentType: 'text/javascript', body: 'export const config = { supabaseUrl: "http://127.0.0.1:54321", anonKey: "" };' }));
+  await context.route('**/functions/v1/portal', route => route.request().method() === 'OPTIONS'
+    ? route.fulfill({ status: 204, headers })
+    : route.fulfill({ headers, json: route.request().postDataJSON().action === 'user.me' ? { user: { id: 'history-user', role: 'uploader' } } : { submissions: games } }));
+  await page.goto(path);
+  const list = page.getByRole('region', { name: '投稿ゲーム一覧' });
+  const titles = list.locator('h3');
+  await expect(titles).toHaveCount(16);
+  await expect(titles.first()).toHaveText('Game 16');
+  expect(await list.evaluate(node => node.scrollHeight > node.clientHeight && getComputedStyle(node).overflowY === 'auto')).toBe(true);
+  await page.getByRole('searchbox', { name: '投稿を検索' }).fill('special');
+  await expect(titles).toHaveText(['Game 6']);
+  await page.getByRole('searchbox', { name: '投稿を検索' }).fill('no match');
+  await expect(list).toContainText('条件に一致する投稿がありません。');
+  await page.getByRole('searchbox', { name: '投稿を検索' }).fill('');
+  await page.getByRole('combobox', { name: '状態で絞り込み' }).selectOption('pending');
+  await expect(titles).toHaveCount(8);
+  await page.getByRole('combobox', { name: '状態で絞り込み' }).selectOption('');
+  await page.getByRole('combobox', { name: '並び替え', exact: true }).selectOption('title');
+  await page.getByRole('combobox', { name: '順序', exact: true }).selectOption('asc');
+  await expect(titles.first()).toHaveText('Game 1');
+  await expect(titles.nth(1)).toHaveText('Game 2');
+  await page.getByRole('combobox', { name: '並び替え', exact: true }).selectOption('updated_at');
+  await expect(titles.first()).toHaveText('Game 16');
+  await page.getByRole('combobox', { name: '並び替え', exact: true }).selectOption('manual');
+  await expect(page.getByRole('combobox', { name: '順序', exact: true })).toBeDisabled();
+  await list.getByRole('button', { name: '「Game 16」を下へ', exact: true }).click();
+  await list.getByRole('button', { name: '「Game 16」を下へ', exact: true }).click();
+  await expect(titles.nth(2)).toHaveText('Game 16');
+  await page.goto(path === 'account/' ? 'upload/' : 'account/');
+  await expect(page.getByRole('combobox', { name: '並び替え', exact: true })).toHaveValue('manual');
+  await expect(titles.nth(2)).toHaveText('Game 16');
+  await page.screenshot({ path: `test-results/history-${path.slice(0,-1)}-desktop.png`, fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect(await list.evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
+  await page.screenshot({ path: `test-results/history-${path.slice(0,-1)}-mobile.png`, fullPage: true });
+});
+
 test('own game deletion requires both confirmations and returns to the updated list', async ({ context, page }) => {
   const game = { id: 'delete-test', title: 'Delete test', engine: 'other', version: '1', visibility: 'draft', status: 'unpublished' };
   const headers = { 'access-control-allow-origin': 'http://127.0.0.1:4173',
