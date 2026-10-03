@@ -320,15 +320,15 @@ function submissionEditor(game) {
   }
   if (game.status === 'uploading') {
     const retry = section('ゲームファイルを再送', grid);
-    retry.append(el('p', 'Web書き出しZIPを選び直してください。保存が完了するまでは審査・プレイできません。', { class: 'muted' }));
+    retry.append(el('p', 'HTML、ZIP、またはWeb書き出しのファイル一式を選び直してください。', { class: 'muted' }));
     const retryForm = form(retry, [], 'ファイルを再送する', async () => {
-      const file = retryForm.elements.package?.files?.[0];
+      const file = await packageWebFiles(retryForm.elements.package?.files ?? []);
       await uploadPackage(game.id, file, account);
     });
     retryForm.classList.add('stacked-form');
     retryForm.append(el('p', '', { class: 'message upload-status', role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' }));
-    const packageLabel = el('label', 'ゲームZIP（最大50MB）');
-    const packageInput = el('input', null, { type: 'file', name: 'package', accept: '.zip,application/zip', required: 'required' });
+    const packageLabel = el('label', 'ゲームファイル（HTML・ZIP・複数ファイル、最大50MB）');
+    const packageInput = el('input', null, { type: 'file', name: 'package', multiple: '', 'aria-label': 'ゲームファイルを再選択', required: 'required' });
     packageLabel.append(packageInput);
     retryForm.querySelector('button[type=submit]').before(packageLabel);
   }

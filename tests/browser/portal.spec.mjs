@@ -78,8 +78,8 @@ test('published ZIP game opens through the isolated public player', async ({ con
   await page.screenshot({ path: 'test-results/player-mobile.png', fullPage: true });
 });
 
-test('HTML upload recovers a lost completion response', async ({ context, page }) => {
-  const submission = { id: 'upload-result', title: 'HTML upload test', status: 'draft', package_ready: true };
+for (const retry of [false, true]) test(`HTML ${retry ? 'resend' : 'upload'} recovers a lost completion response`, async ({ context, page }) => {
+  const submission = { id: 'upload-result', title: 'HTML upload test', engine: 'scratch', version: '1.0.0', visibility: 'draft', status: 'draft', package_ready: true };
   let saved = false; let release; let received;
   const uploadReceived = new Promise(resolve => { received = resolve; });
   const responseReady = new Promise(resolve => { release = resolve; });
@@ -93,7 +93,7 @@ test('HTML upload recovers a lost completion response', async ({ context, page }
     const { action } = route.request().postDataJSON();
     return route.fulfill({ headers, json: action === 'user.me' ? { user: { role: 'uploader' } }
       : action === 'user.submission.create' ? { submission: { ...submission, status: 'uploading', package_ready: false } }
-      : { submissions: saved ? [submission] : [] } });
+      : { submissions: saved ? [submission] : retry ? [{ ...submission, status: 'uploading', package_ready: false }] : [] } });
   });
   await context.route('**/functions/v1/portal/upload', async route => {
     if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
@@ -104,22 +104,32 @@ test('HTML upload recovers a lost completion response', async ({ context, page }
     saved = true;
     await route.fulfill({ status: 503, headers, json: { error: 'unavailable' } });
   });
-  await page.goto('upload/');
-  await page.getByLabel('ゲーム名', { exact: true }).fill(submission.title);
-  await page.getByRole('combobox', { name: 'エンジン', exact: true }).selectOption('scratch');
-  await page.getByLabel('ゲームファイルを選択').setInputFiles({ name: 'my-game.html', mimeType: 'text/html', buffer: Buffer.from('<!doctype html><html><body>Game</body></html>') });
-  await page.getByRole('button', { name: 'ゲームを投稿', exact: true }).click();
+  await page.goto(retry ? 'account/?game=upload-result' : 'upload/');
+  if (!retry) {
+    await page.getByLabel('ゲーム名', { exact: true }).fill(submission.title);
+    await page.getByRole('combobox', { name: 'エンジン', exact: true }).selectOption('scratch');
+  }
+  const fileInput = page.getByLabel(retry ? 'ゲームファイルを再選択' : 'ゲームファイルを選択');
+  expect(await fileInput.getAttribute('accept')).toBeNull();
+  await fileInput.setInputFiles({ name: 'my-game.html', mimeType: 'text/html', buffer: Buffer.from('<!doctype html><html><body>Game</body></html>') });
+  const submitText = retry ? 'ファイルを再送する' : 'ゲームを投稿';
+  await page.getByRole('button', { name: submitText, exact: true }).click();
   await uploadReceived;
-  await expect(page.getByRole('button', { name: 'ゲームを投稿', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: submitText, exact: true })).toBeDisabled();
   await expect(page.getByLabel('ゲーム名', { exact: true })).toBeDisabled();
-  await expect(page.getByRole('combobox', { name: 'エンジン', exact: true })).toBeDisabled();
-  await expect(page.getByLabel('ゲームファイルを選択')).toBeDisabled();
+  await expect(page.getByRole('combobox', { name: 'エンジン' })).toBeDisabled();
+  await expect(fileInput).toBeDisabled();
   await expect(page.locator('#message')).toBeEmpty();
   await expect(page.locator('.upload-status')).toContainText('送信');
-  expect(await page.locator('.upload-status').evaluate(node => node.previousElementSibling.textContent)).toBe('ゲームを投稿');
+  expect(await page.locator('.upload-status').evaluate(node => node.previousElementSibling.textContent)).toBe(submitText);
   release();
-  await expect(page.getByRole('heading', { name: '投稿が完了しました' })).toBeVisible();
-  await expect(page.getByRole('link', { name: '投稿したゲームを管理・プレイ →' })).toHaveAttribute('href', /game=upload-result/);
+  if (retry) {
+    await expect(page.getByRole('heading', { name: 'ゲームファイルを再送' })).toHaveCount(0);
+    await expect(page.locator('#message')).toContainText('下書きに保存しました');
+  } else {
+    await expect(page.getByRole('heading', { name: '投稿が完了しました' })).toBeVisible();
+    await expect(page.getByRole('link', { name: '投稿したゲームを管理・プレイ →' })).toHaveAttribute('href', /game=upload-result/);
+  }
 });
 
 test('browser flows connect to the real Edge handler and migrated database', async ({ context, page }) => {
