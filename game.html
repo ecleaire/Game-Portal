@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#111827" />
   <title>GAME PORTAL</title>
   <link rel="stylesheet" href="assets/style.css" />
-  <link rel="stylesheet" href="assets/design.css" />
+  <link rel="stylesheet" href="assets/design.css?v=20261003" />
 </head>
 <body class="play-page">
   <header class="site-header">
@@ -17,38 +17,42 @@
   </header>
 
   <main class="play-container">
+    <a class="game-back" href="./#games">← ゲーム一覧</a>
     <section class="game-info">
-      <button id="fullscreenButton" class="action-button">全画面で遊ぶ</button>
       <div>
-        <p id="engineLabel" class="engine-label"></p>
-        <h1 id="gameTitle">Loading...</h1>
-        <p id="gameDescription"></p>
+        <div class="game-tags"><span id="engineLabel" class="engine-label" hidden></span><span id="versionText" class="game-version" hidden></span></div>
+        <h1 id="gameTitle">ゲームを読み込んでいます</h1>
       </div>
+      <button id="shareButton" class="action-button" disabled>URLをコピー</button>
     </section>
 
-    <section class="player-shell" id="playerShell">
-      <div id="loading" class="player-loading">ゲームを読み込んでいます…</div>
-      <iframe
-        id="gameFrame"
-        title="Game"
-        allow="autoplay; fullscreen; gamepad"
-        allowfullscreen
-      ></iframe>
+    <section class="player-shell" id="playerShell" aria-label="ゲームプレイヤー" aria-busy="true">
+      <div class="player-toolbar">
+        <span id="playerStatus" class="player-status" role="status">読込中</span>
+        <div class="player-actions">
+          <button id="reloadButton" class="action-button" disabled>再読み込み</button>
+          <button id="fullscreenButton" class="action-button" aria-pressed="false" disabled>全画面で遊ぶ</button>
+        </div>
+      </div>
+      <div class="player-viewport">
+        <div id="loading" class="player-loading" role="status">ゲームを読み込んでいます…</div>
+        <iframe id="gameFrame" title="ゲーム" allow="autoplay; fullscreen; gamepad" allowfullscreen></iframe>
+      </div>
     </section>
 
     <section class="game-meta">
-      <div class="meta-card">
-        <h2>操作方法</h2>
-        <p id="controlsText">—</p>
+      <div class="meta-card" id="descriptionCard" hidden>
+        <h2>このゲームについて</h2>
+        <p id="gameDescription"></p>
       </div>
       <div class="meta-card">
-        <h2>バージョン</h2>
-        <p id="versionText">—</p>
+        <h2>操作方法</h2>
+        <p id="controlsText">ゲーム内の案内をご確認ください。</p>
       </div>
     </section>
   </main>
 
   <script type="module" src="assets/navigation.js"></script>
-  <script type="module" src="assets/play.js?v=20260929b"></script>
+  <script type="module" src="assets/play.js?v=20261003"></script>
 </body>
 </html>

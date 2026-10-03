@@ -43,6 +43,8 @@ test('private HTML preview runs local ZIP assets inside an opaque sandbox', asyn
 });
 
 test('published ZIP game opens through the isolated public player', async ({ context, page }) => {
+  // Exercise the mobile expansion fallback without relying on headless fullscreen support.
+  await page.addInitScript(() => Object.defineProperty(document, 'fullscreenEnabled', { get: () => false }));
   const slug = 'c'.repeat(36);
   const archive = await packageWebFiles([
     new File(['<html><head><script src="jump.js"></script></head><body>Loading</body></html>'], 'jump.html'),
@@ -53,12 +55,27 @@ test('published ZIP game opens through the isolated public player', async ({ con
     body: 'export const config = { supabaseUrl: "http://127.0.0.1:54321", anonKey: "" };' }));
   await context.route('**/functions/v1/portal/public-game', route => route.fulfill({ json: { game: {
     slug, title: 'Published test', description: '', engine: 'godot', version: '1.0', controls: '' } } }));
-  await context.route('**/functions/v1/portal/public-package', route => route.fulfill({
-    body: bytes, contentType: 'application/zip' }));
+  let attempts = 0;
+  await context.route('**/functions/v1/portal/public-package', route => ++attempts === 1
+    ? route.fulfill({ status: 503, json: { error: 'unavailable' } })
+    : route.fulfill({ body: bytes, contentType: 'application/zip' }));
   await page.goto(`game.html?slug=${slug}`);
+  await expect(page.locator('#playerStatus')).toHaveText('読込に失敗');
+  await expect(page.getByRole('button', { name: '全画面で遊ぶ' })).toBeDisabled();
+  await page.getByRole('button', { name: '再読み込み' }).click();
   await expect(page.getByRole('heading', { name: 'Published test' })).toBeVisible();
   await expect(page.frameLocator('#gameFrame').locator('body')).toHaveText('Published game works');
   await expect(page.frameLocator('#gameFrame').locator('html')).toHaveAttribute('data-isolated', 'yes');
+  await expect(page.locator('#playerShell')).toHaveAttribute('aria-busy', 'false');
+  await expect(page.locator('#loading')).toBeHidden();
+  await expect(page.locator('#controlsText')).toHaveText('ゲーム内の案内をご確認ください。');
+  await page.getByRole('button', { name: '全画面で遊ぶ' }).click();
+  await expect(page.locator('#playerShell')).toHaveClass(/is-expanded/);
+  await page.getByRole('button', { name: '全画面を終了' }).click();
+  await expect(page.locator('#playerShell')).not.toHaveClass(/is-expanded/);
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: 'test-results/player-mobile.png', fullPage: true });
 });
 
 test('browser flows connect to the real Edge handler and migrated database', async ({ context, page }) => {

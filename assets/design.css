@@ -172,7 +172,7 @@ body[data-page="upload"] .portal .stacked-form { padding: 26px; }
   .header-inner, .container, .play-container { width: min(100% - 28px, 1240px); }
   .header-inner { gap: 11px; min-height: 0; }
   .header-inner h1 { font-size: 1.38rem; }
-  .site-nav { width: 100%; flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-inline: contain; padding-bottom: 3px; scrollbar-width: thin; }
+  .site-nav { width: 100%; flex-wrap: wrap; padding-bottom: 3px; }
   .site-nav a { padding: 8px 11px; font-size: .8rem; }
   .container { padding-top: 26px; }
   .hero { min-height: 310px; padding: 28px; }
@@ -205,4 +205,44 @@ body[data-page="upload"] .portal .stacked-form { padding: 26px; }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+}
+
+/* Keep the game and its controls together, including on small screens. */
+.play-page .play-container { padding-top: 28px; }
+.game-back { display: inline-flex; min-height: 40px; align-items: center; color: var(--muted); font-size: .88rem; text-decoration: none; }
+.game-back:hover { color: var(--accent); }
+.play-page .game-info { flex-direction: row; align-items: center; padding: 12px 0 24px; gap: 18px; }
+.play-page .game-info h1 { margin: 10px 0 0; font-size: clamp(1.6rem, 3vw, 2.6rem); line-height: 1.2; }
+.game-tags { display: flex; gap: 9px; align-items: center; flex-wrap: wrap; }
+.game-tags .engine-label { margin: 0; }
+.game-version { color: var(--muted); font-size: .8rem; }
+.play-page .action-button { min-height: 44px; border-radius: 10px; white-space: nowrap; }
+.play-page .action-button:disabled { opacity: .5; cursor: default; transform: none; }
+.play-page .player-shell { aspect-ratio: auto; border-color: rgba(187,212,243,.2); background: #080d16; }
+.player-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 16px; border-bottom: 1px solid var(--line); background: #111c2d; }
+.player-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.player-status { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: .8rem; overflow-wrap: anywhere; }
+.player-status::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+#fullscreenButton { background: var(--accent); color: #07201f; border-color: var(--accent); font-weight: 750; }
+.player-viewport { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000; }
+.play-page .player-loading { padding: 26px; text-align: center; background: #0b1321; z-index: 1; }
+.player-loading[hidden], .game-meta > [hidden], .game-tags > [hidden] { display: none; }
+.player-loading.is-error { color: #ffc4ca; }
+.play-page .game-meta { grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; margin-top: 20px; }
+.play-page .meta-card { padding: 23px; background: rgba(17,26,43,.7); }
+.play-page .meta-card p { overflow-wrap: anywhere; }
+.play-page .player-shell:fullscreen, .play-page .player-shell.is-expanded { width: 100%; height: 100%; border: 0; border-radius: 0; display: flex; flex-direction: column; }
+.play-page .player-shell.is-expanded { position: fixed; inset: 0; z-index: 100; height: 100dvh; }
+.player-shell:fullscreen .player-viewport, .player-shell.is-expanded .player-viewport { flex: 1; min-height: 0; aspect-ratio: auto; }
+body.player-expanded { overflow: hidden; }
+@media (max-width: 700px) {
+  .play-page .play-container { padding-top: 12px; }
+  .play-page .game-info { align-items: flex-start; padding-bottom: 20px; }
+  .play-page .game-info > .action-button { align-self: flex-start; font-size: .78rem; padding: 8px 11px; }
+  .player-toolbar { gap: 9px; padding: 10px; flex-wrap: wrap; }
+  .player-status { width: 100%; font-size: .75rem; }
+  .player-actions { width: 100%; }
+  .player-actions .action-button { flex: 1; font-size: .82rem; }
+  .play-page .meta-card { padding: 19px; }
+  .player-shell:fullscreen .player-toolbar, .player-shell.is-expanded .player-toolbar { padding-top: max(10px, env(safe-area-inset-top)); }
 }
