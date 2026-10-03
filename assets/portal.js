@@ -18,6 +18,7 @@ let offset = 0;
 let submissionOffset = 0;
 let auditBefore;
 let busy = false;
+let formMessage = null;
 const errors = {
   invalid_credentials: 'ユーザー名またはパスワードを確認してください。',
   unauthorized: 'セッションが終了しました。再度ログインしてください。',
@@ -49,7 +50,7 @@ function el(tag, text, attrs = {}) {
   for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, value);
   return node;
 }
-function notice(text) { message.textContent = text; }
+function notice(text) { (formMessage?.isConnected ? formMessage : message).textContent = text; }
 function saveSession(next) {
   session = next;
   if (next?.token && /^[a-f0-9]{64}$/.test(next.token)) sessionStorage.setItem(sessionKey, next.token);
@@ -83,14 +84,22 @@ function syncLoginLink() {
     link.onclick = null;
   });
 }
-async function run(task) {
+async function run(task, activeForm = null) {
   if (busy) return;
   busy = true;
+  formMessage = activeForm?.querySelector('.upload-status') ?? null;
+  if (formMessage) message.textContent = '';
   notice('処理中…');
-  root.querySelectorAll('button').forEach(b => { b.disabled = true; });
+  const controls = [...root.querySelectorAll('button, input, select, textarea')].map(control => [control, control.disabled]);
+  controls.forEach(([control]) => { control.disabled = true; });
+  activeForm?.setAttribute('aria-busy', 'true');
   try { await task(); }
   catch (error) { notice(errors[error.message] ?? '通信または処理に失敗しました。'); }
-  finally { busy = false; root.querySelectorAll('button').forEach(b => { b.disabled = false; }); }
+  finally {
+    busy = false;
+    controls.forEach(([control, disabled]) => { control.disabled = disabled; });
+    activeForm?.removeAttribute('aria-busy');
+  }
 }
 async function api(action, data = {}) {
   const response = await fetch(`${config.supabaseUrl.replace(/\/$/, '')}/functions/v1/portal`, {
@@ -165,7 +174,7 @@ function form(parent, fields, submitText, submit) {
     const data = Object.fromEntries(new FormData(f));
     // Remove plaintext from input controls immediately, including failed requests.
     f.querySelectorAll('input[type=password]').forEach(input => { input.value = ''; });
-    run(() => submit(data));
+    run(() => submit(data), f);
   });
   parent.append(f); return f;
 }
@@ -317,6 +326,7 @@ function submissionEditor(game) {
       await uploadPackage(game.id, file, account);
     });
     retryForm.classList.add('stacked-form');
+    retryForm.append(el('p', '', { class: 'message upload-status', role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' }));
     const packageLabel = el('label', 'ゲームZIP（最大50MB）');
     const packageInput = el('input', null, { type: 'file', name: 'package', accept: '.zip,application/zip', required: 'required' });
     packageLabel.append(packageInput);
@@ -578,7 +588,7 @@ async function upload() {
     'パッケージを作成して、生成された.htmlファイルをダウンロードします。',
     'ダウンロードしたHTMLをブラウザーで開き、ゲームが動くことを確認します。',
     'この投稿フォームのエンジンを「Scratch / TurboWarp」にし、HTMLをファイル選択欄へドラッグ＆ドロップするか、「ファイルを選択」から選びます。ZIPにする必要はなく、HTML名もindex.htmlでなくて構いません。',
-    'ゲーム情報と公開範囲を設定し、「ゲームを保存」を押します。',
+    'ゲーム情報と公開範囲を設定し、「ゲームを投稿」を押します。',
   ]) turboSteps.append(el('li', step));
   turboGuide.append(turboSteps, el('p', 'ZIP形式で書き出した場合は、HTMLと関連ファイルが入ったZIPをそのまま選べます。.sb3やWindows用の実行ファイルではなく、ブラウザー用のHTMLまたはZIPを投稿してください。', { class: 'muted' }));
   s.append(turboGuide);
@@ -590,7 +600,7 @@ async function upload() {
     field('controls', '操作説明（任意）', 'text', { maxlength: '2000', optional: true }),
     field('visibility', '公開範囲', 'select', { value: 'draft', choices: visibilityChoices }),
     field('published_at', '公開日時（空欄で即時公開）', 'datetime-local', { optional: true }),
-  ], 'ゲームを保存', async data => {
+  ], 'ゲームを投稿', async data => {
     const thumbnail = submissionForm.elements.thumbnail?.files?.[0];
     delete data.package; delete data.thumbnail;
     data.published_at = data.published_at ? new Date(data.published_at).toISOString() : '';
@@ -602,6 +612,7 @@ async function upload() {
     uploadComplete(completed);
   });
   submissionForm.classList.add('stacked-form');
+  submissionForm.append(el('p', '', { class: 'message upload-status', role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' }));
   const visibilityHelp = el('p', '', { class: 'muted' });
   submissionForm.elements.visibility.closest('label').append(visibilityHelp);
   visibilityGuidance(submissionForm, visibilityHelp);
@@ -623,10 +634,10 @@ async function upload() {
   const packageInput = el('input', null, { type: 'file', name: 'package', multiple: '',
     'aria-label': 'ゲームファイルを選択' });
   const selection = el('p', 'ファイルはまだ選択されていません', { class: 'muted' });
-  const setFiles = files => { selectedFiles = [...files]; selection.textContent = selectedFiles.length
+  const setFiles = files => { if (busy) return; selectedFiles = [...files]; selection.textContent = selectedFiles.length
     ? selectedFiles.length === 1 ? selectedFiles[0].name : `${selectedFiles.length}ファイルを選択中` : 'ファイルはまだ選択されていません'; };
   packageInput.addEventListener('change', () => setFiles(packageInput.files));
-  dropZone.addEventListener('dragover', event => { event.preventDefault(); dropZone.classList.add('is-dragging'); });
+  dropZone.addEventListener('dragover', event => { event.preventDefault(); if (!busy) dropZone.classList.add('is-dragging'); });
   dropZone.addEventListener('dragleave', () => dropZone.classList.remove('is-dragging'));
   dropZone.addEventListener('drop', event => { event.preventDefault(); dropZone.classList.remove('is-dragging'); setFiles(event.dataTransfer.files); });
   dropZone.append(packageInput, selection);

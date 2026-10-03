@@ -108,9 +108,15 @@ test('HTML upload recovers a lost completion response', async ({ context, page }
   await page.getByLabel('ゲーム名', { exact: true }).fill(submission.title);
   await page.getByRole('combobox', { name: 'エンジン', exact: true }).selectOption('scratch');
   await page.getByLabel('ゲームファイルを選択').setInputFiles({ name: 'my-game.html', mimeType: 'text/html', buffer: Buffer.from('<!doctype html><html><body>Game</body></html>') });
-  await page.getByRole('button', { name: 'ゲームを保存', exact: true }).click();
+  await page.getByRole('button', { name: 'ゲームを投稿', exact: true }).click();
   await uploadReceived;
-  await expect(page.getByRole('button', { name: 'ゲームを保存', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'ゲームを投稿', exact: true })).toBeDisabled();
+  await expect(page.getByLabel('ゲーム名', { exact: true })).toBeDisabled();
+  await expect(page.getByRole('combobox', { name: 'エンジン', exact: true })).toBeDisabled();
+  await expect(page.getByLabel('ゲームファイルを選択')).toBeDisabled();
+  await expect(page.locator('#message')).toBeEmpty();
+  await expect(page.locator('.upload-status')).toContainText('送信');
+  expect(await page.locator('.upload-status').evaluate(node => node.previousElementSibling.textContent)).toBe('ゲームを投稿');
   release();
   await expect(page.getByRole('heading', { name: '投稿が完了しました' })).toBeVisible();
   await expect(page.getByRole('link', { name: '投稿したゲームを管理・プレイ →' })).toHaveAttribute('href', /game=upload-result/);

@@ -94,6 +94,8 @@ a, button, input, select { -webkit-tap-highlight-color: transparent; }
 .portal input:hover, .portal select:hover, .portal textarea:hover { border-color: rgba(188,210,238,.5); }
 .portal input:focus, .portal select:focus, .portal textarea:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px rgba(115,231,209,.12); }
 .portal input[type="file"] { height: auto; padding: 12px; cursor: pointer; }
+.portal input:disabled, .portal select:disabled, .portal textarea:disabled { opacity: .6; cursor: not-allowed; }
+.portal form .upload-status { margin: 0; width: 100%; box-sizing: border-box; }
 .portal input::file-selector-button { margin-right: 12px; padding: 8px 12px; border: 0; border-radius: 8px; background: #243d55; color: var(--text); cursor: pointer; }
 .portal button { min-height: 44px; padding: 10px 16px; border: 1px solid rgba(183,212,238,.27); border-radius: 10px; background: #20314a; font-size: .9rem; font-weight: 710; transition: background .18s, border-color .18s, transform .18s; }
 .portal button:hover:not(:disabled) { background: #2b4563; border-color: rgba(115,231,209,.55); transform: translateY(-1px); }
