@@ -78,6 +78,44 @@ test('published ZIP game opens through the isolated public player', async ({ con
   await page.screenshot({ path: 'test-results/player-mobile.png', fullPage: true });
 });
 
+test('HTML upload recovers a lost completion response', async ({ context, page }) => {
+  const submission = { id: 'upload-result', title: 'HTML upload test', status: 'draft', package_ready: true };
+  let saved = false; let release; let received;
+  const uploadReceived = new Promise(resolve => { received = resolve; });
+  const responseReady = new Promise(resolve => { release = resolve; });
+  const headers = { 'access-control-allow-origin': 'http://127.0.0.1:4173',
+    'access-control-allow-headers': 'content-type,x-portal-session', 'access-control-allow-methods': 'POST,OPTIONS' };
+  await context.addInitScript(() => sessionStorage.setItem('game-portal.user.session.v1', 'a'.repeat(64)));
+  await context.route('**/assets/config.js', route => route.fulfill({ contentType: 'text/javascript',
+    body: 'export const config = { supabaseUrl: "http://127.0.0.1:54321", anonKey: "" };' }));
+  await context.route('**/functions/v1/portal', route => {
+    if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
+    const { action } = route.request().postDataJSON();
+    return route.fulfill({ headers, json: action === 'user.me' ? { user: { role: 'uploader' } }
+      : action === 'user.submission.create' ? { submission: { ...submission, status: 'uploading', package_ready: false } }
+      : { submissions: saved ? [submission] : [] } });
+  });
+  await context.route('**/functions/v1/portal/upload', async route => {
+    if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
+    expect(route.request().headers()['x-portal-session']).toBe('a'.repeat(64));
+    expect(route.request().postDataBuffer().includes(Buffer.from('web-game.zip'))).toBe(true);
+    received();
+    await responseReady;
+    saved = true;
+    await route.fulfill({ status: 503, headers, json: { error: 'unavailable' } });
+  });
+  await page.goto('upload/');
+  await page.getByLabel('ゲーム名', { exact: true }).fill(submission.title);
+  await page.getByRole('combobox', { name: 'エンジン', exact: true }).selectOption('scratch');
+  await page.getByLabel('ゲームファイルを選択').setInputFiles({ name: 'my-game.html', mimeType: 'text/html', buffer: Buffer.from('<!doctype html><html><body>Game</body></html>') });
+  await page.getByRole('button', { name: 'ゲームを保存', exact: true }).click();
+  await uploadReceived;
+  await expect(page.getByRole('button', { name: 'ゲームを保存', exact: true })).toBeDisabled();
+  release();
+  await expect(page.getByRole('heading', { name: '投稿が完了しました' })).toBeVisible();
+  await expect(page.getByRole('link', { name: '投稿したゲームを管理・プレイ →' })).toHaveAttribute('href', /game=upload-result/);
+});
+
 test('browser flows connect to the real Edge handler and migrated database', async ({ context, page }) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
