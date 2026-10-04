@@ -1,4 +1,5 @@
 import { config } from './config.js';
+import { tagChips } from './tags.js?v=20261004a';
 import { unpackPrivateZip, privatePreviewDocument } from './private-preview.js?v=20260929a';
 
 const params = new URLSearchParams(location.search);
@@ -18,6 +19,8 @@ function showError(message) {
     document.getElementById('gameTitle').textContent = 'ゲームを開けませんでした';
 }
 function showGame(game) {
+  document.querySelector('#gameTags')?.remove();
+  const tags=tagChips(game.tags,Infinity,'./');tags.id='gameTags';document.getElementById('gameTitle').after(tags);
   document.title = `${game.title} | GAME PORTAL`;
   document.getElementById('gameTitle').textContent = game.title;
   frame.title = `${game.title} のゲーム画面`;

@@ -343,3 +343,44 @@ test('browser flows connect to the real Edge handler and migrated database', asy
   await expect(page.getByRole('navigation', { name: 'メインメニュー' }).getByRole('link', { name: 'ログアウト' })).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+
+test('tag selection, editing and administrator management use the authenticated backend', async ({context,page})=>{
+ await context.route('**/assets/config.js',route=>route.fulfill({contentType:'text/javascript',body:'export const config={supabaseUrl:"http://127.0.0.1:54321",anonKey:""};'}));
+ await page.goto('login/');
+ await page.getByLabel('ユーザー名',{exact:true}).fill('browser_owner');
+ await page.getByLabel('パスワード',{exact:true}).fill('browser-test-admin-only');
+ await page.getByRole('button',{name:'ログイン',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'タグ管理',exact:true})).toBeVisible();
+ const add=page.locator('#tag-management details').filter({has:page.getByText('新しいタグを追加',{exact:true})});
+ await add.locator('summary').click();
+ await add.getByLabel('タグ名',{exact:true}).fill('テストタグ');
+ await add.getByLabel('slug（半角英小文字・数字・ハイフン）',{exact:true}).fill('browser-test-tag');
+ await add.getByRole('button',{name:'タグを追加',exact:true}).click();
+ await expect(page.locator('#message')).toHaveText('タグを追加しました。');
+ await page.evaluate(async()=>{await fetch('http://127.0.0.1:54321/functions/v1/portal',{method:'POST',headers:{'Content-Type':'application/json','X-Portal-Session':sessionStorage.getItem('game-portal.admin.session.v1')},body:JSON.stringify({action:'admin.create',data:{username:'browser_tag_user',password:'browser-tag-test-only',role:'uploader'}})});});
+ const user=await context.newPage();await user.goto('http://127.0.0.1:4173/Game-Portal/login/');
+ await user.getByLabel('ユーザー名',{exact:true}).fill('browser_tag_user');await user.getByLabel('パスワード',{exact:true}).fill('browser-tag-test-only');
+ await user.getByRole('button',{name:'ログイン',exact:true}).click();await expect(user.getByRole('heading',{name:'アカウント',exact:true})).toBeVisible();
+ await user.goto('http://127.0.0.1:4173/Game-Portal/upload/');
+ const picker=user.locator('.tag-picker');await expect(picker.locator('.tag-count')).toHaveText('選択中 0 / 8');
+ const chips=picker.getByRole('button');for(let i=0;i<8;i++)await chips.nth(i).click();
+ await expect(picker.locator('.tag-count')).toHaveText('選択中 8 / 8');await expect(chips.nth(8)).toBeDisabled();
+ await chips.nth(0).click();await expect(chips.nth(8)).toBeEnabled();await chips.nth(8).click();
+ const ids=await user.evaluate(()=>[...document.querySelectorAll('.tag-picker button[aria-pressed="true"]')].map(n=>n.textContent));expect(new Set(ids).size).toBe(8);
+ await user.setViewportSize({width:390,height:844});expect(await user.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await user.screenshot({path:'test-results/tags-upload-mobile.png',fullPage:true});
+ await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+test('tag filters combine with engine and text search, and cards cap visible tags',async({context,page})=>{
+ const tags=Array.from({length:5},(_,i)=>({id:'6b61c4a0-1204-4000-8000-'+String(i+1).padStart(12,'0'),name:['アクション','3D','1人用','高難易度','ゲームパッド'][i],slug:['action','3d','single','hard','gamepad'][i],category:'ジャンル',is_active:true}));
+ await context.route('**/assets/config.js',route=>route.fulfill({contentType:'text/javascript',body:'export const config={supabaseUrl:"http://127.0.0.1:54321",anonKey:""};'}));
+ await context.route('**/functions/v1/portal/catalog',route=>route.fulfill({json:{games:[{slug:'a'.repeat(36),title:'Tag game',engine:'godot',description:'test',tags},{slug:'b'.repeat(36),title:'Other tagged',engine:'scratch',description:'test',tags:[tags[0]]}]}}));
+ await context.route('**/functions/v1/portal/tags',route=>route.fulfill({json:{tags}}));
+ await page.goto('?tag=action');await expect(page.locator('.game-card')).toHaveCount(2);await expect(page.locator('.game-card').first().locator('.tag-overflow')).toHaveText('+2');
+ await page.locator('.tag-picker').getByRole('button',{name:'3D',exact:true}).click();await expect(page.locator('.game-card')).toHaveCount(1);
+ await page.getByRole('button',{name:'Scratch',exact:true}).click();await expect(page.locator('.game-card')).toHaveCount(0);
+ await page.getByRole('button',{name:'すべて',exact:true}).click();await page.locator('#searchInput').fill('Tag game');await expect(page.locator('.game-card')).toHaveCount(1);
+ await page.reload();await expect(page.locator('.game-card')).toHaveCount(1);
+});

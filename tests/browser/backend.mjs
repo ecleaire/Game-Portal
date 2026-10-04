@@ -17,6 +17,11 @@ const handler = createHandler({
   fetcher: async (_url, options) => {
     const p = JSON.parse(options.body);
     try {
+      if (_url.endsWith('/rpc/portal_tags') || _url.endsWith('/rpc/portal_catalog')) {
+        const fn = _url.endsWith('/portal_tags') ? 'portal_tags' : 'portal_catalog';
+        const { rows } = await db.query(`select public.${fn}() as result`);
+        return Response.json(rows[0].result);
+      }
       const { rows } = await db.query('select public.portal_api($1,$2::jsonb,$3,$4) as result',
         [p.p_action, JSON.stringify(p.p_body), p.p_token_hash, p.p_new_token_hash]);
       return Response.json(rows[0].result);

@@ -1,4 +1,6 @@
 import { config } from './config.js';
+import { loadTags, tagPicker, tagChips } from './tags.js?v=20261004a';
+let selectedTags = new Set(new URLSearchParams(location.search).getAll('tag'));
 let games = [];
 let activeFilter = "all";
 
@@ -22,7 +24,7 @@ function render() {
   const filtered = games.filter(game => {
     const engineMatch = activeFilter === "all" || game.engine.toLowerCase() === activeFilter;
     const text = `${game.title} ${game.description} ${game.engine}`.toLowerCase();
-    return engineMatch && text.includes(keyword);
+    return engineMatch && text.includes(keyword) && [...selectedTags].every(slug => (game.tags ?? []).some(tag => tag.slug === slug));
   });
 
   count.textContent = `${filtered.length}作品`;
@@ -47,6 +49,7 @@ function render() {
       </div>
     `;
     grid.appendChild(card);
+    card.querySelector('.play-link').before(tagChips(game.tags,3,'./'));
     if (game.slug && game.has_thumbnail && config.supabaseUrl) {
       fetch(`${config.supabaseUrl}/functions/v1/portal/public-thumbnail`, { method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(config.anonKey ? { apikey: config.anonKey } : {}) },
@@ -89,5 +92,19 @@ async function loadGames() {
     games = [...legacy, ...published.map(game => ({ ...game, id: game.slug }))]; render();
   } catch (error) { console.error(error); }
 }
-loadGames().catch(error => { console.error(error); emptyMessage.hidden = false;
+const gamesReady = loadGames().catch(error => { console.error(error); emptyMessage.hidden = false;
   emptyMessage.textContent = 'ゲーム情報を読み込めませんでした。'; });
+gamesReady.then(()=>loadTags()).then(tags=>{
+  // Retain linked inactive tags in the filter; they can still exist on games.
+  const known=new Map(tags.map(tag=>[tag.slug,tag]));
+  for(const game of games) for(const tag of game.tags??[]) if(!known.has(tag.slug)) known.set(tag.slug,tag);
+  const all=[...known.values()];
+  const picker=tagPicker(all,all.filter(t=>selectedTags.has(t.slug)),{maximum:Infinity,title:'タグで絞り込み',filter:true,onChange:ids=>{
+    selectedTags=new Set(all.filter(t=>ids.includes(t.id)).map(t=>t.slug));
+    const url=new URL(location.href);url.searchParams.delete('tag');for(const slug of selectedTags)url.searchParams.append('tag',slug);
+    history.replaceState(null,'',url);render();
+  }});
+  const clear=document.createElement('button');clear.type='button';clear.textContent='タグをすべて解除';
+  clear.addEventListener('click',()=>{const url=new URL(location.href);url.searchParams.delete('tag');location.href=url;});
+  picker.element.append(clear);document.getElementById('games').append(picker.element);
+}).catch(console.error);

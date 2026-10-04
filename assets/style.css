@@ -335,3 +335,21 @@ h1, h2, h3, p { margin-top: 0; }
   .player-shell { border-radius: 14px; }
   .header-badge { display: none; }
 }
+/* Shared game tags: compact on cards, comfortable touch targets in pickers. */
+.tag-chips { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
+.tag-chip { display:inline-flex; align-items:center; padding:6px 12px; border:1px solid #475569; border-radius:999px; color:inherit; background:rgba(148,163,184,.08); font-size:.8rem; text-decoration:none; line-height:1.5; }
+.tag-chip:hover { border-color:#4fd1c5; }
+.tag-chip[aria-pressed="true"] { color:#082f31; background:#5eead4; border-color:#5eead4; font-weight:700; }
+.tag-chip:disabled { opacity:.4; cursor:not-allowed; }
+.tag-chip[aria-pressed="true"]:disabled { opacity:.8; }
+.tag-chip:focus-visible { outline:3px solid #5eead4; outline-offset:3px; }
+.tag-picker { min-width:0; width:100%; box-sizing:border-box; border:1px solid #475569; border-radius:16px; padding:16px; margin:16px 0; grid-column:1/-1; }
+.tag-picker legend { font-weight:700; padding:0 8px; }
+.tag-count { margin:0 0 12px; color:#5eead4; font-size:.9rem; }
+.tag-picker details { border-top:1px solid rgba(148,163,184,.2); padding:8px 0; }
+.tag-picker summary, .tag-review-editor summary, #tag-management summary { cursor:pointer; padding:10px 0; font-weight:600; }
+.tag-picker button.tag-chip { min-height:44px; font-size:.9rem; width:auto; }
+.tag-admin-list { max-height:580px; overflow:auto; overscroll-behavior:contain; margin-top:16px; }
+.tag-admin-list > details { border-top:1px solid #475569; padding:8px; }
+.tag-review-editor { margin:14px 0; }
+@media(max-width:600px) { .tag-picker { padding:12px; } .tag-chips { gap:6px; } }

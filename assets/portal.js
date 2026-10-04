@@ -1,4 +1,11 @@
 import { config } from './config.js';
+import { loadTags, tagPicker, tagChips, tagCategories } from './tags.js?v=20261004a';
+let availableTags = [];
+function gameTagPicker(game = {}) {
+  const merged = new Map(availableTags.map(tag => [tag.id, tag]));
+  for (const tag of game.tags ?? []) if (!merged.has(tag.id)) merged.set(tag.id, tag);
+  return tagPicker([...merged.values()], game.tags ?? []);
+}
 import { checkWebGameZip, unpackPrivateZip, privatePreviewDocument } from './private-preview.js?v=20260929a';
 import { packageWebFiles } from './zip-upload.js?v=20261003a';
 import { sendUpload, uploadWithRecovery } from './upload-request.js?v=20261003a';
@@ -22,6 +29,9 @@ let auditBefore;
 let busy = false;
 let formMessage = null;
 const errors = {
+  invalid_tags: 'タグは有効なものを重複なしで8個まで選んでください。',
+  invalid_tag: 'タグ名・カテゴリは1〜40文字、slugは半角英小文字・数字・ハイフンで入力してください。',
+  tag_conflict: 'このslugはすでに使用されています。',
   invalid_credentials: 'ユーザー名またはパスワードを確認してください。',
   unauthorized: 'セッションが終了しました。再度ログインしてください。',
   forbidden: 'この操作を行う権限がありません。',
@@ -197,6 +207,7 @@ function logoutButton(parent) {
   button(parent, 'ログアウト', logout);
 }
 async function account() {
+  availableTags = await loadTags();
   const [{ user }, { submissions }] = await Promise.all([api('user.me'), api('user.submissions')]);
   root.replaceChildren();
   const gameId = new URLSearchParams(location.search).get('game');
@@ -248,11 +259,36 @@ function thumbnailOrFallback(parent, game) {
   parent.append(el('div', game.title.slice(0, 2).toUpperCase(), { class: 'summary-fallback', 'aria-hidden': 'true' }));
   if (game.has_thumbnail) showSubmissionThumbnail(parent, game.id, 'user');
 }
+async function tagManagement() {
+  const { tags } = await api('admin.tags');
+  const panel = section('タグ管理'); panel.id = 'tag-management';
+  panel.append(el('p', '無効化しても既存ゲームのタグは残ります。新しい投稿では選択できません。', { class: 'muted' }));
+  const fields = (tag = {}) => [
+    field('name','タグ名','text',{value:tag.name ?? '',maxlength:'40'}),
+    field('slug','slug（半角英小文字・数字・ハイフン）','text',{value:tag.slug ?? '',maxlength:'80',pattern:'[a-z0-9]+(-[a-z0-9]+)*'}),
+    field('category','カテゴリ','text',{value:tag.category ?? tagCategories[0],maxlength:'40',list:'tag-categories'}),
+    field('sort_order','並び順','number',{value:tag.sort_order ?? 0,min:'-999999',max:'999999'}),
+    field('is_active','状態','select',{value:tag.is_active === false ? 'false' : 'true',choices:[['true','有効'],['false','無効']]}),
+  ];
+  const datalist=el('datalist',null,{id:'tag-categories'});
+  for(const category of tagCategories) datalist.append(el('option',null,{value:category})); panel.append(datalist);
+  const add=el('details'); add.append(el('summary','新しいタグを追加'));
+  form(add,fields(),'タグを追加',async data=>{await api('admin.tag.create',data);await dashboard();notice('タグを追加しました。');}); panel.append(add);
+  const search=el('input',null,{type:'search',placeholder:'タグ名・カテゴリで検索','aria-label':'タグ管理を検索'}); panel.append(search);
+  const list=el('div',null,{class:'tag-admin-list'});panel.append(list);
+  for(const tag of tags){
+    const row=el('details'); row.dataset.search=`${tag.name} ${tag.slug} ${tag.category}`.toLowerCase();
+    row.append(el('summary',`${tag.name} · ${tag.category} · ${tag.is_active?'有効':'無効'} · ${tag.game_count}ゲーム`));
+    form(row,fields(tag),'タグを更新',async data=>{await api('admin.tag.update',{...data,tag_id:tag.id});await dashboard();notice('タグを更新しました。');});list.append(row);
+  }
+  search.addEventListener('input',()=>{for(const row of list.children) row.hidden=!row.dataset.search.includes(search.value.trim().toLowerCase());});
+}
 function submissionCard(game, accountPath) {
   const card = el('article', null, { class: 'row submission-summary' });
   const art = el('div', null); thumbnailOrFallback(art, game); card.append(art);
   const details = el('div', null);
   details.append(statusBadge(game), el('h3', game.title));
+  details.append(tagChips(game.tags, 3));
   details.append(el('p', `${game.engine.toUpperCase()} · バージョン ${game.version}`, { class: 'muted' }));
   if (game.status === 'uploading') details.append(el('p', 'ファイルの再送が必要です。', { class: 'muted' }));
   if (game.created_at) details.append(el('p', `投稿日: ${new Date(game.created_at).toLocaleDateString('ja-JP')}`, { class: 'muted' }));
@@ -279,6 +315,7 @@ function submissionEditor(game) {
   const editable = ['uploading', 'draft', 'pending', 'rejected', 'approved'].includes(game.status);
   if (editable) {
     const basics = section('基本情報を編集', grid);
+    const picker = gameTagPicker(game);
     if (game.status === 'approved') basics.append(el('p', '保存すると公開ページの情報にも反映されます。ゲームファイルは変更されません。', { class: 'muted' }));
     form(basics, [
       field('title', 'ゲーム名', 'text', { value: game.title, maxlength: '120' }),
@@ -287,8 +324,9 @@ function submissionEditor(game) {
       field('version', 'バージョン', 'text', { value: game.version, maxlength: '80' }),
       field('controls', '操作説明（任意）', 'textarea', { value: game.controls, maxlength: '2000', rows: '3', optional: true }),
     ], game.status === 'rejected' ? '修正して再審査へ' : '変更を保存', async data => {
-      await api('user.submission.update', { ...data, submission_id: game.id }); await account(); notice(game.status === 'rejected' ? '修正を再審査へ送りました。' : '投稿情報を更新しました。');
+      await api('user.submission.update', { ...data, tag_ids: picker.values(), submission_id: game.id }); await account(); notice(game.status === 'rejected' ? '修正を再審査へ送りました。' : '投稿情報を更新しました。');
     }).classList.add('stacked-form');
+    basics.querySelector('button[type=submit]').before(picker.element);
   } else {
     const basics = section('基本情報', grid);
     basics.append(el('p', game.description || '説明はありません。', { class: 'muted' }));
@@ -372,12 +410,13 @@ async function showSubmissionThumbnail(parent, submissionId, mode) {
   } catch { /* Thumbnail is optional; metadata and moderation remain usable. */ }
 }
 async function dashboard() {
+  availableTags = await loadTags();
   const [{ admin }, { users }, { submissions }] = await Promise.all([api('admin.me'), api('admin.users', { offset }), api('admin.submissions', { offset: submissionOffset })]);
   root.replaceChildren();
   const top = section(`管理画面 — ${admin.username}`);
   top.append(el('p', `このページの表示: ユーザー ${users.length}件 · 投稿 ${submissions.length}件 · 審査待ち ${submissions.filter(game => game.status === 'pending').length}件`, { class: 'muted' }));
   const jumps = el('div', null, { class: 'actions dashboard-jumps' });
-  jumps.append(el('a', '投稿の審査へ ↓', { href: '#reviews' }), el('a', 'ユーザー一覧へ ↓', { href: '#users' }));
+  jumps.append(el('a', '投稿の審査へ ↓', { href: '#reviews' }), el('a', 'ユーザー一覧へ ↓', { href: '#users' }), el('a', 'タグ管理へ ↓', { href: '#tag-management' }));
   top.append(jumps);
   logoutButton(top);
   button(top, '投稿保管を確認', checkStorageHealth);
@@ -415,6 +454,15 @@ async function dashboard() {
   for (const game of submissions) {
     const row = el('div', null, { class: 'row' });
     row.append(statusBadge(game), el('h3', game.title));
+    row.append(tagChips(game.tags));
+    const editTags = el('details', null, { class: 'tag-review-editor' });
+    editTags.append(el('summary', 'タグを編集'));
+    const picker = gameTagPicker(game);
+    const tagForm = form(editTags, [], 'タグを保存', async () => {
+      await api('admin.submission.tags', { submission_id: game.id, tag_ids: picker.values() });
+      await dashboard(); notice('投稿タグを更新しました。');
+    });
+    tagForm.querySelector('button[type=submit]').before(picker.element); row.append(editTags);
     row.append(el('p', `投稿者: ${game.username} · ${game.engine.toUpperCase()} · バージョン ${game.version}`, { class: 'muted' }));
     if (game.is_published) row.append(el('a', '公開ページ', { href: `../game.html?slug=${encodeURIComponent(game.public_slug)}` }));
     if (game.status === 'uploading') row.append(el('p', 'ZIP未保管。投稿者がWeb書き出しZIPを再送するまで審査・公開できません。', { class: 'muted' }));
@@ -441,6 +489,7 @@ async function dashboard() {
   if (submissionOffset > 0) button(reviewPages, '前の100件', async () => { submissionOffset -= 100; await dashboard(); });
   if (submissions.length === 100) button(reviewPages, '次の100件', async () => { submissionOffset += 100; await dashboard(); });
   button(reviewPages, '投稿一覧を更新', dashboard); reviews.append(reviewPages);
+  await tagManagement();
   const audit = section('管理操作の監査ログ', root, 'admin-audit');
   button(audit, '最新の100件', async () => { auditBefore = undefined; await showAudit(audit); notice('監査ログを表示しました。'); });
 }
@@ -549,6 +598,7 @@ async function downloadSubmission(submissionId) {
   document.body.append(a); a.click(); a.remove(); URL.revokeObjectURL(url); notice('ZIPをダウンロードしました。実行・展開前に隔離環境で確認してください。');
 }
 async function upload() {
+  availableTags = await loadTags();
   const { user } = await api('user.me'); root.replaceChildren();
   const s = section('ゲーム投稿'); logoutButton(s);
   if (!['uploader', 'trusted_uploader'].includes(user.role)) { s.append(el('p', 'このアカウントには投稿権限がありません。管理者に投稿可能ユーザーへの変更を依頼してください。')); return; }
@@ -588,6 +638,7 @@ async function upload() {
   turboGuide.append(turboSteps, el('p', 'ZIP形式で書き出した場合は、HTMLと関連ファイルが入ったZIPをそのまま選べます。.sb3やWindows用の実行ファイルではなく、ブラウザー用のHTMLまたはZIPを投稿してください。', { class: 'muted' }));
   s.append(turboGuide);
   let pendingSubmissionId, selectedFiles = [], thumbnailUrl;
+  const picker = gameTagPicker();
   const submissionForm = form(s, [field('title', 'ゲーム名', 'text', { maxlength: '120' }),
     field('engine', 'エンジン', 'select', { choices: [['godot','Godot'],['scratch','Scratch / TurboWarp'],['other','その他']] }),
     field('description', '説明（任意）', 'text', { maxlength: '4000', optional: true }),
@@ -598,6 +649,7 @@ async function upload() {
   ], 'ゲームを投稿', async data => {
     const thumbnail = submissionForm.elements.thumbnail?.files?.[0];
     delete data.package; delete data.thumbnail;
+    data.tag_ids = picker.values();
     data.published_at = data.published_at ? new Date(data.published_at).toISOString() : '';
     const file = await packageWebFiles(selectedFiles);
     await checkWebGameZip(file);
@@ -607,6 +659,7 @@ async function upload() {
     uploadComplete(completed);
   });
   submissionForm.classList.add('stacked-form');
+  submissionForm.querySelector('button[type=submit]').before(picker.element);
   submissionForm.append(el('p', '', { class: 'message upload-status', role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' }));
   const visibilityHelp = el('p', '', { class: 'muted' });
   submissionForm.elements.visibility.closest('label').append(visibilityHelp);
