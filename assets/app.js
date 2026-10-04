@@ -1,5 +1,5 @@
 import { config } from './config.js';
-import { loadTags, tagPicker, tagChips } from './tags.js?v=20261004a';
+import { loadTags, tagFilter, tagChips } from './tags.js?v=20261004b';
 let selectedTags = new Set(new URLSearchParams(location.search).getAll('tag'));
 let games = [];
 let activeFilter = "all";
@@ -99,12 +99,11 @@ gamesReady.then(()=>loadTags()).then(tags=>{
   const known=new Map(tags.map(tag=>[tag.slug,tag]));
   for(const game of games) for(const tag of game.tags??[]) if(!known.has(tag.slug)) known.set(tag.slug,tag);
   const all=[...known.values()];
-  const picker=tagPicker(all,all.filter(t=>selectedTags.has(t.slug)),{maximum:Infinity,title:'タグで絞り込み',filter:true,onChange:ids=>{
+  if (!all.length) return;
+  const filter=tagFilter(all,all.filter(t=>selectedTags.has(t.slug)),ids=>{
     selectedTags=new Set(all.filter(t=>ids.includes(t.id)).map(t=>t.slug));
     const url=new URL(location.href);url.searchParams.delete('tag');for(const slug of selectedTags)url.searchParams.append('tag',slug);
     history.replaceState(null,'',url);render();
-  }});
-  const clear=document.createElement('button');clear.type='button';clear.textContent='タグをすべて解除';
-  clear.addEventListener('click',()=>{const url=new URL(location.href);url.searchParams.delete('tag');location.href=url;});
-  picker.element.append(clear);document.getElementById('games').append(picker.element);
+  });
+  document.getElementById('games').append(filter);
 }).catch(console.error);

@@ -379,8 +379,16 @@ test('tag filters combine with engine and text search, and cards cap visible tag
  await context.route('**/functions/v1/portal/catalog',route=>route.fulfill({json:{games:[{slug:'a'.repeat(36),title:'Tag game',engine:'godot',description:'test',tags},{slug:'b'.repeat(36),title:'Other tagged',engine:'scratch',description:'test',tags:[tags[0]]}]}}));
  await context.route('**/functions/v1/portal/tags',route=>route.fulfill({json:{tags}}));
  await page.goto('?tag=action');await expect(page.locator('.game-card')).toHaveCount(2);await expect(page.locator('.game-card').first().locator('.tag-overflow')).toHaveText('+2');
- await page.locator('.tag-picker').getByRole('button',{name:'3D',exact:true}).click();await expect(page.locator('.game-card')).toHaveCount(1);
+ await page.getByRole('button',{name:/タグで絞り込み/}).click();
+ await page.getByRole('searchbox',{name:'タグを検索',exact:true}).fill('3D');
+ await page.locator('.tag-filter-options').getByRole('button',{name:'3D',exact:true}).click();await expect(page.locator('.game-card')).toHaveCount(1);
+ await page.screenshot({path:'test-results/tag-filter-desktop.png',fullPage:true});
+ await page.setViewportSize({width:390,height:844});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.locator('.tag-filter').screenshot({path:'test-results/tag-filter-mobile.png'});
  await page.getByRole('button',{name:'Scratch',exact:true}).click();await expect(page.locator('.game-card')).toHaveCount(0);
  await page.getByRole('button',{name:'すべて',exact:true}).click();await page.locator('#searchInput').fill('Tag game');await expect(page.locator('.game-card')).toHaveCount(1);
  await page.reload();await expect(page.locator('.game-card')).toHaveCount(1);
+ await page.getByRole('button',{name:'タグをすべて解除',exact:true}).click();
+ await expect(page.locator('.game-card')).toHaveCount(4);
 });

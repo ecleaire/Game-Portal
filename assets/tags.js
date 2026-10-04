@@ -51,3 +51,58 @@ export function tagPicker(tags, selected = [], { maximum = 8, title = 'タグ', 
   if (!tags.length) box.append(node('p','選択できるタグはありません。'));
   update(); return { element:box, values:()=>[...picked] };
 }
+
+export function tagFilter(tags, selected = [], onChange = () => {}) {
+  const picked = new Set(selected.map(tag => tag.id));
+  let category = tagCategories.find(value => tags.some(tag => tag.category === value)) ?? tags[0]?.category;
+  const box = node('div', null, 'tag-filter');
+  const bar = node('div', null, 'tag-filter-bar');
+  const toggle = node('button', null, 'tag-filter-toggle'); toggle.type = 'button';
+  toggle.append(node('span', '☷', 'tag-filter-icon'), node('span', 'タグで絞り込み'));
+  const badge = node('span', '', 'tag-filter-badge'); toggle.append(badge, node('span', '⌄', 'tag-filter-chevron'));
+  toggle.setAttribute('aria-expanded', 'false'); toggle.setAttribute('aria-controls', 'tag-filter-panel');
+  const selection = node('div', null, 'tag-filter-selection'); selection.setAttribute('aria-label', '選択中のタグ');
+  const clear = node('button', 'クリア', 'tag-filter-clear'); clear.type = 'button'; clear.setAttribute('aria-label', 'タグをすべて解除');
+  bar.append(toggle, selection, clear); box.append(bar);
+  const panel = node('section', null, 'tag-filter-panel'); panel.id = 'tag-filter-panel'; panel.hidden = true;
+  panel.setAttribute('aria-label', 'タグを選ぶ');
+  const header = node('div', null, 'tag-filter-heading');
+  header.append(node('strong', 'どんなゲームを探す？'));
+  const close = node('button', '閉じる', 'tag-filter-close'); close.type = 'button'; header.append(close);
+  const search = node('input'); search.type = 'search'; search.placeholder = 'タグを検索'; search.setAttribute('aria-label', 'タグを検索');
+  const categories = node('div', null, 'tag-filter-categories'); categories.setAttribute('aria-label', 'タグのカテゴリ');
+  const names = [...new Set([...tagCategories, ...tags.map(tag => tag.category)])].filter(value => tags.some(tag => tag.category === value));
+  const tabs = names.map(name => {
+    const b = node('button', name); b.type = 'button';
+    b.addEventListener('click', () => { category = name; search.value = ''; renderOptions(); }); categories.append(b); return [b, name];
+  });
+  const options = node('div', null, 'tag-chips tag-filter-options');
+  const hint = node('p', '複数選択すると、すべてのタグに一致する作品を表示します。', 'tag-filter-hint');
+  panel.append(header, search, categories, options, hint); box.append(panel);
+  const setOpen = open => { panel.hidden = !open; toggle.setAttribute('aria-expanded', String(open)); };
+  toggle.addEventListener('click', () => setOpen(panel.hidden)); close.addEventListener('click', () => { setOpen(false); toggle.focus(); });
+  box.addEventListener('keydown', event => { if (event.key === 'Escape') { setOpen(false); toggle.focus(); } });
+  function change(id) { if (picked.has(id)) picked.delete(id); else picked.add(id); update(); onChange([...picked]); }
+  function renderOptions() {
+    const keyword = search.value.trim().toLowerCase(); options.replaceChildren();
+    for (const [tab, name] of tabs) tab.setAttribute('aria-pressed', String(!keyword && name === category));
+    for (const tag of tags.filter(tag => keyword ? `${tag.name} ${tag.slug}`.toLowerCase().includes(keyword) : tag.category === category)) {
+      const b = node('button', tag.name, 'tag-chip'); b.type = 'button'; b.setAttribute('aria-pressed', String(picked.has(tag.id)));
+      b.dataset.tagId = tag.id;
+      b.addEventListener('click', () => { change(tag.id); options.querySelector(`[data-tag-id="${tag.id}"]`)?.focus(); }); options.append(b);
+    }
+    if (!options.children.length) options.append(node('p', '一致するタグはありません。', 'tag-filter-hint'));
+  }
+  function update() {
+    badge.textContent = String(picked.size); badge.hidden = !picked.size; clear.hidden = !picked.size;
+    selection.replaceChildren();
+    for (const tag of tags.filter(tag => picked.has(tag.id))) {
+      const b = node('button', `${tag.name} ×`, 'tag-chip'); b.type = 'button'; b.setAttribute('aria-label', `${tag.name}を解除`);
+      b.addEventListener('click', () => { change(tag.id); toggle.focus(); }); selection.append(b);
+    }
+    renderOptions();
+  }
+  search.addEventListener('input', renderOptions);
+  clear.addEventListener('click', () => { picked.clear(); update(); onChange([]); toggle.focus(); });
+  update(); return box;
+}
