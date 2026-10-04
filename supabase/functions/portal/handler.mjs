@@ -65,6 +65,10 @@ export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleS
       return key;
     };
     const publicPath = requestUrl.pathname;
+    if (publicPath.endsWith('/tags')) {
+      try { return reply({ tags: await publicRpc('portal_tags') }); }
+      catch { return reply({ error: 'unavailable' }, 503); }
+    }
     if (publicPath.endsWith('/catalog')) {
       try { return reply({ games: await publicRpc('portal_catalog') }); }
       catch { return reply({ error: 'unavailable' }, 503); }

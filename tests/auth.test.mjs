@@ -339,6 +339,54 @@ test('only an active owner can delete a game; deletion removes every listing and
   assert.equal((await db.query('select id from portal_private.game_submissions where id=$1', [made.submission.id])).rows.length, 1);
 });
 
+test('managed tags enforce ownership, active state, limits, moderation and public visibility', async () => {
+ const seeded=(await db.query('select public.portal_tags() as tags')).rows[0].tags;
+ assert.equal(seeded.length,77);
+ assert.equal((await api('admin.tags',{},adminToken)).tags.length,77);
+ await db.exec(await readFile(new URL('../supabase/tag-seed.sql',import.meta.url),'utf8'));
+ assert.equal((await db.query('select count(*)::integer as n from portal_private.tags')).rows[0].n,77);
+ await api('admin.create',{username:'tag_author',password:original,role:'uploader'},adminToken);
+ const author=await login('tag_author'); const selected=seeded.slice(0,8).map(t=>t.id);
+ const body={title:'Tagged game',engine:'other',version:'1',visibility:'public',tag_ids:selected};
+ for(const ids of [[...selected,seeded[8].id],[selected[0],selected[0]],[token().slice(0,36)],null]) {
+  assert.equal((await api('user.submission.create',{...body,tag_ids:ids},author.hash)).error,'invalid_tags');
+ }
+ const made=await api('user.submission.create',body,author.hash); const id=made.submission.id;
+ assert.equal(made.submission.tags.length,8);
+ await assert.rejects(db.query('insert into portal_private.game_tags(game_id,tag_id) values($1,$2)',[id,seeded[8].id]),/tag_limit/);
+ assert.equal((await api('admin.tags',{},author.hash)).error,'forbidden');
+ assert.equal((await api('admin.tag.update',{tag_id:selected[0]},author.hash)).error,'forbidden');
+ assert.equal((await api('user.submission.update',{...body,submission_id:id},adminToken)).error,'forbidden');
+ await api('admin.create',{username:'tag_other',password:original,role:'uploader'},adminToken);
+ const stranger=await login('tag_other');
+ assert.equal((await api('user.submission.update',{...body,submission_id:id},stranger.hash)).error,'not_found');
+ const tag=seeded[0];
+ assert.ok((await api('admin.tag.update',{tag_id:tag.id,name:tag.name,slug:tag.slug,category:tag.category,sort_order:'10',is_active:'false'},adminToken)).tag);
+ assert.equal((await db.query('select public.portal_tags() as tags')).rows[0].tags.some(t=>t.id===tag.id),false);
+ await api('admin.tag.update',{tag_id:tag.id,name:tag.name,slug:'renamed-inactive-tag',category:tag.category,sort_order:'10',is_active:'false'},adminToken);
+ await db.exec(await readFile(new URL('../supabase/tag-seed.sql',import.meta.url),'utf8'));
+ assert.equal((await db.query('select count(*)::integer as n from portal_private.tags')).rows[0].n,77);
+ assert.equal((await api('user.submission.create',body,author.hash)).error,'invalid_tags');
+ assert.equal((await api('user.submission.update',{...body,submission_id:id},author.hash)).submission.tags.length,8);
+ await api('user.submission.complete',{submission_id:id,drive_file_id:'test-only',package_name:'game.zip',package_size:'100',package_storage_key:'test-only.zip'},author.hash);
+ assert.equal((await api('admin.submission.tags',{submission_id:id,tag_ids:[seeded[9].id]},adminToken)).submission.tags.length,1);
+ await api('admin.submission.complete',{submission_id:id,status:'approved',package_storage_key:'test-only.zip'},adminToken);
+ const catalog=(await db.query('select public.portal_catalog() as games')).rows[0].games;
+ assert.equal(catalog.find(g=>g.slug===made.submission.public_slug).tags[0].id,seeded[9].id);
+ const detail=(await db.query('select public.portal_public_game($1) as game',[made.submission.public_slug])).rows[0].game;
+ assert.equal(detail.tags[0].id,seeded[9].id);
+ await api('user.submission.visibility',{submission_id:id,visibility:'draft'},author.hash);
+ assert.equal((await api('admin.submission.tags',{submission_id:id,tag_ids:[]},adminToken)).error,'not_found');
+ assert.equal((await db.query('select public.portal_public_game($1) as game',[made.submission.public_slug])).rows[0].game,null);
+ for(const role of ['anon','authenticated','service_role']){
+  await db.exec('set role '+role);
+  try{await assert.rejects(db.query('select * from portal_private.tags'),/permission denied/);await assert.rejects(db.query('select * from portal_private.game_tags'),/permission denied/);}
+  finally{await db.exec('reset role');}
+ }
+ await api('user.submission.delete',{submission_id:id,title:'Tagged game',confirmation:'delete'},author.hash);
+ assert.equal((await db.query('select count(*)::integer as n from portal_private.game_tags where game_id=$1',[id])).rows[0].n,0);
+});
+
 test('expired and deactivated admin sessions cannot perform management', async () => {
   const next = await login('owner', adminPassword, true);
   await db.query("update portal_private.sessions set expires_at=now()-interval '1 second' where token_hash=$1", [next.hash]);

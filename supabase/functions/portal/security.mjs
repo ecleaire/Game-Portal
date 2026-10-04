@@ -1,4 +1,5 @@
 export const actions = new Set([
+  'admin.tags', 'admin.tag.create', 'admin.tag.update', 'admin.submission.tags',
   'portal.login', 'user.login', 'admin.login', 'logout', 'user.me', 'user.profile', 'user.rename', 'user.password',
   'admin.me', 'admin.users', 'admin.audit', 'admin.create', 'admin.admin.create', 'admin.rename', 'admin.role',
   'admin.passwords', 'admin.password.add', 'admin.password.revoke', 'admin.kick',
@@ -42,7 +43,9 @@ export async function readBody(request, maximum = 8192) {
   if (body.data !== undefined && (!body.data || Array.isArray(body.data) || typeof body.data !== 'object')) throw new Error('invalid_request');
   const data = body.data ?? {};
   for (const [name, value] of Object.entries(data)) {
-    if (name === 'offset' || name === 'before_id') {
+    if (name === 'tag_ids') {
+      if (!Array.isArray(value) || value.length > 8 || new Set(value).size !== value.length || value.some(id => typeof id !== 'string' || !/^[a-f0-9-]{36}$/.test(id))) throw new Error('invalid_tags');
+    } else if (name === 'offset' || name === 'before_id') {
       if (!Number.isSafeInteger(value) || value < 0) throw new Error('invalid_request');
     } else if (value !== null && typeof value !== 'string') throw new Error('invalid_request');
   }
