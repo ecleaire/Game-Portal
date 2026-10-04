@@ -53,6 +53,7 @@ const errors = {
   invalid_upload: 'ZIP形式・ファイル構成またはサイズを確認してください（最大50MB）。',
   web_export_required: 'ブラウザーで遊べるHTMLが見つかりません。Godotの「Web」書き出しで生成したHTML・.js・.wasm・.pckをまとめてください。「PCK/ZIP」書き出しだけではプレイできません。',
   invalid_thumbnail: 'サムネイルはPNG・JPEG・WebPの5MB以下を選んでください。',
+  thumbnail_conflict: 'サムネイルや投稿状態が別の操作で変更されました。画面を更新して再試行してください。',
   storage_unavailable: '公開用の保管先に接続できません。管理者にSupabase Storageの設定確認を依頼してください。',
   preview_unsupported: 'このブラウザーはZIPプレビューに対応していません。ブラウザーを更新してください。',
 };
@@ -314,6 +315,36 @@ function submissionEditor(game) {
   const grid = el('div', null, { class: 'editor-grid' }); editor.append(grid);
   const editable = ['uploading', 'draft', 'pending', 'rejected', 'approved'].includes(game.status);
   if (editable) {
+    const thumbnail = section('サムネイル', grid);
+    const preview = el('div', null); thumbnailOrFallback(preview, game); thumbnail.append(preview);
+    let previewUrl;
+    const imageForm = form(thumbnail, [], game.has_thumbnail ? 'サムネイルを変更' : 'サムネイルを追加', async () => {
+      const file = imageForm.elements.thumbnail.files?.[0];
+      if (!file || !['image/png','image/jpeg','image/webp'].includes(file.type) || file.size > 5242880 || !file.size) throw new Error('invalid_thumbnail');
+      notice('サムネイルを更新中…');
+      const body = new FormData(); body.set('submission_id', game.id); body.set('thumbnail', file);
+      const response = await fetch(`${config.supabaseUrl.replace(/\/$/, '')}/functions/v1/portal/update-thumbnail`, {
+        method: 'POST', credentials: 'omit', headers: { ...(config.anonKey ? { apikey: config.anonKey } : {}), 'X-Portal-Session': session.token },
+        body, signal: AbortSignal.timeout(60000) });
+      const result = await response.json();
+      if (!response.ok || result.error) throw new Error(result.error === 'conflict' ? 'thumbnail_conflict' : result.error ?? 'unavailable');
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      await account(); notice('サムネイルを更新しました。');
+    });
+    imageForm.classList.add('stacked-form');
+    const label = el('label', '画像を選択（PNG・JPEG・WebP、5MB以下）');
+    const input = el('input', null, { name: 'thumbnail', type: 'file', accept: 'image/png,image/jpeg,image/webp', required: '', 'aria-label': '変更するサムネイル' });
+    input.addEventListener('change', () => {
+      const file = input.files?.[0]; if (!file) return;
+      if (!['image/png','image/jpeg','image/webp'].includes(file.type) || file.size > 5242880) { notice(errors.invalid_thumbnail); input.value = ''; return; }
+      preview.dataset.replaced = 'true';
+      if (previewUrl) URL.revokeObjectURL(previewUrl); previewUrl = URL.createObjectURL(file);
+      preview.replaceChildren(el('img', null, { src: previewUrl, alt: '新しいサムネイルのプレビュー', class: 'thumbnail-preview' }));
+    });
+    label.append(input); imageForm.querySelector('button[type=submit]').before(label);
+    imageForm.append(el('p', '', { class: 'message upload-status', role: 'status', 'aria-live': 'polite' }));
+  }
+  if (editable) {
     const basics = section('基本情報を編集', grid);
     const picker = gameTagPicker(game);
     if (game.status === 'approved') basics.append(el('p', '保存すると公開ページの情報にも反映されます。ゲームファイルは変更されません。', { class: 'muted' }));
@@ -401,8 +432,10 @@ async function showSubmissionThumbnail(parent, submissionId, mode) {
       method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'application/json',
         ...(config.anonKey ? { apikey: config.anonKey } : {}), 'X-Portal-Session': session.token },
       body: JSON.stringify({ submission_id: submissionId, mode }) });
-    if (!response.ok) return;
-    const url = URL.createObjectURL(await response.blob());
+    if (!response.ok || parent.dataset.replaced === 'true') return;
+    const blob = await response.blob();
+    if (!parent.isConnected || parent.dataset.replaced === 'true') return;
+    const url = URL.createObjectURL(blob);
     const image = el('img', null, { class: 'thumbnail-preview', alt: 'ゲームサムネイル', src: url });
     image.onload = () => URL.revokeObjectURL(url);
     const fallback = parent.querySelector('.summary-fallback');

@@ -169,3 +169,36 @@ test('missing configuration fails closed and network failures return no internal
   const response = await unavailable(request({ action: 'user.login' }));
   assert.deepEqual(await response.json(), { error: 'unavailable' });
 });
+
+
+test('thumbnail upload validates images, checks owner twice and preserves committed files after lost responses', async()=>{
+ const id='6b61c4a0-1204-4000-8000-000000000001';const session=token();
+ const make=(bytes=Uint8Array.from([137,80,78,71,13,10,26,10]),type='image/png')=>{
+  const body=new FormData();body.set('submission_id',id);body.set('thumbnail',new File([bytes],'image.png',{type}));
+  return new Request(settings.url+'/functions/v1/portal/update-thumbnail',{method:'POST',headers:{origin:settings.allowedOrigins,'x-portal-session':session},body});
+ };
+ for(const outcome of ['ok','foreign','revoked','lost']){
+  const removed=[];let stored=0;let key;
+  const handler=createHandler({...settings,fetcher:async(url,options)=>{
+   if(url.endsWith('/rpc/portal_api')){
+    const p=JSON.parse(options.body);assert.equal(p.p_token_hash,await digest(session,settings.pepper));
+    if(p.p_action.endsWith('_prepare'))return Response.json(outcome==='foreign'?{error:'not_found'}:{previous_key:'old.png'});
+    if(outcome==='lost')throw new Error('lost response');
+    if(outcome==='revoked')return Response.json({error:'unauthorized'});
+    key=p.p_body.thumbnail_key;assert.match(key,new RegExp('^'+id+'-[a-f0-9]{64}\\.png$'));
+    return Response.json({submission:{id,has_thumbnail:true}});
+   }
+   if(options.method==='DELETE'){removed.push(...JSON.parse(options.body).prefixes);return Response.json({});}
+   stored++;return Response.json({});
+  }});
+  const r=await handler(make());assert.equal(r.status,{ok:200,foreign:404,revoked:401,lost:503}[outcome]);
+  assert.equal(stored,outcome==='foreign'?0:1);
+  if(outcome==='ok')assert.deepEqual(removed,['old.png']);
+  if(outcome==='revoked')assert.equal(removed.length,1);
+  if(outcome==='lost')assert.deepEqual(removed,[]);
+ }
+ const handler=createHandler({...settings,fetcher:async()=>Response.json({previous_key:''})});
+ assert.equal((await handler(make(new TextEncoder().encode('<html>bad</html>')))).status,400);
+ assert.equal((await handler(make(new Uint8Array(5242881)))).status,400);
+ assert.equal((await handler(make(new Uint8Array([1]),'image/svg+xml'))).status,400);
+});

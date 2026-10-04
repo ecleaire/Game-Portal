@@ -387,6 +387,26 @@ test('managed tags enforce ownership, active state, limits, moderation and publi
  assert.equal((await db.query('select count(*)::integer as n from portal_private.game_tags where game_id=$1',[id])).rows[0].n,0);
 });
 
+test('thumbnail edits are owner-only, compare-and-swap and preserve review and publication',async()=>{
+ await api('admin.create',{username:'image_owner',password:original,role:'uploader'},adminToken);
+ await api('admin.create',{username:'image_stranger',password:original,role:'uploader'},adminToken);
+ const owner=await login('image_owner'),stranger=await login('image_stranger');
+ const made=await api('user.submission.create',{title:'Image game',engine:'other',version:'1',visibility:'draft'},owner.hash);const id=made.submission.id;
+ assert.equal((await api('user.submission.thumbnail_prepare',{submission_id:id},stranger.hash)).error,'not_found');
+ assert.equal((await api('user.submission.thumbnail_prepare',{submission_id:id},adminToken)).error,'forbidden');
+ for(const status of ['uploading','draft','pending','rejected','approved']){
+  await db.query('update portal_private.game_submissions set status=$1,visibility=$2 where id=$3',[status,status==='approved'?'public':'draft',id]);
+  const prepared=await api('user.submission.thumbnail_prepare',{submission_id:id},owner.hash);const key=id+'-'+token()+'.png';
+  assert.equal((await api('user.submission.thumbnail_complete',{submission_id:id,previous_key:prepared.previous_key,thumbnail_key:'another-game.png'},owner.hash)).error,'invalid_thumbnail');
+  const saved=await api('user.submission.thumbnail_complete',{submission_id:id,previous_key:prepared.previous_key,thumbnail_key:key},owner.hash);
+  assert.equal(saved.submission.has_thumbnail,true);assert.equal(saved.submission.status,status);
+  assert.equal((await api('user.submission.thumbnail_complete',{submission_id:id,previous_key:prepared.previous_key,thumbnail_key:id+'-'+token()+'.png'},owner.hash)).error,'conflict');
+  assert.equal((await api('user.submission.thumbnail',{submission_id:id},owner.hash)).thumbnail_key,key);
+ }
+ await api('admin.ban',{user_id:owner.user.id,reason:'test'},adminToken);
+ assert.equal((await api('user.submission.thumbnail_prepare',{submission_id:id},owner.hash)).error,'unauthorized');
+});
+
 test('expired and deactivated admin sessions cannot perform management', async () => {
   const next = await login('owner', adminPassword, true);
   await db.query("update portal_private.sessions set expires_at=now()-interval '1 second' where token_hash=$1", [next.hash]);

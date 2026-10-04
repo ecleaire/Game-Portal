@@ -95,6 +95,45 @@ export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleS
           'Content-Disposition': thumbnail ? 'inline' : 'attachment; filename="game.zip"' } });
       } catch (error) { return reply({ error: error?.message === 'invalid_request' ? 'invalid_request' : 'unavailable' }, 503); }
     }
+    if (requestUrl.pathname.endsWith('/update-thumbnail')) {
+      const supplied = request.headers.get('x-portal-session');
+      if (!/^[a-f0-9]{64}$/.test(supplied ?? '')) return reply({ error: 'unauthorized' }, 401);
+      let newKey; let completionStarted = false;
+      const remove = async key => {
+        const response = await fetcher(`${url.replace(/\/$/, '')}/storage/v1/object/portal-thumbnails`, {
+          method: 'DELETE', headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prefixes: [key] }), signal: AbortSignal.timeout(15000) });
+        if (!response.ok && response.status !== 404) throw new Error('storage_unavailable');
+      };
+      try {
+        if (!request.headers.get('content-type')?.startsWith('multipart/form-data') || Number(request.headers.get('content-length') ?? 0) > 6291456) return reply({ error: 'invalid_thumbnail' }, 400);
+        const reader = request.body?.getReader(); if (!reader) return reply({ error: 'invalid_thumbnail' }, 400);
+        const chunks = []; let size = 0;
+        for (;;) { const { done, value } = await reader.read(); if (done) break; size += value.length;
+          if (size > 6291456) { await reader.cancel(); return reply({ error: 'invalid_thumbnail' }, 400); } chunks.push(value); }
+        const form = await new Response(new Blob(chunks), { headers: { 'Content-Type': request.headers.get('content-type') } }).formData();
+        const submissionId = form.get('submission_id'); const file = form.get('thumbnail');
+        const types = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' };
+        if (typeof submissionId !== 'string' || !/^[a-f0-9-]{36}$/.test(submissionId) || !(file instanceof File) || !types[file.type] || !file.size || file.size > 5242880) return reply({ error: 'invalid_thumbnail' }, 400);
+        const prepared = await rpc('user.submission.thumbnail_prepare', { submission_id: submissionId }, supplied);
+        const failed = internalError(prepared); if (failed) return failed;
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const valid = file.type === 'image/png' ? [137,80,78,71,13,10,26,10].every((v,i) => bytes[i] === v)
+          : file.type === 'image/jpeg' ? bytes[0]===255 && bytes[1]===216 && bytes[2]===255
+          : new TextDecoder().decode(bytes.slice(0,4))==='RIFF' && new TextDecoder().decode(bytes.slice(8,12))==='WEBP';
+        if (!valid) return reply({ error: 'invalid_thumbnail' }, 400);
+        newKey = `${submissionId}-${token()}.${types[file.type]}`;
+        await storeObject('portal-thumbnails', newKey, bytes, file.type);
+        completionStarted = true;
+        const completed = await rpc('user.submission.thumbnail_complete', { submission_id: submissionId,
+          thumbnail_key: newKey, previous_key: prepared.result.previous_key }, supplied);
+        const failure = internalError(completed);
+        if (failure) { if (completed.result?.error) await remove(newKey).catch(() => {}); newKey = null; return failure; }
+        newKey = null; // Committed; never delete this object if old-object cleanup fails.
+        if (prepared.result.previous_key) await remove(prepared.result.previous_key).catch(() => {});
+        return reply(completed.result);
+      } catch { if (newKey && !completionStarted) await remove(newKey).catch(() => {}); return reply({ error: 'unavailable' }, 503); }
+    }
     if (requestUrl.pathname.endsWith('/submission-thumbnail')) {
       const supplied = request.headers.get('x-portal-session');
       if (!/^[a-f0-9]{64}$/.test(supplied ?? '')) return reply({ error: 'unauthorized' }, 401);

@@ -11,10 +11,17 @@ await db.exec('create role anon; create role authenticated; create role service_
 const dir = new URL('../../supabase/migrations/', import.meta.url);
 for (const name of (await readdir(dir)).sort()) await db.exec(await readFile(new URL(name, dir), 'utf8'));
 await db.query('select public.portal_bootstrap($1,$2)', ['browser_owner', 'browser-test-admin-only']);
+const imageObjects = new Map();
 const handler = createHandler({
   url: 'http://127.0.0.1:54321', serviceKey: 'browser-test-server-only',
   pepper: 'browser-test-only-pepper-not-for-production', allowedOrigins: 'http://127.0.0.1:4173',
   fetcher: async (_url, options) => {
+    if (_url.includes('/storage/v1/object/portal-thumbnails')) {
+      if (options.method === 'DELETE') { for (const key of JSON.parse(options.body).prefixes) imageObjects.delete(key); return Response.json({}); }
+      const key = decodeURIComponent(_url.split('/portal-thumbnails/')[1]);
+      if (options.method === 'POST') { imageObjects.set(key, { bytes: options.body, type: options.headers['Content-Type'] }); return Response.json({}); }
+      const file = imageObjects.get(key); return file ? new Response(file.bytes, { headers: { 'Content-Type': file.type } }) : new Response(null, { status: 404 });
+    }
     const p = JSON.parse(options.body);
     try {
       if (_url.endsWith('/rpc/portal_tags') || _url.endsWith('/rpc/portal_catalog')) {

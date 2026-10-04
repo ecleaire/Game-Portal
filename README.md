@@ -20,6 +20,7 @@ https://ecleaire.github.io/Game-Portal/
 - [認証/セッション設計とセキュリティ上の制約](docs/SECURITY.md)
 - [API仕様](docs/API.md)
 - [ゲームタグの設定・管理・検索・権限制御](docs/TAGS.md)
+- [投稿後のサムネイル追加・変更](docs/THUMBNAILS.md)
 - [Google Driveの所有者設定とPhase 3への引き継ぎ](docs/GOOGLE_DRIVE_SETUP.md)
 
 `uploader`権限のユーザーは`/upload/`から最大50MBのWebゲームZIP、またはWeb書き出しの複数ファイルを投稿できます。ゲームZIPは管理者だけが扱うGoogle Driveへ保管し、配信用コピーは非公開Supabase Storageへ保存します。投稿者にはDriveのURLやIDを返しません。所有者の設定は[Google Driveの管理者専用保管領域の設定](docs/GOOGLE_DRIVE_SETUP.md)と[公開機能の有効化](docs/PUBLISHING.md)を参照してください。

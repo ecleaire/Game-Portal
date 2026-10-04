@@ -392,3 +392,27 @@ test('tag filters combine with engine and text search, and cards cap visible tag
  await page.getByRole('button',{name:'タグをすべて解除',exact:true}).click();
  await expect(page.locator('.game-card')).toHaveCount(4);
 });
+
+
+test('owners can add and replace a submitted thumbnail without changing the game',async({context,page})=>{
+ await context.route('**/assets/config.js',route=>route.fulfill({contentType:'text/javascript',body:'export const config={supabaseUrl:"http://127.0.0.1:54321",anonKey:""};'}));
+ await page.goto('login/');await page.getByLabel('ユーザー名',{exact:true}).fill('browser_owner');await page.getByLabel('パスワード',{exact:true}).fill('browser-test-admin-only');await page.getByRole('button',{name:'ログイン',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'管理画面 — browser_owner',exact:true})).toBeVisible();
+ const made=await page.evaluate(async()=>{
+  const post=async(action,data,session)=>{const r=await fetch('http://127.0.0.1:54321/functions/v1/portal',{method:'POST',headers:{'Content-Type':'application/json',...(session?{'X-Portal-Session':session}:{})},body:JSON.stringify({action,data})});return r.json();};
+  await post('admin.create',{username:'browser_image_user',password:'browser-image-test-only',role:'uploader'},sessionStorage.getItem('game-portal.admin.session.v1'));
+  const login=await post('user.login',{username:'browser_image_user',password:'browser-image-test-only'});
+  const game=await post('user.submission.create',{title:'Thumbnail test',engine:'other',version:'1',visibility:'draft'},login.token);
+  return {token:login.token,id:game.submission.id};
+ });
+ const user=await context.newPage();await user.goto('http://127.0.0.1:4173/Game-Portal/');await user.evaluate(token=>sessionStorage.setItem('game-portal.user.session.v1',token),made.token);
+ await user.goto('http://127.0.0.1:4173/Game-Portal/account/?game='+made.id);
+ const image=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aXWQAAAAASUVORK5CYII=','base64');
+ await user.getByLabel('変更するサムネイル',{exact:true}).setInputFiles({name:'first.png',mimeType:'image/png',buffer:image});
+ await expect(user.getByAltText('新しいサムネイルのプレビュー')).toBeVisible();await user.getByRole('button',{name:'サムネイルを追加',exact:true}).click();
+ await expect(user.locator('#message')).toHaveText('サムネイルを更新しました。');await expect(user.getByRole('button',{name:'サムネイルを変更',exact:true})).toBeVisible();
+ await user.getByLabel('変更するサムネイル',{exact:true}).setInputFiles({name:'second.png',mimeType:'image/png',buffer:image});await user.getByRole('button',{name:'サムネイルを変更',exact:true}).click();
+ await expect(user.locator('#message')).toHaveText('サムネイルを更新しました。');await expect(user.getByRole('heading',{name:'Thumbnail test',exact:true})).toBeVisible();
+ await user.setViewportSize({width:390,height:844});expect(await user.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await user.locator('.editor-grid > section').filter({has:user.getByRole('heading',{name:'サムネイル',exact:true})}).screenshot({path:'test-results/thumbnail-edit-mobile.png'});
+});

@@ -4,7 +4,7 @@
 
 ## 所有者が行う必要がある手順（既存サイトの更新順）
 
-1. Supabase SQL Editorで、未適用のmigrationを番号順に適用します。今回の追加は[`202610040016_game_tags.sql`](../supabase/migrations/202610030015_shared_login_entry.sql)です。既存のmigrationを再実行しないでください。`supabase db push`を使う場合は`--dry-run`で対象を確認します。
+1. Supabase SQL Editorで、未適用のmigrationを番号順に適用します。今回の追加は[`202610040017_edit_submission_thumbnail.sql`](../supabase/migrations/202610030015_shared_login_entry.sql)です。既存のmigrationを再実行しないでください。`supabase db push`を使う場合は`--dry-run`で対象を確認します。
 2. 同じSQL Editorで[`publication_buckets.sql`](../supabase/storage/publication_buckets.sql)を実行します。`portal-packages`と`portal-thumbnails`が **Private** であることをStorage画面で確認します。一般ユーザーにStorageの直接読み取りポリシーを追加しないでください。Freeプランのファイル上限は50MBです。投稿が失敗する場合はStorage Settingsのグローバル上限も確認します。[Supabase Storageの制限](https://supabase.com/docs/guides/storage/uploads/file-limits)
 3. Edge Function `portal`を、このリポジトリの最新コードへデプロイします。CLIなら`supabase functions deploy portal`です。Dashboardでコードを編集する場合は`handler.mjs`、`drive.mjs`、`security.mjs`と`assets/private-preview.js`への依存関係をすべて最新にします。`Verify JWT with legacy secret`はOFFのままです。service_role key、Google OAuth認証情報はSupabase Secretsだけに置き、GitHub PagesやGitHub Variablesへ移しません。
 4. Edge Functionで投稿、審査、公開一覧の動作を確認してからGitHub Pagesの新フロントエンドを公開します。反対の順序だと旧バックエンドに新しい投稿画面が接続して失敗します。
