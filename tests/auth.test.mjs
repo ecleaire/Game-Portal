@@ -76,6 +76,25 @@ test('user/admin sessions cannot cross authorization boundaries or spoof privile
   const users = await api('admin.users', {}, adminToken);
   assert.equal(users.users[0].id, uid);
 });
+test('shared login chooses the correct isolated domain and never falls back from an admin name', async () => {
+  const freshAdmin = token();
+  const admin = await api('portal.login', { username: ' OWNER ', password: adminPassword }, null, freshAdmin);
+  assert.equal(admin.admin.username, 'owner');
+  assert.equal((await api('user.me', {}, freshAdmin)).error, 'forbidden');
+  const freshUser = token();
+  const user = await api('portal.login', { username: 'alice', password: original }, null, freshUser);
+  assert.equal(user.user.username, 'alice');
+  assert.equal((await api('admin.me', {}, freshUser)).error, 'forbidden');
+  await api('admin.create', { username: 'owner', password: 'separate-user-password', role: 'player' }, adminToken);
+  assert.equal((await api('portal.login', { username: 'owner', password: 'separate-user-password' }, null, token())).error, 'invalid_credentials');
+  assert.equal((await api('portal.login', { username: 'unknown', password: 'unknown-password' }, null, token())).error, 'invalid_credentials');
+  const other = await login('owner', 'separate-user-password');
+  assert.ok(other.user);
+  await db.query('delete from portal_private.sessions where user_id=$1', [other.user.id]);
+  await db.query('delete from portal_private.user_passwords where user_id=$1', [other.user.id]);
+  await db.query('delete from portal_private.users where id=$1', [other.user.id]);
+});
+
 test('users can update only their own safe display profile', async () => {
   const changed = await api('user.profile', { display_name: 'Alice Player', avatar_key: 'rocket' }, userToken);
   assert.equal(changed.user.display_name, 'Alice Player');

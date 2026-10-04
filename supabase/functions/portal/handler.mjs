@@ -227,7 +227,7 @@ export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleS
     let input;
     try { input = await readBody(request); }
     catch (error) { return reply({ error: error.message }, error.message === 'body_too_large' ? 413 : 400); }
-    const login = input.action === 'user.login' || input.action === 'admin.login';
+    const login = ['portal.login', 'user.login', 'admin.login'].includes(input.action);
     const supplied = request.headers.get('x-portal-session');
     if (!login && !/^[a-f0-9]{64}$/.test(supplied ?? '')) return reply({ error: 'unauthorized' }, 401);
     const fresh = login ? token() : null;

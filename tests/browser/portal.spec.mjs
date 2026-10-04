@@ -221,6 +221,34 @@ for (const retry of [false, true]) test(`HTML ${retry ? 'resend' : 'upload'} rec
   }
 });
 
+test('shared login reveals admin navigation only after server authentication and logout hides it everywhere', async ({ context, page }) => {
+  await context.route('**/assets/config.js', route => route.fulfill({ contentType: 'text/javascript', body: 'export const config = { supabaseUrl: "http://127.0.0.1:54321", anonKey: "" };' }));
+  await page.goto('./');
+  const adminLink = page.getByRole('navigation', { name: 'メインメニュー' }).getByRole('link', { name: '管理画面', exact: true });
+  await expect(adminLink).toBeHidden();
+  await page.getByRole('link', { name: 'ログイン', exact: true }).click();
+  await page.getByLabel('ユーザー名', { exact: true }).fill('browser_owner');
+  await page.getByLabel('パスワード', { exact: true }).fill('browser-test-admin-only');
+  await page.getByRole('button', { name: 'ログイン', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '管理画面 — browser_owner', exact: true })).toBeVisible();
+  await expect(adminLink).toBeVisible();
+  expect(await page.evaluate(() => sessionStorage.getItem('game-portal.user.session.v1'))).toBeNull();
+  const adminToken = await page.evaluate(() => sessionStorage.getItem('game-portal.admin.session.v1'));
+  await page.getByRole('link', { name: 'ホーム', exact: true }).click();
+  await expect(adminLink).toBeVisible();
+  await page.goto('game.html?id=scratch-demo');
+  await expect(adminLink).toBeVisible();
+  await page.getByRole('navigation', { name: 'メインメニュー' }).getByRole('link', { name: 'ログアウト', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'ログイン', exact: true })).toBeVisible();
+  await expect(adminLink).toBeHidden();
+  expect(await page.evaluate(() => sessionStorage.getItem('game-portal.admin.session.v1'))).toBeNull();
+  // A revoked token copied back into storage cannot make the link visible.
+  await page.evaluate(token => sessionStorage.setItem('game-portal.admin.session.v1', token), adminToken);
+  await page.goto('./');
+  await expect(adminLink).toBeHidden();
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem('game-portal.admin.session.v1'))).toBeNull();
+});
+
 test('browser flows connect to the real Edge handler and migrated database', async ({ context, page }) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));

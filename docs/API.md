@@ -5,7 +5,8 @@
 
 | action | data | 認可 / 応答 |
 | --- | --- | --- |
-| user.login | username, password | 公開 / token, expires_at, user |
+| portal.login | username, password | 共通ログイン / token, expires_at, userまたはadmin。管理者名は管理者認証のみ |
+| user.login | username, password | 互換用の一般ログイン / token, expires_at, user |
 | admin.login | username, password | 公開 / token, expires_at, admin |
 | logout | なし | 有効セッション / ok |
 | user.me | なし | 一般セッション / user |

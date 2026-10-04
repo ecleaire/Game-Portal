@@ -3,6 +3,7 @@ import { checkWebGameZip, unpackPrivateZip, privatePreviewDocument } from './pri
 import { packageWebFiles } from './zip-upload.js?v=20261003a';
 import { sendUpload, uploadWithRecovery } from './upload-request.js?v=20261003a';
 import { submissionList } from './submission-list.js?v=20261003a';
+import { adminSessionKey, confirmAdminSession, hasAdminSession, logoutSessions, navigationReady, syncNavigation } from './navigation.js?v=20261003a';
 
 const root = document.querySelector('#portal');
 const message = document.querySelector('#message');
@@ -65,24 +66,9 @@ function restoreSession() {
   return session;
 }
 function syncLoginLink() {
-  document.querySelectorAll('a[data-portal-login], a[href$="/login/"]').forEach(link => {
-    link.dataset.portalLogin = 'true';
-    if (!link.dataset.loginHref) link.dataset.loginHref = link.href;
-    if (session) {
-      link.textContent = 'ログアウト';
-      link.href = '#logout';
-      link.onclick = event => { event.preventDefault(); run(logout); };
-    } else {
-      link.textContent = 'ログイン';
-      link.href = link.dataset.loginHref;
-      link.onclick = null;
-    }
-  });
-  document.querySelectorAll('a[data-portal-account], a[href$="/account/"]').forEach(link => {
-    if (!link.dataset.accountHref) link.dataset.accountHref = link.href;
-    link.hidden = !session || adminMode;
-    link.href = link.dataset.accountHref;
-    link.onclick = null;
+  syncNavigation();
+  document.querySelectorAll('[data-portal-login]').forEach(link => {
+    link.onclick = session || hasAdminSession() ? event => { event.preventDefault(); run(logout); } : null;
   });
 }
 async function run(task, activeForm = null) {
@@ -182,11 +168,19 @@ function form(parent, fields, submitText, submit) {
 function login() {
   syncLoginLink();
   root.replaceChildren();
-  const s = section(adminMode ? '管理者ログイン' : 'ユーザーログイン');
+  const s = section(adminMode ? '管理者ログイン' : 'ログイン');
   s.append(el('p', adminMode ? '管理者アカウントでログインして、投稿の審査とユーザー管理を行います。'
     : 'ゲームの投稿や、自分の作品の管理にはログインが必要です。', { class: 'muted' }));
   form(s, [username(), password('password', 'パスワード', false)], 'ログイン', async data => {
-    saveSession(await api(adminMode ? 'admin.login' : 'user.login', data));
+    const result = await api(adminMode ? 'admin.login' : 'portal.login', data);
+    await logoutSessions();
+    if (result.admin && !adminMode) {
+      sessionStorage.setItem(adminSessionKey, result.token);
+      confirmAdminSession(result.token);
+      location.href = '../admin/'; return;
+    }
+    saveSession(result);
+    if (result.admin) confirmAdminSession(result.token);
     syncLoginLink();
     if (adminMode) { offset = 0; selected = null; await dashboard(); }
     else if (uploadMode) await upload();
@@ -196,7 +190,7 @@ function login() {
   });
 }
 async function logout() {
-  try { await api('logout'); }
+  try { await logoutSessions(); }
   finally { clearSession(); syncLoginLink(); login(); notice('ログアウトしました。'); }
 }
 function logoutButton(parent) {
@@ -664,11 +658,13 @@ async function start() {
     else section('認証サービスは未設定です').append(el('p', '管理者がSupabaseの設定を完了すると利用できます。公開済みゲームは引き続き遊べます。'));
     return;
   }
+  await navigationReady;
+  if (location.hash === '#logout') { await logout(); return; }
+  if (!adminMode && !accountMode && !uploadMode && hasAdminSession()) { location.replace('../admin/'); return; }
   if (!restoreSession()) { login(); return; }
   syncLoginLink();
-  if (location.hash === '#logout') { await logout(); return; }
   try {
-    if (adminMode) { await api('admin.me'); offset = 0; selected = null; await dashboard(); }
+    if (adminMode) { await api('admin.me'); confirmAdminSession(session.token); offset = 0; selected = null; await dashboard(); }
     else {
       await api('user.me');
       if (uploadMode) await upload();
