@@ -209,8 +209,9 @@ for (const retry of [false, true]) test(`HTML ${retry ? 'resend' : 'upload'} rec
   await expect(page.getByRole('combobox', { name: 'エンジン' })).toBeDisabled();
   await expect(fileInput).toBeDisabled();
   await expect(page.locator('#message')).toBeEmpty();
-  await expect(page.locator('.upload-status')).toContainText('送信');
-  expect(await page.locator('.upload-status').evaluate(node => node.previousElementSibling.textContent)).toBe(submitText);
+  const fileUploadStatus = page.locator('form').filter({ has: fileInput }).locator('.upload-status');
+  await expect(fileUploadStatus).toContainText('送信');
+  expect(await fileUploadStatus.evaluate(node => node.previousElementSibling.textContent)).toBe(submitText);
   release();
   if (retry) {
     await expect(page.getByRole('heading', { name: 'ゲームファイルを再送' })).toHaveCount(0);
