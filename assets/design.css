@@ -162,6 +162,12 @@ a, button, input, select { -webkit-tap-highlight-color: transparent; }
 .portal .editor-grid > section:first-child { grid-column: 1 / -1; }
 .portal .editor-grid form { max-width: none; }
 .portal .editor-grid form.stacked-form { padding: 0; border: 0; background: transparent; }
+.portal .editor-grid .game-edit-form { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.portal .game-edit-form > section { margin: 0; box-shadow: none; background: rgba(8,17,30,.5); }
+.portal .game-edit-form > section:first-of-type, .portal .editor-save { grid-column: 1 / -1; }
+.portal .game-edit-form label { display: block; margin-bottom: 16px; }
+.portal .editor-save { padding: 20px; border: 1px solid var(--border); border-radius: 16px; background: rgba(8,17,30,.8); }
+@media (max-width: 700px) { .portal .editor-grid .game-edit-form { grid-template-columns: 1fr; } }
 .portal .editor-grid input[type="text"] { width: 100%; }
 .portal .editor-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .portal .submission-editor .row { background: transparent; }

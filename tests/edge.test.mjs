@@ -69,7 +69,7 @@ test('CORS, methods, size, malformed input and missing sessions fail before data
   assert.equal((await handler(request({}, { origin: 'https://evil.example' }))).status, 403);
   assert.equal((await handler(request(null, {}, 'OPTIONS'))).status, 204);
   assert.equal((await handler(request(null, {}, 'GET'))).status, 405);
-  assert.equal((await handler(request('x'.repeat(8200)))).status, 413);
+  assert.equal((await handler(request('x'.repeat(32769)))).status, 413);
   for (const body of ['{', 'null', '[]', { action: 'bootstrap' }, { action: 'admin.users', data: [] }, { action: 'admin.users', data: { offset: -1 } }]) {
     assert.equal((await handler(request(body))).status, 400);
   }

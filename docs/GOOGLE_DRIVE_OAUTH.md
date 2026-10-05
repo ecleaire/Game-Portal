@@ -41,6 +41,23 @@ OAuthが設定されている場合は、既存の`GOOGLE_SERVICE_ACCOUNT_JSON`�
 
 ## 継続運用・失敗時
 
+### 認証失効からの復旧（既存フォルダーを維持）
+
+「Google Driveの所有者認証が失効しています」は、Googleのトークン更新が`invalid_grant`で拒否されたことを示します。サイトのログインし直しでは直りません。
+
+1. Google Auth Platform → 対象で公開ステータスを確認します。「テスト中」の場合は、ブランディングの必須設定を所有者が完了し、継続利用のためProductionへ変更する手順を確認してください。アプリの公開はゲームZIPやDriveフォルダーの一般公開ではありません。Google側の確認や同意は所有者が行います。
+2. 初回と同じDesktop OAuth client JSONと、初回の4つの設定を保存した環境ファイルを使用します。新しい出力ファイルへ次のコマンドで認証を取り直します（ファイル名は実際の場所に合わせてください）。
+
+```powershell
+& 'C:\Users\echo0\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe' scripts/setup-drive-oauth.mjs 'C:\Users\echo0\game-portal-drive-client.json' 'C:\Users\echo0\.game-portal-drive-reconnect.env' --reconnect 'C:\Users\echo0\.game-portal-drive-secrets.env'
+```
+
+3. 保存先の元のGoogleアカウントで許可します。復旧モードは同じclient IDを確認し、既存の3フォルダーが書き込み可能なことを確認します。新しいフォルダーは作成せず、既存のファイルや設定は変更しません。
+4. Supabase → Edge Functions → Secretsの`GOOGLE_DRIVE_OAUTH_JSON`だけを新しい出力ファイルの値へ更新します。3つのフォルダーIDは変更しません。秘密情報をチャットやGitHubに貼り付けないでください。
+5. 管理画面の「投稿保管を確認」を再実行し、その後、小さなゲームで投稿・審査の保存動作を確認します。すでに保存できなかった投稿はアカウントの編集画面から再送できます。
+
+再認証の同意だけではSupabaseの保存済みトークンは更新されません。手順4まで必要です。失敗して空の出力ファイルができた場合は別の新しい出力名で再実行してください。
+
 TestingのExternal OAuthでは、Driveスコープのrefresh tokenが通常7日で失効します。継続運用ではAudienceの公開状態をProductionへ変更し、Googleが表示する要件を完了してから認証を取り直します。失効・取り消し時は管理画面に再認証が必要と表示します。[Googleのトークン有効期限](https://developers.google.com/identity/protocols/oauth2#expiration)
 
 出力先の上書きは禁止です。失敗すると空ファイルや途中までの値が残る場合があります。再実行時は新しい出力名を指定してください。フォルダー作成失敗時も取得済みOAuthは出力ファイルに残します。スクリプトは既存データ・認証を削除しません。

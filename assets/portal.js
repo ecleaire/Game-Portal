@@ -95,7 +95,7 @@ async function run(task, activeForm = null) {
   controls.forEach(([control]) => { control.disabled = true; });
   activeForm?.setAttribute('aria-busy', 'true');
   try { await task(); }
-  catch (error) { notice(errors[error.message] ?? '通信または処理に失敗しました。'); }
+  catch (error) { notice(error.userMessage ?? errors[error.message] ?? '通信または処理に失敗しました。'); }
   finally {
     busy = false;
     controls.forEach(([control, disabled]) => { control.disabled = disabled; });
@@ -330,87 +330,77 @@ function submissionEditor(game) {
   const grid = el('div', null, { class: 'editor-grid' }); editor.append(grid);
   const editable = ['uploading', 'draft', 'pending', 'rejected', 'approved'].includes(game.status);
   if (editable) {
-    const thumbnail = section('サムネイル', grid);
-    const preview = el('div', null); thumbnailOrFallback(preview, game); thumbnail.append(preview);
-    let previewUrl;
-    const imageForm = form(thumbnail, [], game.has_thumbnail ? 'サムネイルを変更' : 'サムネイルを追加', async () => {
-      const file = imageForm.elements.thumbnail.files?.[0];
-      if (!file || !['image/png','image/jpeg','image/webp'].includes(file.type) || file.size > 5242880 || !file.size) throw new Error('invalid_thumbnail');
-      notice('サムネイルを更新中…');
-      const body = new FormData(); body.set('submission_id', game.id); body.set('thumbnail', file);
-      const response = await fetch(`${config.supabaseUrl.replace(/\/$/, '')}/functions/v1/portal/update-thumbnail`, {
-        method: 'POST', credentials: 'omit', headers: { ...(config.anonKey ? { apikey: config.anonKey } : {}), 'X-Portal-Session': session.token },
-        body, signal: AbortSignal.timeout(60000) });
-      const result = await response.json();
-      if (!response.ok || result.error) throw new Error(result.error === 'conflict' ? 'thumbnail_conflict' : result.error ?? 'unavailable');
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-      await account(); notice('サムネイルを更新しました。');
-    });
-    imageForm.classList.add('stacked-form');
-    const label = el('label', '画像を選択（PNG・JPEG・WebP、5MB以下）');
-    const input = el('input', null, { name: 'thumbnail', type: 'file', accept: 'image/png,image/jpeg,image/webp', required: '', 'aria-label': '変更するサムネイル' });
-    input.addEventListener('change', () => {
-      const file = input.files?.[0]; if (!file) return;
-      if (!['image/png','image/jpeg','image/webp'].includes(file.type) || file.size > 5242880) { notice(errors.invalid_thumbnail); input.value = ''; return; }
-      preview.dataset.replaced = 'true';
-      if (previewUrl) URL.revokeObjectURL(previewUrl); previewUrl = URL.createObjectURL(file);
-      preview.replaceChildren(el('img', null, { src: previewUrl, alt: '新しいサムネイルのプレビュー', class: 'thumbnail-preview' }));
-    });
-    label.append(input); imageForm.querySelector('button[type=submit]').before(label);
-    imageForm.append(el('p', '', { class: 'message upload-status', role: 'status', 'aria-live': 'polite' }));
-  }
-  if (editable) {
-    const basics = section('基本情報を編集', grid);
     const picker = gameTagPicker(game);
-    if (game.status === 'approved') basics.append(el('p', '保存すると公開ページの情報にも反映されます。ゲームファイルは変更されません。', { class: 'muted' }));
-    form(basics, [
+    let previewUrl;
+    const saveForm = form(grid, [
       field('title', 'ゲーム名', 'text', { value: game.title, maxlength: '120' }),
       field('engine', 'エンジン', 'select', { value: game.engine, choices: [['godot','Godot'],['scratch','Scratch / TurboWarp'],['other','その他']] }),
       field('description', '説明（任意）', 'textarea', { value: game.description, maxlength: '4000', rows: '5', optional: true }),
       field('version', 'バージョン', 'text', { value: game.version, maxlength: '80' }),
       field('controls', '操作説明（任意）', 'textarea', { value: game.controls, maxlength: '2000', rows: '3', optional: true }),
-    ], game.status === 'rejected' ? '修正して再審査へ' : '変更を保存', async data => {
-      await api('user.submission.update', { ...data, tag_ids: picker.values(), submission_id: game.id }); await account(); notice(game.status === 'rejected' ? '修正を再審査へ送りました。' : '投稿情報を更新しました。');
-    }).classList.add('stacked-form');
-    basics.querySelector('button[type=submit]').before(picker.element);
+      field('visibility', '公開範囲', 'select', { value: game.visibility, choices: visibilityChoices }),
+      shareField(game.shared_user_ids),
+      field('published_at', '公開日時（空欄で即時）', 'datetime-local', { value: game.published_at ? localDateTime(game.published_at) : '', optional: true }),
+    ], '変更を保存', async data => {
+      const image = saveForm.elements.thumbnail.files?.[0];
+      const selectedFiles = [...saveForm.elements.package.files];
+      if (image && (!['image/png','image/jpeg','image/webp'].includes(image.type) || !image.size || image.size > 5242880)) throw new Error('invalid_thumbnail');
+      let archive;
+      if (selectedFiles.length) { archive = await packageWebFiles(selectedFiles); await checkWebGameZip(archive); }
+      delete data.thumbnail; delete data.package;
+      data.tag_ids = picker.values();
+      data.published_at = data.published_at ? new Date(data.published_at).toISOString() : '';
+      notice('変更を保存中…');
+      await api('user.submission.save', { ...data, submission_id: game.id });
+      try {
+        if (image) {
+          notice('サムネイルを保存中…');
+          const body = new FormData(); body.set('submission_id', game.id); body.set('thumbnail', image);
+          const response = await fetch(config.supabaseUrl.replace(/\/$/, '') + '/functions/v1/portal/update-thumbnail', {
+            method: 'POST', credentials: 'omit', headers: { ...(config.anonKey ? { apikey: config.anonKey } : {}), 'X-Portal-Session': session.token },
+            body, signal: AbortSignal.timeout(60000) });
+          const result = await response.json();
+          if (!response.ok || result.error) throw new Error(result.error === 'conflict' ? 'thumbnail_conflict' : result.error ?? 'unavailable');
+          input.value = '';
+        }
+        if (archive) { await uploadPackage(game.id, archive, null, null, game.status !== 'uploading'); saveForm.elements.package.value = ''; }
+      } catch (error) {
+        error.userMessage = 'ゲーム情報と公開設定は保存済みです。ファイルの保存を完了できませんでした。' + (errors[error.message] ?? '接続を確認し、同じボタンで再試行してください。');
+        throw error;
+      }
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      await account(); notice('変更を保存しました。' + (archive ? 'ゲームファイルも保存しました。公開状態は上の表示をご確認ください。' : ''));
+    });
+    saveForm.classList.add('stacked-form', 'game-edit-form');
+    const labels = [...saveForm.querySelectorAll(':scope > label')];
+    const submit = saveForm.querySelector('button[type=submit]');
+    const thumbnail = section('サムネイル', saveForm);
+    const preview = el('div', null); thumbnailOrFallback(preview, game); thumbnail.append(preview);
+    const label = el('label', '画像を選択（PNG・JPEG・WebP、5MB以下）');
+    const input = el('input', null, { name: 'thumbnail', type: 'file', accept: 'image/png,image/jpeg,image/webp', 'aria-label': '変更するサムネイル' });
+    input.addEventListener('change', () => {
+      const file = input.files?.[0]; if (!file) return;
+      if (!['image/png','image/jpeg','image/webp'].includes(file.type) || !file.size || file.size > 5242880) { notice(errors.invalid_thumbnail); input.value = ''; return; }
+      preview.dataset.replaced = 'true';
+      if (previewUrl) URL.revokeObjectURL(previewUrl); previewUrl = URL.createObjectURL(file);
+      preview.replaceChildren(el('img', null, { src: previewUrl, alt: '新しいサムネイルのプレビュー', class: 'thumbnail-preview' }));
+    });
+    label.append(input); thumbnail.append(label);
+    const basics = section('基本情報', saveForm); basics.append(...labels.slice(0, 5), picker.element);
+    const visibility = section('公開設定', saveForm); visibility.append(...labels.slice(5));
+    const help = el('p', '', { class: 'muted' }); visibility.append(help); visibilityGuidance(saveForm, help);
+    const files = section(game.status === 'uploading' ? 'ゲームファイルを再送' : 'ゲームファイルを変更', saveForm);
+    files.append(el('p', '変更する場合だけ、HTML・ZIP・Web書き出しのファイル一式を選んでください（最大50MB）。', { class: 'muted' }));
+    files.append(el('p', 'ファイルを差し替えると再審査になります。下書きと信頼済み投稿者は審査を省略します。', { class: 'muted' }));
+    const packageLabel = el('label', 'ゲームファイル（任意）');
+    packageLabel.append(el('input', null, { type: 'file', name: 'package', multiple: '', 'aria-label': 'ゲームファイルを再選択' })); files.append(packageLabel);
+    const footer = el('div', null, { class: 'editor-save' });
+    footer.append(submit, el('p', '', { class: 'message upload-status', role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' }));
+    saveForm.append(footer);
   } else {
     const basics = section('基本情報', grid);
     basics.append(el('p', game.description || '説明はありません。', { class: 'muted' }));
-    basics.append(el('p', game.controls ? `操作方法: ${game.controls}` : '操作方法は未設定です。', { class: 'muted' }));
     basics.append(el('p', '公開停止中のため編集できません。', { class: 'muted' }));
-  }
-  if (!['unpublished'].includes(game.status)) {
-    const visibility = section('公開設定', grid);
-    const help = el('p', '', { class: 'muted' }); visibility.append(help);
-    const visibilityForm = form(visibility, [
-      field('visibility', '公開範囲', 'select', { value: game.visibility, choices: visibilityChoices }),
-      shareField(game.shared_user_ids),
-      field('published_at', '公開日時（空欄で即時）', 'datetime-local', {
-        value: game.published_at ? localDateTime(game.published_at) : '', optional: true }),
-    ], '公開設定を保存', async data => {
-      await api('user.submission.visibility', { submission_id: game.id, visibility: data.visibility,
-        ...(data.shared_user_ids!==undefined?{shared_user_ids:data.shared_user_ids}:{}),
-        published_at: data.published_at ? new Date(data.published_at).toISOString() : '' });
-      await account(); notice('公開設定を保存しました。');
-    });
-    visibilityForm.classList.add('stacked-form');
-    visibilityGuidance(visibilityForm, help);
-  }
-  if (['uploading','draft','pending','approved','rejected'].includes(game.status)) {
-    const replacement = game.status !== 'uploading';
-    const retry = section(replacement ? 'ゲームファイルを変更' : 'ゲームファイルを再送', grid);
-    retry.append(el('p', 'HTML、ZIP、またはWeb書き出しのファイル一式を選び直してください。', { class: 'muted' }));
-    if (replacement) retry.append(el('p', '同じゲームURLのまま差し替えます。公開・限定公開のゲームは再審査になります（信頼済み投稿者は審査を省略）。送信に失敗した場合は現在のファイルが残ります。', { class: 'muted' }));
-    const retryForm = form(retry, [], replacement ? 'ファイルを変更する' : 'ファイルを再送する', async () => {
-      const file = await packageWebFiles(retryForm.elements.package?.files ?? []);
-      await uploadPackage(game.id, file, account, null, replacement);
-    });
-    retryForm.classList.add('stacked-form');
-    retryForm.append(el('p', '', { class: 'message upload-status', role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' }));
-    const packageLabel = el('label', 'ゲームファイル（HTML・ZIP・複数ファイル、最大50MB）');
-    const packageInput = el('input', null, { type: 'file', name: 'package', multiple: '', 'aria-label': 'ゲームファイルを再選択', required: 'required' });
-    packageLabel.append(packageInput);
-    retryForm.querySelector('button[type=submit]').before(packageLabel);
   }
   const removal = section('ゲームを削除する', grid);
   removal.append(el('p', 'ゲーム情報とアップロードしたファイルを削除します。元に戻せません。公開をやめるだけなら、公開範囲を「下書き」に変更してください。', { class: 'muted' }));

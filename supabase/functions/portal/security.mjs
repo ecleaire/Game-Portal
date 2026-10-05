@@ -1,5 +1,5 @@
 export const actions = new Set([
-  'user.shared.games','admin.submission.delete','admin.account.delete','admin.cleanup',
+  'user.submission.save','user.shared.games','admin.submission.delete','admin.account.delete','admin.cleanup',
   'admin.admin.rename','admin.admin.role','admin.admin.disable','admin.admin.enable','admin.admin.kick','admin.admin.password','admin.admin.delete',
   'admin.tags', 'admin.tag.create', 'admin.tag.update', 'admin.submission.tags',
   'portal.login', 'user.login', 'admin.login', 'logout', 'user.me', 'user.profile', 'user.rename', 'user.password',
@@ -22,7 +22,7 @@ export async function digest(value, pepper) {
   return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
 }
 
-export async function readBody(request, maximum = 8192) {
+export async function readBody(request, maximum = 32768) {
   if (!request.headers.get('content-type')?.toLowerCase().startsWith('application/json')) throw new Error('content_type');
   if (!request.body) throw new Error('invalid_request');
   const reader = request.body.getReader();

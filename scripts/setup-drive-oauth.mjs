@@ -6,16 +6,27 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 async function main() {
-  const [clientFile, outputFile] = process.argv.slice(2);
+  const [clientFile, outputFile, option, existingFile] = process.argv.slice(2);
   if (!clientFile || !outputFile) throw new Error('Usage: node scripts/setup-drive-oauth.mjs CLIENT_JSON OUTPUT_ENV (both files outside the repository)');
+  if (option && (option !== '--reconnect' || !existingFile)) throw new Error('To reconnect, append --reconnect EXISTING_ENV.');
   const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-  for (const file of [clientFile, outputFile]) {
+  for (const file of [clientFile, outputFile, ...(existingFile ? [existingFile] : [])]) {
     const path = resolve(file).toLowerCase();
     if (path === repo.toLowerCase() || path.startsWith(`${repo.toLowerCase()}\\`) || path.startsWith(`${repo.toLowerCase()}/`)) throw new Error('Keep credentials outside the repository.');
   }
   let client;
   try { client = JSON.parse(await readFile(clientFile, 'utf8')).installed; } catch { throw new Error('Cannot read desktop OAuth client JSON.'); }
   if (!client?.client_id || !client?.client_secret) throw new Error('Download a Desktop app OAuth client JSON from Google Cloud Console.');
+  let existing;
+  if (existingFile) {
+    try {
+      existing = Object.fromEntries((await readFile(existingFile, 'utf8')).split(/\r?\n/).filter(line => line && !line.startsWith('#')).map(line => {
+        const at = line.indexOf('='); return [line.slice(0, at), line.slice(at + 1)];
+      }));
+      if (JSON.parse(existing.GOOGLE_DRIVE_OAUTH_JSON).client_id !== client.client_id) throw new Error();
+      if (!['PENDING','APPROVED','REJECTED'].every(name => /^[A-Za-z0-9_-]{10,200}$/.test(existing[`GOOGLE_DRIVE_${name}_FOLDER_ID`] ?? ''))) throw new Error();
+    } catch { throw new Error('Reconnect requires the original client and an existing environment file containing all three folder IDs. No values were printed.'); }
+  }
   // Fail before consent when the output already exists; never overwrite credentials.
   const output = await open(outputFile, 'wx', 0o600);
   try {
@@ -68,6 +79,23 @@ async function main() {
     const granted = new Set((token.scope ?? '').split(' '));
     if (!granted.has('https://www.googleapis.com/auth/drive.file')) throw new Error('Drive file permission was not granted.');
     const credentials = JSON.stringify({ client_id: client.client_id, client_secret: client.client_secret, refresh_token: token.refresh_token });
+    if (existing) {
+      // Keep every existing archive in place. A different owner/client must not
+      // silently replace the configured storage with newly created folders.
+      for (const name of ['PENDING','APPROVED','REJECTED']) {
+        const id = existing[`GOOGLE_DRIVE_${name}_FOLDER_ID`];
+        const response = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?fields=id,mimeType,trashed,capabilities(canAddChildren)&supportsAllDrives=true`, {
+          headers: { Authorization: `Bearer ${token.access_token}` }, signal: AbortSignal.timeout(15000),
+        });
+        const folder = await response.json().catch(() => null);
+        if (!response.ok || folder?.mimeType !== 'application/vnd.google-apps.folder' || folder.trashed || folder.capabilities?.canAddChildren !== true)
+          throw new Error('The authorized owner cannot write to the existing folders. Existing configuration was not changed.');
+      }
+      await output.write(`GOOGLE_DRIVE_OAUTH_JSON=${credentials}\n`);
+      for (const name of ['PENDING','APPROVED','REJECTED']) await output.write(`GOOGLE_DRIVE_${name}_FOLDER_ID=${existing[`GOOGLE_DRIVE_${name}_FOLDER_ID`]}\n`);
+      console.log('Reconnected to the existing private folders. Update only GOOGLE_DRIVE_OAUTH_JSON in Supabase Secrets from the new output file.');
+      return;
+    }
     // Save the credential first so a folder-creation failure can be recovered.
     await output.write(`GOOGLE_DRIVE_OAUTH_JSON=${credentials}\n`);
     const folder = async (name, parent) => {

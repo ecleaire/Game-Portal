@@ -201,7 +201,7 @@ for (const retry of [false, true]) test(`HTML ${retry ? 'resend' : 'upload'} rec
   const fileInput = page.getByLabel(retry ? 'ゲームファイルを再選択' : 'ゲームファイルを選択');
   expect(await fileInput.getAttribute('accept')).toBeNull();
   await fileInput.setInputFiles({ name: 'my-game.html', mimeType: 'text/html', buffer: Buffer.from('<!doctype html><html><body>Game</body></html>') });
-  const submitText = retry ? 'ファイルを再送する' : 'ゲームを投稿';
+  const submitText = retry ? '変更を保存' : 'ゲームを投稿';
   await page.getByRole('button', { name: submitText, exact: true }).click();
   await uploadReceived;
   await expect(page.getByRole('button', { name: submitText, exact: true })).toBeDisabled();
@@ -215,7 +215,7 @@ for (const retry of [false, true]) test(`HTML ${retry ? 'resend' : 'upload'} rec
   release();
   if (retry) {
     await expect(page.getByRole('heading', { name: 'ゲームファイルを再送' })).toHaveCount(0);
-    await expect(page.locator('#message')).toContainText('下書きに保存しました');
+    await expect(page.locator('#message')).toContainText('ゲームファイルも保存しました');
   } else {
     await expect(page.getByRole('heading', { name: '投稿が完了しました' })).toBeVisible();
     await expect(page.getByRole('link', { name: '投稿したゲームを管理・プレイ →' })).toHaveAttribute('href', /game=upload-result/);
@@ -409,19 +409,19 @@ test('owners can add and replace a submitted thumbnail without changing the game
  const user=await context.newPage();await user.goto('http://127.0.0.1:4173/Game-Portal/');await user.evaluate(token=>sessionStorage.setItem('game-portal.user.session.v1',token),made.token);
  await user.goto('http://127.0.0.1:4173/Game-Portal/account/?game='+made.id);
  const image=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aXWQAAAAASUVORK5CYII=','base64');
- await user.getByLabel('変更するサムネイル',{exact:true}).setInputFiles({name:'first.png',mimeType:'image/png',buffer:image});
- await expect(user.getByAltText('新しいサムネイルのプレビュー')).toBeVisible();await user.getByRole('button',{name:'サムネイルを追加',exact:true}).click();
- await expect(user.locator('#message')).toHaveText('サムネイルを更新しました。');await expect(user.getByRole('button',{name:'サムネイルを変更',exact:true})).toBeVisible();
- await user.getByLabel('変更するサムネイル',{exact:true}).setInputFiles({name:'second.png',mimeType:'image/png',buffer:image});await user.getByRole('button',{name:'サムネイルを変更',exact:true}).click();
- await expect(user.locator('#message')).toHaveText('サムネイルを更新しました。');await expect(user.getByRole('heading',{name:'Thumbnail test',exact:true})).toBeVisible();
- await user.getByLabel('ゲームファイルを再選択',{exact:true}).setInputFiles({name:'first.html',mimeType:'text/html',buffer:Buffer.from('<!doctype html><html><body>first</body></html>')});
- await user.getByRole('button',{name:'ファイルを再送する',exact:true}).click();await expect(user.getByRole('button',{name:'ファイルを変更する',exact:true})).toBeVisible();
+ await user.getByLabel('ゲーム名',{exact:true}).fill('Thumbnail edited');await user.getByLabel('説明（任意）',{exact:true}).fill('Unified editor description');await user.getByLabel('変更するサムネイル',{exact:true}).setInputFiles({name:'first.png',mimeType:'image/png',buffer:image});
+ await expect(user.getByAltText('新しいサムネイルのプレビュー')).toBeVisible();await expect.poll(()=>user.getByAltText('新しいサムネイルのプレビュー').evaluate(img=>img.naturalWidth)).toBeGreaterThan(0);await expect(user.locator('.game-edit-form button[type=submit]')).toHaveCount(1);await user.getByRole('button',{name:'変更を保存',exact:true}).click();
+ await expect(user.locator('#message')).toHaveText('変更を保存しました。');await expect.poll(()=>user.locator('.game-edit-form img').evaluate(img=>img.naturalWidth)).toBeGreaterThan(0);await expect(user.getByRole('button',{name:'変更を保存',exact:true})).toBeVisible();
+ await user.getByLabel('変更するサムネイル',{exact:true}).setInputFiles({name:'second.png',mimeType:'image/png',buffer:image});await user.getByRole('button',{name:'変更を保存',exact:true}).click();
+ await expect(user.locator('#message')).toHaveText('変更を保存しました。');await expect(user.getByRole('heading',{name:'Thumbnail edited',exact:true})).toBeVisible();
+ await user.getByRole('combobox',{name:'公開範囲',exact:true}).selectOption('unlisted');await user.getByLabel('ゲームファイルを再選択',{exact:true}).setInputFiles({name:'first.html',mimeType:'text/html',buffer:Buffer.from('<!doctype html><html><body>first</body></html>')});
+ await user.getByRole('button',{name:'変更を保存',exact:true}).click();await expect(user.locator('#message')).toContainText('ゲームファイルも保存しました');
  await user.getByLabel('ゲームファイルを再選択',{exact:true}).setInputFiles({name:'new.html',mimeType:'text/html',buffer:Buffer.from('<!doctype html><html><body>updated</body></html>')});
- await user.getByRole('button',{name:'ファイルを変更する',exact:true}).click();await expect(user.locator('#message')).toContainText('下書きに保存しました');
- await expect(user.getByRole('heading',{name:'Thumbnail test',exact:true})).toBeVisible();await expect(user.getByRole('button',{name:'サムネイルを変更',exact:true})).toBeVisible();
- await user.screenshot({path:'test-results/package-replacement.png',fullPage:true});
+ await user.getByRole('button',{name:'変更を保存',exact:true}).click();await expect(user.locator('#message')).toContainText('ゲームファイルも保存しました');
+ await expect(user.getByRole('heading',{name:'Thumbnail edited',exact:true})).toBeVisible();await expect(user.getByRole('button',{name:'変更を保存',exact:true})).toBeVisible();
+ await expect(user.getByLabel('説明（任意）',{exact:true})).toHaveValue('Unified editor description');await expect(user.getByRole('combobox',{name:'公開範囲',exact:true})).toHaveValue('unlisted');await expect.poll(()=>user.locator('.game-edit-form img').evaluate(img=>img.naturalWidth)).toBeGreaterThan(0);await user.screenshot({path:'test-results/package-replacement.png',fullPage:true});
  await user.setViewportSize({width:390,height:844});expect(await user.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
- await user.locator('.editor-grid > section').filter({has:user.getByRole('heading',{name:'サムネイル',exact:true})}).screenshot({path:'test-results/thumbnail-edit-mobile.png'});
+ await user.locator('.game-edit-form > section').filter({has:user.getByRole('heading',{name:'サムネイル',exact:true})}).screenshot({path:'test-results/thumbnail-edit-mobile.png'});
 });
 
 test('account sharing, administrator management and permanent deletion work through real authorization',async({context,page})=>{

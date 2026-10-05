@@ -501,6 +501,20 @@ test('only super admins manage admin accounts; sessions revoke and audit survive
  assert.ok((await api('admin.audit',{},adminToken)).events.some(e=>e.action==='admin.admin.delete'&&e.target_id===id));
 });
 
+test('unified game editor commits metadata and sharing together and rolls back invalid sharing', async()=>{
+ const made=await api('admin.create',{username:'editor_save_user',password:original,role:'uploader'},adminToken);
+ const owner=await login('editor_save_user');const game=await api('user.submission.create',{title:'Before save',engine:'other',version:'1',visibility:'draft'},owner.hash);
+ const body={submission_id:game.submission.id,title:'After save',engine:'other',version:'2',description:'説明',controls:'操作',tag_ids:[],visibility:'shared',shared_user_ids:[],published_at:''};
+ assert.equal((await api('user.submission.save',body,owner.hash)).error,'invalid_shares');
+ let current=(await api('user.submissions',{},owner.hash)).submissions[0];assert.equal(current.title,'Before save');assert.equal(current.visibility,'draft');
+ const friend=await api('admin.create',{username:'editor_save_friend',password:original,role:'player'},adminToken);
+ const saved=await api('user.submission.save',{...body,shared_user_ids:[friend.user.id]},owner.hash);assert.equal(saved.submission.title,'After save');assert.equal(saved.submission.visibility,'shared');assert.deepEqual(saved.submission.shared_user_ids,[friend.user.id]);
+ const outsider=await login('editor_save_friend');assert.equal((await api('user.submission.save',body,outsider.hash)).error,'not_found');
+ assert.equal((await api('user.submission.save',body,adminToken)).error,'forbidden');
+ const invalid=await api('user.submission.save',{...body,title:'Bad second change',shared_user_ids:[friend.user.id],published_at:'2100-01-01T00:00:00Z'},owner.hash);assert.equal(invalid.error,'invalid_request');
+ current=(await api('user.submissions',{},owner.hash)).submissions[0];assert.equal(current.title,'After save');assert.deepEqual(current.shared_user_ids,[friend.user.id]);
+});
+
 test('expired and deactivated admin sessions cannot perform management', async () => {
   const next = await login('owner', adminPassword, true);
   await db.query("update portal_private.sessions set expires_at=now()-interval '1 second' where token_hash=$1", [next.hash]);

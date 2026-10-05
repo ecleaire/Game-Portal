@@ -36,3 +36,5 @@ Godotでは**Web**プリセットから「プロジェクトをエクスポー�
 投稿済みゲームのファイル変更は[ファイル差し替え](docs/PACKAGE_REPLACEMENT.md)を参照してください。
 
 [アカウント指定の共有・管理者管理・完全削除](docs/SHARING_AND_ACCOUNT_MANAGEMENT.md)
+
+投稿済みゲームの一括編集・画像表示・保存仕様は[ゲーム編集](docs/GAME_EDITOR.md)を参照してください。
