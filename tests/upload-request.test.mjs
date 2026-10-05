@@ -39,3 +39,10 @@ test('a lost success response is recovered only for the exact completed submissi
   }
   await assert.rejects(uploadWithRecovery(send, async () => { throw new Error('unavailable'); }, 'game'), /upload_timeout/);
 });
+
+test('replacement recovery requires the new revision, never the old ready package', async()=>{
+ const send=async()=>{throw new Error('upload_timeout')};const old={id:'game',package_ready:true,status:'approved',package_revision:'old'};
+ await assert.rejects(uploadWithRecovery(send,async()=>({submissions:[old]}),'game','new'),/upload_timeout/);
+ const saved={...old,package_revision:'new',status:'pending'};
+ assert.deepEqual(await uploadWithRecovery(send,async()=>({submissions:[saved]}),'game','new'),saved);
+});

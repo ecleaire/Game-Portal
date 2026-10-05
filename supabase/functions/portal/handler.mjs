@@ -95,6 +95,23 @@ export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleS
           'Content-Disposition': thumbnail ? 'inline' : 'attachment; filename="game.zip"' } });
       } catch (error) { return reply({ error: error?.message === 'invalid_request' ? 'invalid_request' : 'unavailable' }, 503); }
     }
+    if (['/shared-game','/shared-package'].some(path=>requestUrl.pathname.endsWith(path))) {
+      const supplied=request.headers.get('x-portal-session');
+      if (!/^[a-f0-9]{64}$/.test(supplied ?? '')) return reply({error:'unauthorized'},401);
+      try {
+        const {slug}=await privateJson();
+        if(typeof slug!=='string'||!/^[a-f0-9]{36}$/.test(slug))return reply({error:'invalid_request'},400);
+        const checked=await rpc('user.shared.game',{slug},supplied);const failed=internalError(checked);if(failed)return failed;
+        const game=checked.result.game;
+        if(requestUrl.pathname.endsWith('/shared-package')) {
+          const response=await fetcher(storageUrl('portal-packages',game.package_storage_key),{headers:{apikey:serviceKey,Authorization:`Bearer ${serviceKey}`},signal:AbortSignal.timeout(60000)});
+          if(!response.ok)return reply({error:'unavailable'},503);
+          return new Response(response.body,{headers:{...headers,'Content-Type':'application/zip'}});
+        }
+        delete game.package_storage_key;delete game.thumbnail_key;delete game.drive_file_id;
+        return reply({game});
+      }catch{return reply({error:'unavailable'},503);}
+    }
     if (requestUrl.pathname.endsWith('/update-thumbnail')) {
       const supplied = request.headers.get('x-portal-session');
       if (!/^[a-f0-9]{64}$/.test(supplied ?? '')) return reply({ error: 'unauthorized' }, 401);
@@ -175,14 +192,16 @@ export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleS
         const form = await request.formData();
         const submissionId = form.get('submission_id'); const file = form.get('package');
         if (typeof submissionId !== 'string' || !(file instanceof File)) return reply({ error: 'invalid_request' }, 400);
-        const before = await rpc('user.submission.prepare', { submission_id: submissionId }, supplied);
+        const revision = form.get('package_revision');
+        if (revision !== null && (typeof revision !== 'string' || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(revision))) return reply({ error: 'invalid_request' }, 400);
+        const before = await rpc(revision ? 'user.submission.replace_prepare' : 'user.submission.prepare', { submission_id: submissionId }, supplied);
         if (!before.response.ok || before.result?.error) return reply({ error: before.result?.error ?? 'unavailable' }, statusFor(before.result?.error ?? 'unavailable'));
         const thumbnail = form.get('thumbnail');
         const types = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' };
         if (thumbnail instanceof File && thumbnail.size && (!types[thumbnail.type] || thumbnail.size > 5242880))
           return reply({ error: 'invalid_thumbnail' }, 400);
         const bytes = new Uint8Array(await file.arrayBuffer()); validateZip(bytes);
-        const packageKey = `${submissionId}.zip`;
+        const packageKey = revision ? `${submissionId}-${revision}-${token()}.zip` : `${submissionId}.zip`;
         await storeObject('portal-packages', packageKey, bytes, 'application/zip');
         let thumbnailKey = '';
         if (thumbnail instanceof File && thumbnail.size) {
@@ -191,9 +210,16 @@ export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleS
         }
         const stored = await storePrivateZip({ serviceAccountJson: googleServiceAccountJson, oauthJson: googleDriveOAuthJson,
           pendingFolderId: googlePendingFolderId, submissionId, file, bytes, fetcher });
-        const after = await rpc('user.submission.complete', { submission_id: submissionId, drive_file_id: stored.id,
-          package_name: stored.name, package_size: String(stored.size), package_storage_key: packageKey, thumbnail_key: thumbnailKey }, supplied);
+        const after = await rpc(revision ? 'user.submission.replace_complete' : 'user.submission.complete', { submission_id: submissionId, drive_file_id: stored.id,
+          package_name: stored.name, package_size: String(stored.size), package_storage_key: packageKey, thumbnail_key: thumbnailKey,
+          ...(revision ? { package_revision: revision, previous_updated_at: before.result.updated_at } : {}) }, supplied);
         if (!after.response.ok || after.result?.error) return reply({ error: after.result?.error ?? 'unavailable' }, statusFor(after.result?.error ?? 'unavailable'));
+        if (revision && before.result.previous_key && before.result.previous_key !== packageKey) {
+          // The database has committed the new revision. Old Drive ZIPs remain private archives.
+          try { await fetcher(`${url.replace(/\/$/, '')}/storage/v1/object/portal-packages`, {
+            method: 'DELETE', headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prefixes: [before.result.previous_key] }), signal: AbortSignal.timeout(10000) }); } catch { /* Best-effort; private orphan only. */ }
+        }
         return reply(after.result);
       } catch (error) {
         const name = error?.message;
@@ -284,9 +310,11 @@ export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleS
       }
       if (!result || typeof result !== 'object') return reply({ error: 'unavailable' }, 503);
       if (result.error) return reply({ error: result.error }, statusFor(result.error));
-      if (input.action === 'user.submission.delete' && result.deleted === true) {
+      if (['user.submission.delete','admin.submission.delete','admin.account.delete','admin.cleanup'].includes(input.action) && result.deleted === true) {
+        const ids=result.cleanup_ids ?? [input.data.submission_id];let pending=ids.length>10;
+        for(const cleanupId of ids.slice(0,10)) {
         try {
-          const files = await publicRpc('portal_submission_cleanup', { p_id: input.data.submission_id });
+          const files = await publicRpc('portal_submission_cleanup', { p_id: cleanupId });
           if (files) {
             const removeObject = async (bucket, key) => {
               if (!key) return;
@@ -301,12 +329,15 @@ export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleS
               removeObject('portal-thumbnails', files.thumbnail_key),
               ...(files.drive_file_id ? [deletePrivateZip({ serviceAccountJson: googleServiceAccountJson,
                 oauthJson: googleDriveOAuthJson, fileId: files.drive_file_id, fetcher })] : []),
+              ...(files.extra_assets ?? []).filter(asset=> !((asset.bucket==='drive'&&asset.key===files.drive_file_id)||(asset.bucket==='portal-packages'&&asset.key===files.package_storage_key)||(asset.bucket==='portal-thumbnails'&&asset.key===files.thumbnail_key))).map(asset=>asset.bucket==='drive'
+                ? deletePrivateZip({serviceAccountJson:googleServiceAccountJson,oauthJson:googleDriveOAuthJson,fileId:asset.key,fetcher}) : removeObject(asset.bucket,asset.key)),
             ]);
             if (removed.some(item => item.status === 'rejected')) throw new Error('cleanup_pending');
-            await publicRpc('portal_submission_cleanup', { p_id: input.data.submission_id, p_complete: true });
+            await publicRpc('portal_submission_cleanup', { p_id: cleanupId, p_complete: true });
           }
-          return reply({ deleted: true, cleanup_pending: false });
-        } catch { return reply({ deleted: true, cleanup_pending: true }); }
+        } catch { pending=true; }
+        }
+        return reply({deleted:true,deleted_games:result.deleted_games,cleanup_pending:pending});
       }
       return reply(fresh ? { ...result, token: fresh } : result);
     } catch { return reply({ error: 'unavailable' }, 503); }

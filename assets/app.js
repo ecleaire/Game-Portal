@@ -1,5 +1,5 @@
 import { config } from './config.js';
-import { loadTags, tagFilter, tagChips } from './tags.js?v=20261004b';
+import { loadTags, tagFilter, tagChips } from './tags.js?v=20261004d';
 let selectedTags = new Set(new URLSearchParams(location.search).getAll('tag'));
 let games = [];
 let activeFilter = "all";

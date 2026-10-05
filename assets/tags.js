@@ -21,7 +21,7 @@ export function tagChips(tags = [], limit = Infinity, home = '../') {
   return list;
 }
 // A shared accessible picker for submission, editing, moderation and filtering.
-export function tagPicker(tags, selected = [], { maximum = 8, title = 'タグ', onChange = () => {}, filter = false } = {}) {
+export function tagPicker(tags, selected = [], { maximum = 22, title = 'タグ', onChange = () => {}, filter = false } = {}) {
   const picked = new Set(selected.map(t => typeof t === 'string' ? t : t.id));
   const box = node('fieldset', null, 'tag-picker'); box.append(node('legend', title));
   const counter = node('p', '', 'tag-count'); counter.setAttribute('aria-live','polite'); box.append(counter);

@@ -1,4 +1,5 @@
 import { config } from './config.js';
+import { userSessionKey } from './navigation.js?v=20261003a';
 import { tagChips } from './tags.js?v=20261004a';
 import { unpackPrivateZip, privatePreviewDocument } from './private-preview.js?v=20260929a';
 
@@ -11,6 +12,7 @@ const reloadButton = document.getElementById('reloadButton');
 const fullscreenButton = document.getElementById('fullscreenButton');
 const shareButton = document.getElementById('shareButton');
 let loadingGame = false;
+let sharedMode=false;
 function showError(message) {
   loading.textContent = message; loading.hidden = false; loading.classList.add('is-error');
   frame.style.visibility = 'hidden'; shell.setAttribute('aria-busy', 'false');
@@ -34,8 +36,9 @@ function showGame(game) {
   shareButton.disabled = false;
 }
 async function publicPost(path, slug) {
+  const token=sessionStorage.getItem(userSessionKey);
   const response = await fetch(`${config.supabaseUrl}/functions/v1/portal/${path}`, { method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...(config.anonKey ? { apikey: config.anonKey } : {}) },
+    headers: { 'Content-Type': 'application/json', ...(config.anonKey ? { apikey: config.anonKey } : {}),...(path.startsWith('shared-')&&token?{'X-Portal-Session':token}:{}) },
     body: JSON.stringify({ slug }), signal: AbortSignal.timeout(90000) });
   if (!response.ok) throw new Error(response.status === 404 ? 'not_found' : 'unavailable');
   return response;
@@ -55,10 +58,16 @@ async function load() {
   const slug = params.get('slug');
   if (slug) {
     if (!config.supabaseUrl || !/^[a-f0-9]{36}$/.test(slug)) throw new Error('not_found');
-    const { game } = await (await publicPost('public-game', slug)).json();
+    let response;
+    try { response=await publicPost('public-game',slug);sharedMode=false; }
+    catch(error){if(error.message!=='not_found')throw error;
+      if(!/^[a-f0-9]{64}$/.test(sessionStorage.getItem(userSessionKey)??''))throw new Error('private_or_missing');
+      response=await publicPost('shared-game',slug);sharedMode=true;
+    }
+    const { game } = await response.json();
     if (!game) throw new Error('not_found');
     showGame(game);
-    const archive = await (await publicPost('public-package', slug)).arrayBuffer();
+    const archive = await (await publicPost(sharedMode?'shared-package':'public-package', slug)).arrayBuffer();
     const files = await unpackPrivateZip(archive);
     frame.setAttribute('sandbox', 'allow-scripts');
     frame.setAttribute('referrerpolicy', 'no-referrer');
@@ -72,7 +81,10 @@ async function load() {
   }
 }
 function openGame() {
-  load().catch(error => showError(error.message === 'not_found' ? 'ゲームが見つからないか、公開前です。' : 'ゲームを読み込めませんでした。「再読み込み」で再試行できます。'));
+  load().catch(error => {
+    showError(error.message === 'private_or_missing' ? 'ゲームが見つからないか、ログインが必要な共有ゲームです。' : error.message === 'not_found' ? 'ゲームが見つからないか、閲覧権限がありません。' : 'ゲームを読み込めませんでした。「再読み込み」で再試行できます。');
+    if(error.message==='private_or_missing'&&!document.getElementById('sharedLogin')){const a=document.createElement('a');a.id='sharedLogin';a.textContent='ログインする';a.href='./login/';document.getElementById('gameDescription').after(a);}
+  });
 }
 openGame(); reloadButton.addEventListener('click', openGame);
 function updateFullscreen() {

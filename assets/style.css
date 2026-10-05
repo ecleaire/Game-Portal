@@ -382,3 +382,5 @@ h1, h2, h3, p { margin-top: 0; }
  .tag-filter-panel { padding:16px; } .tag-filter-selection { order:3; flex-basis:100%; }
  .tag-filter-selection:empty { display:none; } .tag-filter-clear { margin-left:auto; }
 }
+
+.account-id { overflow-wrap:anywhere; font-family:monospace; }

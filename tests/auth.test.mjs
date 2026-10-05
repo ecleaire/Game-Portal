@@ -74,7 +74,7 @@ test('user/admin sessions cannot cross authorization boundaries or spoof privile
   await assert.rejects(manage('admin.role', { role: 'super_admin' }), /check constraint/);
   assert.equal((await api('user.me', {}, userToken)).user.role, 'uploader');
   const users = await api('admin.users', {}, adminToken);
-  assert.equal(users.users[0].id, uid);
+  assert.equal(users.users.find(u=>u.kind==='user').id, uid);
 });
 test('shared login chooses the correct isolated domain and never falls back from an admin name', async () => {
   const freshAdmin = token();
@@ -106,7 +106,7 @@ test('users can update only their own safe display profile', async () => {
 });
 test('password validation, atomic failed creation and case-insensitive username uniqueness', async () => {
   await assert.rejects(api('admin.create', { username: 'bob', password: 'four' }, adminToken), /password/);
-  assert.equal((await api('admin.users', {}, adminToken)).users.length, 1);
+  assert.equal((await api('admin.users', {}, adminToken)).users.filter(u=>u.kind==='user').length, 1);
   const minimum = await api('admin.create', { username: 'five', password: 'short' }, adminToken);
   assert.equal(minimum.user.username, 'five');
   await assert.rejects(api('admin.create', { username: 'ALICE', password: original }, adminToken), /unique/);
@@ -283,7 +283,7 @@ test('drafts bypass review, unlisted links stay out of catalog, and future relea
   const id = made.submission.id, slug = made.submission.public_slug;
   const completed = await api('user.submission.complete', { submission_id: id, drive_file_id: 'draft-drive', package_name: 'game.zip', package_size: '100', package_storage_key: `${id}.zip` }, owner.hash);
   assert.equal(completed.submission.status, 'draft');
-  assert.equal((await api('admin.submissions', {}, adminToken)).submissions.some(item => item.id === id), false);
+  assert.equal((await api('admin.submissions', {}, adminToken)).submissions.some(item => item.id === id), true);
   assert.equal((await api('user.submission.preview', { submission_id: id }, owner.hash)).submission.drive_file_id, 'draft-drive');
   const future = new Date(Date.now() + 86400000).toISOString();
   const unlisted = await api('user.submission.visibility', { submission_id: id, visibility: 'unlisted', published_at: future }, owner.hash);
@@ -346,14 +346,14 @@ test('managed tags enforce ownership, active state, limits, moderation and publi
  await db.exec(await readFile(new URL('../supabase/tag-seed.sql',import.meta.url),'utf8'));
  assert.equal((await db.query('select count(*)::integer as n from portal_private.tags')).rows[0].n,77);
  await api('admin.create',{username:'tag_author',password:original,role:'uploader'},adminToken);
- const author=await login('tag_author'); const selected=seeded.slice(0,8).map(t=>t.id);
+ const author=await login('tag_author'); const selected=seeded.slice(0,22).map(t=>t.id);
  const body={title:'Tagged game',engine:'other',version:'1',visibility:'public',tag_ids:selected};
- for(const ids of [[...selected,seeded[8].id],[selected[0],selected[0]],[token().slice(0,36)],null]) {
+ for(const ids of [[...selected,seeded[22].id],[selected[0],selected[0]],[token().slice(0,36)],null]) {
   assert.equal((await api('user.submission.create',{...body,tag_ids:ids},author.hash)).error,'invalid_tags');
  }
  const made=await api('user.submission.create',body,author.hash); const id=made.submission.id;
- assert.equal(made.submission.tags.length,8);
- await assert.rejects(db.query('insert into portal_private.game_tags(game_id,tag_id) values($1,$2)',[id,seeded[8].id]),/tag_limit/);
+ assert.equal(made.submission.tags.length,22);
+ await assert.rejects(db.query('insert into portal_private.game_tags(game_id,tag_id) values($1,$2)',[id,seeded[22].id]),/tag_limit/);
  assert.equal((await api('admin.tags',{},author.hash)).error,'forbidden');
  assert.equal((await api('admin.tag.update',{tag_id:selected[0]},author.hash)).error,'forbidden');
  assert.equal((await api('user.submission.update',{...body,submission_id:id},adminToken)).error,'forbidden');
@@ -367,7 +367,7 @@ test('managed tags enforce ownership, active state, limits, moderation and publi
  await db.exec(await readFile(new URL('../supabase/tag-seed.sql',import.meta.url),'utf8'));
  assert.equal((await db.query('select count(*)::integer as n from portal_private.tags')).rows[0].n,77);
  assert.equal((await api('user.submission.create',body,author.hash)).error,'invalid_tags');
- assert.equal((await api('user.submission.update',{...body,submission_id:id},author.hash)).submission.tags.length,8);
+ assert.equal((await api('user.submission.update',{...body,submission_id:id},author.hash)).submission.tags.length,22);
  await api('user.submission.complete',{submission_id:id,drive_file_id:'test-only',package_name:'game.zip',package_size:'100',package_storage_key:'test-only.zip'},author.hash);
  assert.equal((await api('admin.submission.tags',{submission_id:id,tag_ids:[seeded[9].id]},adminToken)).submission.tags.length,1);
  await api('admin.submission.complete',{submission_id:id,status:'approved',package_storage_key:'test-only.zip'},adminToken);
@@ -405,6 +405,100 @@ test('thumbnail edits are owner-only, compare-and-swap and preserve review and p
  }
  await api('admin.ban',{user_id:owner.user.id,reason:'test'},adminToken);
  assert.equal((await api('user.submission.thumbnail_prepare',{submission_id:id},owner.hash)).error,'unauthorized');
+});
+
+test('package replacement is atomic, owner-only and returns changed public games to review', async () => {
+ await api('admin.create',{username:'replace_owner',password:original,role:'uploader'},adminToken);
+ await api('admin.create',{username:'replace_other',password:original,role:'uploader'},adminToken);
+ const owner=await login('replace_owner'),other=await login('replace_other');
+ const made=await api('user.submission.create',{title:'Replace me',engine:'other',version:'1',visibility:'public'},owner.hash);const id=made.submission.id;
+ await api('user.submission.complete',{submission_id:id,drive_file_id:'old-drive',package_name:'old.zip',package_size:'100',package_storage_key:'old.zip',thumbnail_key:'old.png'},owner.hash);
+ await api('admin.submission.complete',{submission_id:id,status:'approved',package_storage_key:'old.zip'},adminToken);
+ assert.equal((await api('user.submission.replace_prepare',{submission_id:id},other.hash)).error,'not_found');
+ const prepared=await api('user.submission.replace_prepare',{submission_id:id},owner.hash);
+ assert.equal((await api('user.submissions',{},owner.hash)).submissions[0].status,'approved');
+ const revision='00000000-0000-4000-8000-000000000018';const body={submission_id:id,previous_updated_at:prepared.updated_at,package_revision:revision,drive_file_id:'new-drive',package_name:'new.zip',package_size:'200',package_storage_key:id+'-'+revision+'-'+token()+'.zip'};
+ assert.equal((await api('user.submission.replace_complete',{...body,package_storage_key:'old.zip'},owner.hash)).error,'invalid_request');
+ const changed=await api('user.submission.replace_complete',body,owner.hash);
+ assert.equal(changed.submission.status,'pending');assert.equal(changed.submission.public_slug,made.submission.public_slug);assert.equal(changed.submission.has_thumbnail,true);assert.equal(changed.submission.package_revision,revision);
+ assert.equal((await api('user.submission.replace_complete',body,owner.hash)).error,'conflict');
+ assert.equal((await db.query('select public.portal_public_game($1) as game',[made.submission.public_slug])).rows[0].game,null);
+ await api('user.submission.visibility',{submission_id:id,visibility:'draft'},owner.hash);
+ const draft=await api('user.submission.replace_prepare',{submission_id:id},owner.hash);
+ assert.equal((await api('user.submission.replace_complete',{...body,previous_updated_at:draft.updated_at},owner.hash)).submission.status,'draft');
+ await api('admin.role',{user_id:owner.user.id,role:'trusted_uploader'},adminToken);
+ await api('user.submission.visibility',{submission_id:id,visibility:'public'},owner.hash);
+ const trusted=await api('user.submission.replace_prepare',{submission_id:id},owner.hash);
+ assert.equal((await api('user.submission.replace_complete',{...body,previous_updated_at:trusted.updated_at},owner.hash)).submission.status,'approved');
+ await api('admin.ban',{user_id:owner.user.id,reason:'test'},adminToken);
+ assert.equal((await api('user.submission.replace_complete',body,owner.hash)).error,'unauthorized');
+});
+
+test('account-specific sharing never exposes packages publicly and removal revokes access',async()=>{
+ for(const username of ['share_author','share_friend','share_stranger'])await api('admin.create',{username,password:original,role:username==='share_author'?'uploader':'player'},adminToken);
+ const author=await login('share_author'),friend=await login('share_friend'),stranger=await login('share_stranger');
+ const body={title:'Shared game',engine:'other',version:'1',visibility:'shared',shared_user_ids:[friend.user.id]};
+ assert.equal((await api('user.submission.create',{...body,shared_user_ids:[]},author.hash)).error,'invalid_shares');
+ assert.equal((await api('user.submission.create',{...body,shared_user_ids:[friend.user.id,friend.user.id]},author.hash)).error,'invalid_shares');
+ const made=await api('user.submission.create',body,author.hash);const id=made.submission.id,slug=made.submission.public_slug;
+ assert.equal(made.submission.visibility,'shared');assert.deepEqual(made.submission.shared_user_ids,[friend.user.id]);
+ await api('user.submission.complete',{submission_id:id,drive_file_id:'shared-drive',package_name:'game.zip',package_size:'100',package_storage_key:'shared.zip'},author.hash);
+ assert.equal((await api('user.shared.game',{slug},friend.hash)).error,'not_found');
+ await api('admin.submission.complete',{submission_id:id,status:'approved',package_storage_key:'shared.zip'},adminToken);
+ assert.equal((await db.query('select public.portal_public_game($1) as game',[slug])).rows[0].game,null);
+ assert.equal((await db.query('select public.portal_catalog() as games')).rows[0].games.some(g=>g.slug===slug),false);
+ assert.equal((await api('user.shared.game',{slug},stranger.hash)).error,'not_found');
+ assert.equal((await api('user.shared.game',{slug},adminToken)).error,'forbidden');
+ const received=await api('user.shared.game',{slug},friend.hash);assert.equal(received.game.package_storage_key,'shared.zip');assert.equal(received.game.shared_user_ids,undefined);
+ assert.ok((await api('user.shared.games',{},friend.hash)).games.some(g=>g.id===id));
+ await api('user.submission.visibility',{submission_id:id,visibility:'shared',shared_user_ids:[stranger.user.id],published_at:''},author.hash);
+ assert.equal((await api('user.shared.game',{slug},friend.hash)).error,'not_found');
+ assert.equal((await api('user.shared.games',{},friend.hash)).games.some(g=>g.id===id),false);
+ await api('user.submission.visibility',{submission_id:id,visibility:'shared',shared_user_ids:[stranger.user.id],published_at:new Date(Date.now()+3600000).toISOString()},author.hash);
+ assert.equal((await api('user.shared.game',{slug},stranger.hash)).error,'not_found');
+ await api('user.submission.visibility',{submission_id:id,visibility:'shared',shared_user_ids:[stranger.user.id],published_at:''},author.hash);
+ await api('admin.ban',{user_id:stranger.user.id,reason:'test'},adminToken);
+ assert.equal((await api('user.shared.game',{slug},stranger.hash)).error,'unauthorized');
+});
+
+test('admin deletion removes accounts, every game and credentials but durably retains file cleanup',async()=>{
+ await api('admin.create',{username:'delete_account',password:original,role:'uploader'},adminToken);const owner=await login('delete_account');let games=[];
+ for(let i=0;i<2;i++){
+  const made=await api('user.submission.create',{title:'Delete '+i,engine:'other',version:'1',visibility:'draft'},owner.hash);games.push(made.submission);
+  await api('user.submission.complete',{submission_id:made.submission.id,drive_file_id:'drive-'+i,package_name:'game.zip',package_size:'100',package_storage_key:'game-'+i+'.zip'},owner.hash);
+ }
+ const id=games[0].id;
+ await db.query('update portal_private.game_submissions set package_storage_key=$1,drive_file_id=$2 where id=$3',['revision.zip','revision-drive',id]);
+ assert.equal((await api('admin.submission.delete',{submission_id:id,title:games[0].title,confirmation:'delete'},owner.hash)).error,'forbidden');
+ assert.equal((await api('admin.account.delete',{user_id:owner.user.id,username:'delete_account'},adminToken)).error,'invalid_request');
+ const deleted=await api('admin.submission.delete',{submission_id:id,title:games[0].title,confirmation:'delete'},adminToken);assert.equal(deleted.deleted,true);
+ const queue=(await db.query('select public.portal_submission_cleanup($1) as files',[id])).rows[0].files;assert.equal(queue.extra_assets.length,4);
+ const all=await api('admin.account.delete',{user_id:owner.user.id,username:'delete_account',confirmation:'delete'},adminToken);assert.equal(all.deleted,true);assert.equal(all.cleanup_ids.length,2);
+ for(const table of ['users','user_passwords','sessions','game_submissions']){
+  const col=table==='users'?'id':'user_id';assert.equal((await db.query('select count(*)::integer n from portal_private.'+table+' where '+col+'=$1',[owner.user.id])).rows[0].n,0);
+ }
+ assert.equal((await login('delete_account')).error,'invalid_credentials');
+ assert.equal((await api('user.me',{},owner.hash)).error,'unauthorized');
+ assert.equal((await db.query('select count(*)::integer n from portal_private.submission_deletions where user_id=$1',[owner.user.id])).rows[0].n,2);
+ assert.ok((await api('admin.audit',{},adminToken)).events.some(e=>e.action==='admin.account.delete'&&e.target_id===owner.user.id));
+});
+
+test('only super admins manage admin accounts; sessions revoke and audit survives permanent deletion',async()=>{
+ const made=await api('admin.admin.create',{username:'managed_admin',password:original},adminToken);const id=made.admin.id;
+ const ordinary=await login('managed_admin',original,true);
+ const root=(await api('admin.me',{},adminToken)).admin;
+ const listed=(await api('admin.users',{},adminToken)).users;assert.ok(listed.some(u=>u.kind==='admin'&&u.id===id));assert.equal(JSON.stringify(listed).includes('password_hash'),false);
+ assert.equal((await api('admin.admin.disable',{admin_id:root.id},ordinary.hash)).error,'forbidden');
+ for(const action of ['admin.admin.delete','admin.admin.disable','admin.admin.role'])assert.equal((await api(action,{admin_id:root.id,confirmation:'delete',username:root.username,role:'admin'},adminToken)).error,'self_protected');
+ await api('admin.admin.role',{admin_id:id,role:'super_admin'},adminToken);assert.equal((await api('admin.me',{},ordinary.hash)).error,'unauthorized');
+ const promoted=await login('managed_admin',original,true);assert.equal(promoted.admin.role,'super_admin');
+ await api('admin.admin.password',{admin_id:id,password:'managed-new-password'},adminToken);assert.equal((await api('admin.me',{},promoted.hash)).error,'unauthorized');
+ await api('admin.admin.disable',{admin_id:id},adminToken);assert.equal((await login('managed_admin','managed-new-password',true)).error,'invalid_credentials');
+ await api('admin.admin.enable',{admin_id:id},adminToken);const active=await login('managed_admin','managed-new-password',true);assert.ok(active.admin);
+ assert.equal((await api('admin.admin.delete',{admin_id:id,username:'managed_admin',confirmation:'delete'},adminToken)).ok,true);
+ assert.equal((await api('admin.me',{},active.hash)).error,'unauthorized');
+ assert.equal((await db.query('select count(*)::integer n from portal_private.admin_users where id=$1',[id])).rows[0].n,0);
+ assert.ok((await api('admin.audit',{},adminToken)).events.some(e=>e.action==='admin.admin.delete'&&e.target_id===id));
 });
 
 test('expired and deactivated admin sessions cannot perform management', async () => {

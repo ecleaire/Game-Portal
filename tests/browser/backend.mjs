@@ -15,7 +15,17 @@ const imageObjects = new Map();
 const handler = createHandler({
   url: 'http://127.0.0.1:54321', serviceKey: 'browser-test-server-only',
   pepper: 'browser-test-only-pepper-not-for-production', allowedOrigins: 'http://127.0.0.1:4173',
+  googleDriveOAuthJson: JSON.stringify({client_id:'test-only',client_secret:'test-only',refresh_token:'test-only'}),
+  googlePendingFolderId: 'test-pending',
   fetcher: async (_url, options) => {
+    if (_url === 'https://oauth2.googleapis.com/token') return Response.json({access_token:'test-only',expires_in:3600});
+    if (_url.startsWith('https://www.googleapis.com/upload/drive/')) return Response.json({id:crypto.randomUUID()});
+    if (_url.includes('/storage/v1/object/portal-packages')) {
+      if (options.method === 'DELETE') { for (const key of JSON.parse(options.body).prefixes) imageObjects.delete(key); return Response.json({}); }
+      const key=decodeURIComponent(_url.split('/portal-packages/')[1]);
+      if (options.method === 'POST') { imageObjects.set(key,{bytes:options.body,type:'application/zip'});return Response.json({}); }
+      const file=imageObjects.get(key);return file?new Response(file.bytes,{headers:{'Content-Type':file.type}}):new Response(null,{status:404});
+    }
     if (_url.includes('/storage/v1/object/portal-thumbnails')) {
       if (options.method === 'DELETE') { for (const key of JSON.parse(options.body).prefixes) imageObjects.delete(key); return Response.json({}); }
       const key = decodeURIComponent(_url.split('/portal-thumbnails/')[1]);
@@ -24,6 +34,9 @@ const handler = createHandler({
     }
     const p = JSON.parse(options.body);
     try {
+      if(_url.endsWith('/rpc/portal_public_game')) {
+        const {rows}=await db.query('select public.portal_public_game($1) as result',[p.p_slug]);return Response.json(rows[0].result);
+      }
       if (_url.endsWith('/rpc/portal_tags') || _url.endsWith('/rpc/portal_catalog')) {
         const fn = _url.endsWith('/portal_tags') ? 'portal_tags' : 'portal_catalog';
         const { rows } = await db.query(`select public.${fn}() as result`);

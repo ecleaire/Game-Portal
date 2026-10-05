@@ -36,14 +36,14 @@ export function sendUpload(url, { body, headers, onProgress = () => {}, timeout 
 }
 
 // A lost response is not proof of failure. Confirm the exact submission before retrying.
-export async function uploadWithRecovery(send, lookup, submissionId) {
+export async function uploadWithRecovery(send, lookup, submissionId, revision = null) {
   try { return (await send()).submission; }
   catch (error) {
     if (!['upload_timeout', 'upload_network', 'upload_response', 'unavailable', 'conflict'].includes(error.message)) throw error;
     try {
       const { submissions } = await lookup();
       const saved = submissions.find(item => item.id === submissionId);
-      if (saved?.package_ready && ['draft', 'pending', 'approved'].includes(saved.status)) return saved;
+      if (saved?.package_ready && (!revision || saved.package_revision === revision) && ['draft', 'pending', 'approved'].includes(saved.status)) return saved;
     } catch { /* Preserve the original failure when status cannot be confirmed. */ }
     throw error;
   }

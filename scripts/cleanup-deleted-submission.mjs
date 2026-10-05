@@ -27,5 +27,16 @@ for (const [bucket, key] of [['portal-packages', files.package_storage_key], ['p
 }
 if (files.drive_file_id) await deletePrivateZip({ serviceAccountJson: process.env.GOOGLE_SERVICE_ACCOUNT_JSON ?? '',
   oauthJson: process.env.GOOGLE_DRIVE_OAUTH_JSON ?? '', fileId: files.drive_file_id });
+for(const asset of files.extra_assets ?? []) {
+  if(asset.bucket==='drive') {
+    if(asset.key===files.drive_file_id)continue;
+    await deletePrivateZip({serviceAccountJson:process.env.GOOGLE_SERVICE_ACCOUNT_JSON ?? '',oauthJson:process.env.GOOGLE_DRIVE_OAUTH_JSON ?? '',fileId:asset.key});
+  }else {
+    if((asset.bucket==='portal-packages'&&asset.key===files.package_storage_key)||(asset.bucket==='portal-thumbnails'&&asset.key===files.thumbnail_key))continue;
+    if(!['portal-packages','portal-thumbnails'].includes(asset.bucket))throw new Error('Unexpected storage bucket');
+    const response=await fetch(`${base}/storage/v1/object/${asset.bucket}`,{method:'DELETE',headers,body:JSON.stringify({prefixes:[asset.key]}),signal:AbortSignal.timeout(15000)});
+    if(!response.ok&&response.status!==404)throw new Error('Revision cleanup failed; pending work retained');
+  }
+}
 await rpc(true);
 console.log('Deleted submission files removed.');
