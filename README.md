@@ -1,5 +1,7 @@
 # Game Portal
 
+[Codex Cloudで開発するための環境作成・セットアップ手順](docs/CODEX_CLOUD.md)
+
 Godot / Scratch のWebゲームをまとめて遊べるゲームポータルです。
 
 ## 公開URL
