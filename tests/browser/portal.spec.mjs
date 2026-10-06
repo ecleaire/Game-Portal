@@ -78,6 +78,41 @@ test('published ZIP game opens through the isolated public player', async ({ con
   await page.screenshot({ path: 'test-results/player-mobile.png', fullPage: true });
 });
 
+for (const mode of ['public', 'shared']) test(`${mode} game downloads its ZIP before metadata completes`, async ({ context, page }) => {
+  const slug = 'd'.repeat(36);
+  const archive = await packageWebFiles([
+    new File(['<html><body>Parallel game works</body></html>'], 'index.html'),
+  ]);
+  const bytes = Buffer.from(await archive.arrayBuffer());
+  await context.route('**/assets/config.js', route => route.fulfill({ contentType: 'text/javascript',
+    body: 'export const config = { supabaseUrl: "http://127.0.0.1:54321", anonKey: "" };' }));
+  if (mode === 'shared') {
+    await context.addInitScript(() => sessionStorage.setItem('game-portal.user.session.v1', 'a'.repeat(64)));
+    await context.route('**/functions/v1/portal/public-game', route => route.fulfill({ status: 404, json: {} }));
+    await context.route('**/functions/v1/portal/public-package', route => route.fulfill({ status: 404, json: {} }));
+  }
+  let releaseMetadata;
+  const metadataGate = new Promise(resolve => { releaseMetadata = resolve; });
+  let packageRequests = 0;
+  await context.route(`**/functions/v1/portal/${mode}-game`, async route => {
+    await metadataGate;
+    await route.fulfill({ json: { game: { slug, title: 'Parallel test', engine: 'other' } } });
+  });
+  await context.route(`**/functions/v1/portal/${mode}-package`, async route => {
+    if (mode === 'shared') expect(route.request().headers()['x-portal-session']).toBe('a'.repeat(64));
+    packageRequests++;
+    await route.fulfill({ body: bytes, contentType: 'application/zip' });
+  });
+  await page.goto(`game.html?slug=${slug}`);
+  try {
+    // A serial implementation cannot issue this request while metadata is held.
+    await expect.poll(() => packageRequests).toBe(1);
+    await expect(page.locator('#gameFrame')).not.toHaveAttribute('srcdoc', /Parallel game works/);
+  } finally { releaseMetadata(); }
+  await expect(page.frameLocator('#gameFrame').locator('body')).toHaveText('Parallel game works');
+  await expect(page.locator('#playerStatus')).toHaveText('ゲームを表示しました');
+});
+
 for (const path of ['account/', 'upload/']) test(`${path} submission history supports search, sorting, manual order and scrolling`, async ({ context, page }) => {
   const games = Array.from({ length: 16 }, (_,index) => ({ id: `history-${index}`, title: `Game ${index + 1}`, engine: index % 2 ? 'scratch' : 'godot', version: `1.${index}`, description: index === 5 ? 'Special puzzle' : '', visibility: 'draft', status: index % 2 ? 'pending' : 'draft', created_at: new Date(2026,0,index+1).toISOString(), updated_at: new Date(2026,1,16-index).toISOString() }));
   const headers = { 'access-control-allow-origin': 'http://127.0.0.1:4173',

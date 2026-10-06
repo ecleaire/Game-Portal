@@ -12,7 +12,6 @@ const reloadButton = document.getElementById('reloadButton');
 const fullscreenButton = document.getElementById('fullscreenButton');
 const shareButton = document.getElementById('shareButton');
 let loadingGame = false;
-let sharedMode=false;
 function showError(message) {
   loading.textContent = message; loading.hidden = false; loading.classList.add('is-error');
   frame.style.visibility = 'hidden'; shell.setAttribute('aria-busy', 'false');
@@ -35,13 +34,31 @@ function showGame(game) {
   document.getElementById('versionText').hidden = !game.version;
   shareButton.disabled = false;
 }
-async function publicPost(path, slug) {
+async function publicPost(path, slug, signal) {
   const token=sessionStorage.getItem(userSessionKey);
   const response = await fetch(`${config.supabaseUrl}/functions/v1/portal/${path}`, { method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(config.anonKey ? { apikey: config.anonKey } : {}),...(path.startsWith('shared-')&&token?{'X-Portal-Session':token}:{}) },
-    body: JSON.stringify({ slug }), signal: AbortSignal.timeout(90000) });
+    body: JSON.stringify({ slug }), signal: AbortSignal.any([signal, AbortSignal.timeout(90000)]) });
   if (!response.ok) throw new Error(response.status === 404 ? 'not_found' : 'unavailable');
   return response;
+}
+// Both endpoints authorize independently. Start the ZIP transfer while metadata loads.
+async function fetchGame(mode, slug) {
+  const controller = new AbortController();
+  // Observe early transfer failures immediately, but keep metadata errors authoritative
+  // so only a missing public listing triggers the authenticated shared-game fallback.
+  const archive = publicPost(`${mode}-package`, slug, controller.signal)
+    .then(response => response.arrayBuffer())
+    .then(buffer => ({ buffer }), error => ({ error }));
+  try {
+    const response = await publicPost(`${mode}-game`, slug, controller.signal);
+    const { game } = await response.json();
+    if (!game) throw new Error('not_found');
+    return { game, archive, controller };
+  } catch (error) {
+    controller.abort();
+    throw error;
+  }
 }
 function setFrame(attribute, source) {
   frame.addEventListener('load', () => {
@@ -58,17 +75,19 @@ async function load() {
   const slug = params.get('slug');
   if (slug) {
     if (!config.supabaseUrl || !/^[a-f0-9]{36}$/.test(slug)) throw new Error('not_found');
-    let response;
-    try { response=await publicPost('public-game',slug);sharedMode=false; }
+    let result;
+    try { result = await fetchGame('public', slug); }
     catch(error){if(error.message!=='not_found')throw error;
       if(!/^[a-f0-9]{64}$/.test(sessionStorage.getItem(userSessionKey)??''))throw new Error('private_or_missing');
-      response=await publicPost('shared-game',slug);sharedMode=true;
+      result = await fetchGame('shared', slug);
     }
-    const { game } = await response.json();
-    if (!game) throw new Error('not_found');
-    showGame(game);
-    const archive = await (await publicPost(sharedMode?'shared-package':'public-package', slug)).arrayBuffer();
-    const files = await unpackPrivateZip(archive);
+    let archive;
+    try {
+      showGame(result.game);
+      archive = await result.archive;
+      if (archive.error) throw archive.error;
+    } finally { result.controller.abort(); }
+    const files = await unpackPrivateZip(archive.buffer);
     frame.setAttribute('sandbox', 'allow-scripts');
     frame.setAttribute('referrerpolicy', 'no-referrer');
     setFrame('srcdoc', privatePreviewDocument(files));
