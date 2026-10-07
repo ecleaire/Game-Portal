@@ -1,3 +1,5 @@
+import { gameReport } from './reports.js?v=20261008a';
+import { requireTerms } from './terms.js?v=20261008a';
 import { config } from './config.js';
 import { userSessionKey } from './navigation.js?v=20261003a';
 import { tagChips } from './tags.js?v=20261004a';
@@ -33,6 +35,7 @@ function showGame(game) {
   document.getElementById('versionText').textContent = game.version ? `v${game.version}` : '';
   document.getElementById('versionText').hidden = !game.version;
   shareButton.disabled = false;
+  gameReport(document.getElementById('playContent'), params.get('slug') || params.get('id'), game.title);
 }
 async function publicPost(path, slug, signal) {
   const token=sessionStorage.getItem(userSessionKey);
@@ -107,7 +110,9 @@ function openGame() {
     if(error.message==='private_or_missing'&&!document.getElementById('sharedLogin')){const a=document.createElement('a');a.id='sharedLogin';a.textContent='ログインする';a.href='./login/';document.getElementById('gameDescription').after(a);}
   });
 }
-openGame(); reloadButton.addEventListener('click', openGame);
+requireTerms(document.getElementById('playConsent'), { buttonText: '同意してゲームをプレイ' }).then(() => {
+  document.getElementById('playContent').hidden = false; openGame();
+}); reloadButton.addEventListener('click', openGame);
 function updateFullscreen() {
   const expanded = document.fullscreenElement === shell || shell.classList.contains('is-expanded');
   fullscreenButton.textContent = expanded ? '全画面を終了' : '全画面で遊ぶ';

@@ -2,6 +2,21 @@ import { test, expect } from '@playwright/test';
 import { packageWebFiles } from '../../assets/zip-upload.js';
 import { writeFile } from 'node:fs/promises';
 
+// Existing feature tests start with an explicit prior consent fixture. Consent gates
+// themselves are covered from a clean browser in terms.spec.mjs.
+test.beforeEach(async ({ context, request }) => {
+  const policy = await (await request.post('http://127.0.0.1:54321/functions/v1/portal/policy')).json();
+  await context.route('**/assets/config.js', route => route.fulfill({ contentType: 'text/javascript', body: 'export const config={supabaseUrl:"http://127.0.0.1:54321",anonKey:""};' }));
+  await context.addInitScript(version => {
+    try { localStorage.setItem('game-portal.terms.acceptance.v1',JSON.stringify({version,acceptedAt:new Date().toISOString()})); } catch {}
+  }, policy.terms.version);
+});
+async function submitLogin(page) {
+  const consent = page.locator('input[name="terms_accepted"]');
+  if (await consent.count()) await consent.check();
+  await page.getByRole('button', {name:'ログイン',exact:true}).click();
+}
+
 test('footer theme follows device changes and persists explicit overrides across pages', async ({ page, context }) => {
   await page.emulateMedia({ colorScheme: 'light' });
   await page.goto('./');
@@ -79,14 +94,13 @@ test('help and policy pages are linked, keyboard accessible and responsive', asy
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
   await page.getByRole('navigation', { name: 'サポート・ポリシー' }).getByRole('link', { name: '利用規約', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '利用規約', exact: true })).toBeVisible();
-  await expect(page.locator('.policy-draft')).toContainText('公開前の確認用ドラフト');
-  await expect(page.locator('#operator')).toContainText('GAMEPORTAL運営');
-  await expect(page.locator('#operator')).toContainText('問い合わせ窓口を設けていません');
+  await expect(page.getByRole('heading', { name: 'GAME PORTAL 利用規約', exact: true })).toBeVisible();
+  await expect(page.locator('.policy-draft')).toHaveCount(0);
+  await expect(page.locator('#operator')).toContainText('GAME PORTAL運営');
   await page.getByRole('navigation', { name: 'サポート・ポリシー' }).getByRole('link', { name: 'プライバシーポリシー', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'プライバシーポリシー', exact: true })).toBeVisible();
   await expect(page.locator('#providers')).toContainText('Google Drive');
-  await expect(page.locator('#operator')).toContainText('GAMEPORTAL運営');
+  await expect(page.locator('#operator')).toContainText('GAME PORTAL運営');
   for (const width of [1440, 768, 390, 320]) {
     await page.setViewportSize({ width, height: 1000 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -224,8 +238,12 @@ async function goto(page, path) {
   }
 }
 
-test('existing listing, search and public game player work without backend configuration', async ({ page }) => {
-  await goto(page, './');
+test('existing listing, search and public game player work with a policy service and retain unconfigured account screens', async ({ page, context }) => {
+  const openCatalog = async () => {
+    const tagsReady = page.waitForResponse(r => r.url().endsWith('/tags') && r.request().method() === 'POST');
+    await goto(page, './'); await tagsReady;
+  };
+  await openCatalog();
   await expect(page.locator('.game-card')).toHaveCount(2);
   await page.locator('#searchInput').fill('Scratch');
   await expect(page.locator('.game-card')).toHaveCount(1);
@@ -236,13 +254,14 @@ test('existing listing, search and public game player work without backend confi
   await expect(page.locator('#gameTitle')).toHaveText('Scratch Demo');
   await expect(page.locator('#gameFrame')).toHaveAttribute('src', 'games/scratch-demo/index.html');
   await expect(page.frameLocator('#gameFrame').locator('body')).not.toBeEmpty();
-  await page.goto('./');
+  await openCatalog();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.locator('#searchInput').fill('Scratch');
   await page.locator('.game-card').scrollIntoViewIfNeeded();
   const card = await page.locator('.game-card').boundingBox();
   await page.mouse.click(card.x + card.width / 2, card.y + card.height - 12);
   await expect(page.locator('#gameTitle')).toHaveText('Scratch Demo');
+  await context.route('**/assets/config.js',route=>route.fulfill({contentType:'text/javascript',body:'export const config={supabaseUrl:"",anonKey:""};'}));
   await page.goto('admin/');
   await expect(page.getByRole('heading', { name: '認証サービスは未設定です' })).toBeVisible();
   await page.goto('upload/');
@@ -467,6 +486,7 @@ for (const retry of [false, true]) test(`HTML ${retry ? 'resend' : 'upload'} rec
   expect(await fileInput.getAttribute('accept')).toBeNull();
   await fileInput.setInputFiles({ name: 'my-game.html', mimeType: 'text/html', buffer: Buffer.from('<!doctype html><html><body>Game</body></html>') });
   const submitText = retry ? '変更を保存' : 'ゲームを投稿';
+  if (!retry) await page.locator('[name=rights_confirmed]').check();
   await page.getByRole('button', { name: submitText, exact: true }).click();
   await uploadReceived;
   await expect(page.getByRole('button', { name: submitText, exact: true })).toBeDisabled();
@@ -495,7 +515,7 @@ test('shared login reveals admin navigation only after server authentication and
   await page.getByRole('link', { name: 'ログイン', exact: true }).click();
   await page.getByLabel('ユーザー名', { exact: true }).fill('browser_owner');
   await page.getByLabel('パスワード', { exact: true }).fill('browser-test-admin-only');
-  await page.getByRole('button', { name: 'ログイン', exact: true }).click();
+  await submitLogin(page);
   await expect(page.getByRole('heading', { name: '管理画面 — browser_owner', exact: true })).toBeVisible();
   await expect(adminLink).toBeVisible();
   expect(await page.evaluate(() => sessionStorage.getItem('game-portal.user.session.v1'))).toBeNull();
@@ -524,7 +544,7 @@ test('browser flows connect to the real Edge handler and migrated database', asy
   await page.goto('admin/');
   await page.getByLabel('ユーザー名', { exact: true }).fill('browser_owner');
   await page.getByLabel('パスワード', { exact: true }).fill('browser-test-admin-only');
-  await page.getByRole('button', { name: 'ログイン', exact: true }).click();
+  await submitLogin(page);
   await expect(page.getByRole('heading', { name: 'ユーザー作成' })).toBeVisible();
   const create = page.locator('section').filter({ has: page.getByRole('heading', { name: 'ユーザー作成', exact: true }) });
   await create.getByLabel('ユーザー名').fill('browser_user');
@@ -544,19 +564,20 @@ test('browser flows connect to the real Edge handler and migrated database', asy
   await user.goto('http://127.0.0.1:4173/Game-Portal/login/');
   await user.getByLabel('ユーザー名', { exact: true }).fill('browser_user');
   await user.getByLabel('パスワード', { exact: true }).fill('browser-test-alt-only');
-  await user.getByRole('button', { name: 'ログイン', exact: true }).click();
+  await submitLogin(user);
   await expect(user.getByRole('button', { name: 'パスワードを変更', exact: true })).toBeVisible();
   await expect(user.locator('#portal')).not.toContainText('support');
-  expect(await user.evaluate(() => ({ local: localStorage.length, session: sessionStorage.length }))).toEqual({ local: 0, session: 1 });
+  expect(await user.evaluate(() => ({ local: localStorage.length, session: sessionStorage.length }))).toEqual({ local: 1, session: 1 });
   await user.reload();
   await expect(user.getByRole('button', { name: 'パスワードを変更', exact: true })).toBeVisible();
   await expect(user.getByRole('navigation', { name: 'メインメニュー' }).getByRole('link', { name: 'ログアウト' })).toBeVisible();
   const created = await user.evaluate(async () => {
+    const policy=await (await fetch('http://127.0.0.1:54321/functions/v1/portal/policy',{method:'POST'})).json();
     const response = await fetch('http://127.0.0.1:54321/functions/v1/portal', {
       method: 'POST', headers: { 'Content-Type': 'application/json',
         'X-Portal-Session': sessionStorage.getItem('game-portal.user.session.v1') },
       body: JSON.stringify({ action: 'user.submission.create', data: {
-        title: '編集テスト', engine: 'godot', description: '', version: '1.0.0', controls: '', visibility: 'draft', published_at: '' } }),
+        terms_version:policy.terms.version, rights_confirmed:'yes', title: '編集テスト', engine: 'godot', description: '', version: '1.0.0', controls: '', visibility: 'draft', published_at: '' } }),
     });
     return response.json();
   });
@@ -590,12 +611,12 @@ test('browser flows connect to the real Edge handler and migrated database', asy
   await expect(page.locator('#message')).toHaveText('変更を保存しました。');
   await user.getByLabel('ユーザー名', { exact: true }).fill('browser_user');
   await user.getByLabel('パスワード', { exact: true }).fill('browser-test-alt-only');
-  await user.getByRole('button', { name: 'ログイン', exact: true }).click();
+  await submitLogin(user);
   await expect(user.locator('#message')).toContainText('ユーザー名またはパスワード');
   await selected.getByRole('button', { name: 'BANを解除', exact: true }).click();
   await expect(page.locator('#message')).toHaveText('変更を保存しました。');
   await user.getByLabel('パスワード', { exact: true }).fill('browser-test-user-only');
-  await user.getByRole('button', { name: 'ログイン', exact: true }).click();
+  await submitLogin(user);
   await expect(user.getByRole('button', { name: 'パスワードを変更', exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: '最新の100件' }).click();
@@ -616,7 +637,7 @@ test('tag selection, editing and administrator management use the authenticated 
  await page.goto('login/');
  await page.getByLabel('ユーザー名',{exact:true}).fill('browser_owner');
  await page.getByLabel('パスワード',{exact:true}).fill('browser-test-admin-only');
- await page.getByRole('button',{name:'ログイン',exact:true}).click();
+ await submitLogin(page);
  await expect(page.getByRole('heading',{name:'タグ管理',exact:true})).toBeVisible();
  const add=page.locator('#tag-management details').filter({has:page.getByText('新しいタグを追加',{exact:true})});
  await add.locator('summary').click();
@@ -627,7 +648,7 @@ test('tag selection, editing and administrator management use the authenticated 
  await page.evaluate(async()=>{await fetch('http://127.0.0.1:54321/functions/v1/portal',{method:'POST',headers:{'Content-Type':'application/json','X-Portal-Session':sessionStorage.getItem('game-portal.admin.session.v1')},body:JSON.stringify({action:'admin.create',data:{username:'browser_tag_user',password:'browser-tag-test-only',role:'uploader'}})});});
  const user=await context.newPage();await user.goto('http://127.0.0.1:4173/Game-Portal/login/');
  await user.getByLabel('ユーザー名',{exact:true}).fill('browser_tag_user');await user.getByLabel('パスワード',{exact:true}).fill('browser-tag-test-only');
- await user.getByRole('button',{name:'ログイン',exact:true}).click();await expect(user.getByRole('heading',{name:'アカウント',exact:true})).toBeVisible();
+ await submitLogin(user);await expect(user.getByRole('heading',{name:'アカウント',exact:true})).toBeVisible();
  await user.goto('http://127.0.0.1:4173/Game-Portal/upload/');
  const picker=user.locator('.tag-picker');await expect(picker.locator('.tag-count')).toHaveText('選択中 0 / 22');
  const chips=picker.getByRole('button');await picker.locator('details').evaluateAll(nodes=>nodes.forEach(n=>n.open=true));for(let i=0;i<22;i++)await chips.nth(i).click();
@@ -677,10 +698,10 @@ test('tag filters combine with engine and text search, and cards cap visible tag
 
 test('owners can add and replace a submitted thumbnail without changing the game',async({context,page})=>{
  await context.route('**/assets/config.js',route=>route.fulfill({contentType:'text/javascript',body:'export const config={supabaseUrl:"http://127.0.0.1:54321",anonKey:""};'}));
- await page.goto('login/');await page.getByLabel('ユーザー名',{exact:true}).fill('browser_owner');await page.getByLabel('パスワード',{exact:true}).fill('browser-test-admin-only');await page.getByRole('button',{name:'ログイン',exact:true}).click();
+ await page.goto('login/');await page.getByLabel('ユーザー名',{exact:true}).fill('browser_owner');await page.getByLabel('パスワード',{exact:true}).fill('browser-test-admin-only');await submitLogin(page);
  await expect(page.getByRole('heading',{name:'管理画面 — browser_owner',exact:true})).toBeVisible();
  const made=await page.evaluate(async()=>{
-  const post=async(action,data,session)=>{const r=await fetch('http://127.0.0.1:54321/functions/v1/portal',{method:'POST',headers:{'Content-Type':'application/json',...(session?{'X-Portal-Session':session}:{})},body:JSON.stringify({action,data})});return r.json();};
+  const post=async(action,data,session)=>{if(['user.login','user.submission.create'].includes(action)){const policy=await (await fetch('http://127.0.0.1:54321/functions/v1/portal/policy',{method:'POST'})).json();data={...data,terms_accepted:true,terms_version:policy.terms.version,rights_confirmed:'yes'};}const r=await fetch('http://127.0.0.1:54321/functions/v1/portal',{method:'POST',headers:{'Content-Type':'application/json',...(session?{'X-Portal-Session':session}:{})},body:JSON.stringify({action,data})});return r.json();};
   await post('admin.create',{username:'browser_image_user',password:'browser-image-test-only',role:'uploader'},sessionStorage.getItem('game-portal.admin.session.v1'));
   const login=await post('user.login',{username:'browser_image_user',password:'browser-image-test-only'});
   const game=await post('user.submission.create',{title:'Thumbnail test',engine:'other',version:'1',visibility:'draft'},login.token);
@@ -706,10 +727,10 @@ test('owners can add and replace a submitted thumbnail without changing the game
 
 test('account sharing, administrator management and permanent deletion work through real authorization',async({context,page})=>{
  await context.route('**/assets/config.js',route=>route.fulfill({contentType:'text/javascript',body:'export const config={supabaseUrl:"http://127.0.0.1:54321",anonKey:""};'}));
- await page.goto('login/');await page.getByLabel('ユーザー名',{exact:true}).fill('browser_owner');await page.getByLabel('パスワード',{exact:true}).fill('browser-test-admin-only');await page.getByRole('button',{name:'ログイン',exact:true}).click();
+ await page.goto('login/');await page.getByLabel('ユーザー名',{exact:true}).fill('browser_owner');await page.getByLabel('パスワード',{exact:true}).fill('browser-test-admin-only');await submitLogin(page);
  await expect(page.getByRole('heading',{name:'管理画面 — browser_owner',exact:true})).toBeVisible();
  const accounts=await page.evaluate(async()=>{
-  const post=async(action,data,token)=>{const r=await fetch('http://127.0.0.1:54321/functions/v1/portal',{method:'POST',headers:{'Content-Type':'application/json',...(token?{'X-Portal-Session':token}:{})},body:JSON.stringify({action,data})});return r.json();};
+  const post=async(action,data,token)=>{if(['user.login','user.submission.create'].includes(action)){const policy=await (await fetch('http://127.0.0.1:54321/functions/v1/portal/policy',{method:'POST'})).json();data={...data,terms_accepted:true,terms_version:policy.terms.version,rights_confirmed:'yes'};}const r=await fetch('http://127.0.0.1:54321/functions/v1/portal',{method:'POST',headers:{'Content-Type':'application/json',...(token?{'X-Portal-Session':token}:{})},body:JSON.stringify({action,data})});return r.json();};
   const admin=sessionStorage.getItem('game-portal.admin.session.v1');
   await post('admin.create',{username:'browser_shared_author',password:'browser-share-test-only',role:'trusted_uploader'},admin);
   const friend=await post('admin.create',{username:'browser_shared_friend',password:'browser-share-test-only',role:'player'},admin);
@@ -721,7 +742,7 @@ test('account sharing, administrator management and permanent deletion work thro
  await author.getByLabel('ゲーム名',{exact:true}).fill('Shared browser game');await author.getByRole('combobox',{name:'エンジン',exact:true}).selectOption('other');
  await author.getByRole('combobox',{name:'公開範囲',exact:true}).selectOption('shared');await author.getByLabel('共有相手のアカウントID（改行またはカンマ区切り・最大50人）',{exact:true}).fill(accounts.friendId);
  await author.getByLabel('ゲームファイルを選択',{exact:true}).setInputFiles({name:'shared.html',mimeType:'text/html',buffer:Buffer.from('<!doctype html><html><body>Shared browser play</body></html>')});
- await author.getByRole('button',{name:'ゲームを投稿',exact:true}).click();await expect(author.getByRole('heading',{name:'投稿が完了しました',exact:true})).toBeVisible();
+ await author.locator('[name=rights_confirmed]').check();await author.getByRole('button',{name:'ゲームを投稿',exact:true}).click();await expect(author.getByRole('heading',{name:'投稿が完了しました',exact:true})).toBeVisible();
  await author.getByRole('link',{name:'投稿したゲームを管理・プレイ →',exact:true}).click();await expect(author.getByRole('combobox',{name:'公開範囲',exact:true})).toHaveValue('shared');
  await expect(author.getByLabel('共有相手のアカウントID（改行またはカンマ区切り・最大50人）',{exact:true})).toHaveValue(accounts.friendId);
  const friend=await context.newPage();await friend.goto('./');await friend.evaluate(token=>{sessionStorage.removeItem('game-portal.admin.session.v1');sessionStorage.setItem('game-portal.user.session.v1',token);},accounts.friend.token);await friend.goto('account/');

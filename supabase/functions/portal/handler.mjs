@@ -65,6 +65,12 @@ export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleS
       return key;
     };
     const publicPath = requestUrl.pathname;
+    if (publicPath.endsWith('/policy')) {
+      try {
+        const checked = await rpc('policy.current', {}, null);
+        return internalError(checked) ?? reply(checked.result);
+      } catch { return reply({ error: 'unavailable' }, 503); }
+    }
     if (publicPath.endsWith('/tags')) {
       try { return reply({ tags: await publicRpc('portal_tags') }); }
       catch { return reply({ error: 'unavailable' }, 503); }
@@ -298,7 +304,7 @@ export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleS
     catch (error) { return reply({ error: error.message }, error.message === 'body_too_large' ? 413 : 400); }
     const login = ['portal.login', 'user.login', 'admin.login'].includes(input.action);
     const supplied = request.headers.get('x-portal-session');
-    if (!login && !/^[a-f0-9]{64}$/.test(supplied ?? '')) return reply({ error: 'unauthorized' }, 401);
+    if (!login && input.action !== 'report.create' && !/^[a-f0-9]{64}$/.test(supplied ?? '')) return reply({ error: 'unauthorized' }, 401);
     const fresh = login ? token() : null;
     try {
       const { response, result } = await rpc(input.action, input.data, login ? null : supplied, fresh);

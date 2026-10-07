@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="./assets/support.css?v=20261007a">
   <link rel="stylesheet" href="assets/theme.css?v=20261007b">
   <script src="assets/theme.js?v=20261007b"></script>
+<link rel="stylesheet" href="./assets/consent.css?v=20261008a">
 </head>
 <body class="play-page">
   <header class="site-header">
@@ -21,6 +22,8 @@
 
   <main class="play-container">
     <a class="game-back" href="./#games">← ゲーム一覧</a>
+    <div id="playConsent"></div>
+    <div id="playContent" data-consent-content hidden>
     <section class="game-info">
       <div>
         <div class="game-tags"><span id="engineLabel" class="engine-label" hidden></span><span id="versionText" class="game-version" hidden></span></div>
@@ -53,10 +56,11 @@
         <p id="controlsText">ゲーム内の案内をご確認ください。</p>
       </div>
     </section>
+  </div>
   </main>
   <footer class="site-footer"><div class="footer-inner"><div><a class="footer-brand" href="./">GAME PORTAL</a><p>遊ぶ人とつくる人が集まる場所。</p></div><nav aria-label="サポート・ポリシー"><a href="./faq/">FAQ</a><a href="./terms/">利用規約</a><a href="./privacy/">プライバシーポリシー</a></nav></div></footer>
 
   <script type="module" src="assets/navigation.js?v=20261003a"></script>
-  <script type="module" src="assets/play.js?v=20261007d"></script>
+  <script type="module" src="assets/play.js?v=20261008a"></script>
 </body>
 </html>

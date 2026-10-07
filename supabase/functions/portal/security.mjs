@@ -1,4 +1,5 @@
 export const actions = new Set([
+  'report.create', 'admin.reports', 'admin.report.update',
   'user.submission.save','user.shared.games','admin.submission.delete','admin.account.delete','admin.cleanup',
   'admin.admin.rename','admin.admin.role','admin.admin.disable','admin.admin.enable','admin.admin.kick','admin.admin.password','admin.admin.delete',
   'admin.tags', 'admin.tag.create', 'admin.tag.update', 'admin.submission.tags',
@@ -47,6 +48,8 @@ export async function readBody(request, maximum = 32768) {
   for (const [name, value] of Object.entries(data)) {
     if (name === 'tag_ids' || name === 'shared_user_ids') {
       if (!Array.isArray(value) || value.length > (name === 'tag_ids' ? 22 : 50) || new Set(value).size !== value.length || value.some(id => typeof id !== 'string' || !/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(id))) throw new Error(name === 'tag_ids' ? 'invalid_tags' : 'invalid_shares');
+    } else if (name === 'terms_accepted') {
+      if (typeof value !== 'boolean') throw new Error('invalid_request');
     } else if (name === 'offset' || name === 'before_id') {
       if (!Number.isSafeInteger(value) || value < 0) throw new Error('invalid_request');
     } else if (value !== null && typeof value !== 'string') throw new Error('invalid_request');
@@ -54,5 +57,5 @@ export async function readBody(request, maximum = 32768) {
   return { action: body.action, data };
 }
 
-export const statusFor = error => ({ unauthorized: 401, forbidden: 403, not_found: 404,
+export const statusFor = error => ({ terms_required: 400, terms_outdated: 409, unauthorized: 401, forbidden: 403, not_found: 404,
   rate_limited: 429, conflict: 409, unavailable: 503 }[error] ?? 400);

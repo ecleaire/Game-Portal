@@ -1,3 +1,4 @@
+import { requireTerms } from './terms.js?v=20261008a';
 import { config } from './config.js';
 import { loadTags, tagFilter, tagChips } from './tags.js?v=20261007a';
 import { matchesGameSearch } from './game-search.js?v=20261007b';
@@ -124,7 +125,9 @@ async function loadGames() {
     games = [...legacy, ...published.map(game => ({ ...game, id: game.slug }))]; render();
   } catch (error) { console.error(error); }
 }
-const gamesReady = loadGames().catch(error => { console.error(error); emptyMessage.hidden = false;
+const gamesReady = requireTerms(document.getElementById('catalogConsent')).then(() => {
+  document.getElementById('catalogContent').hidden = false; return loadGames();
+}).catch(error => { console.error(error); emptyMessage.hidden = false;
   emptyMessage.textContent = 'ゲーム情報を読み込めませんでした。'; });
 gamesReady.then(()=>loadTags()).then(tags=>{
   // Retain linked inactive tags in the filter; they can still exist on games.

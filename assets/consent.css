@@ -1,0 +1,18 @@
+.consent-checkbox { display: flex !important; align-items: flex-start; gap: 12px !important; line-height: 1.8; font-size: .9rem; }
+.consent-checkbox input[type="checkbox"] { width: 20px; min-width: 20px; height: 20px; min-height: 20px; margin: 5px 0 0; padding: 0; accent-color: var(--accent); flex: none; }
+.consent-checkbox a { color: var(--accent); text-underline-offset: 3px; }
+.terms-gate, .report-panel { padding: 24px; margin: 20px 0; border: 1px solid var(--line); border-radius: 18px; background: var(--panel); }
+.terms-gate form { display: grid; gap: 16px; }
+.terms-gate button, .report-panel button { min-height: 44px; padding: 10px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--accent); color: var(--bg); font: inherit; cursor: pointer; }
+.terms-gate .muted { color: var(--muted); font-size: .8rem; }
+.terms-gate button:disabled { opacity: .6; }
+[data-consent-content][hidden] { display: none !important; }
+.portal .consent-checkbox { flex-basis: 100%; font-weight: 400; }
+.report-panel form, .report-panel label { display: grid; gap: 10px; }
+.report-panel form { gap: 18px; }
+.report-panel select, .report-panel textarea { width: 100%; padding: 10px; font: inherit; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; }
+.report-panel textarea { min-height: 120px; resize: vertical; }
+.portal .admin-reports { grid-column: 1 / -1; }
+
+.report-panel form[hidden] { display: none; }
+@media (min-width: 901px) { .terms-page .support-toc { max-height: calc(100dvh - 150px); overflow-y: auto; } }

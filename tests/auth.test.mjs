@@ -11,6 +11,10 @@ const original = 'test-only-user-password';
 const alternative = 'test-only-alternative';
 const adminPassword = 'test-only-admin-password';
 async function api(action, body = {}, hash = null, fresh = null) {
+  if (['user.login','portal.login','user.submission.create'].includes(action)) {
+    const policy = (await db.query("select version from portal_private.policy_versions where is_current")).rows[0];
+    body = { terms_accepted: true, terms_version: policy.version, rights_confirmed: 'yes', ...body };
+  }
   const { rows } = await db.query('select public.portal_api($1,$2::jsonb,$3,$4) as result', [action, JSON.stringify(body), hash, fresh]);
   return rows[0].result;
 }

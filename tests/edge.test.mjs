@@ -202,3 +202,17 @@ test('thumbnail upload validates images, checks owner twice and preserves commit
  assert.equal((await handler(make(new Uint8Array(5242881)))).status,400);
  assert.equal((await handler(make(new Uint8Array([1]),'image/svg+xml'))).status,400);
 });
+
+test('policy endpoint reads DB policy and terms failures never return a session token', async () => {
+  const terms={version:'test-policy',effective_at:'2026-10-08',url:'/Game-Portal/terms/'};
+  const policyHandler=createHandler({...settings,fetcher:async(_url,options)=>{
+    const body=JSON.parse(options.body);assert.equal(body.p_action,'policy.current');assert.equal(body.p_new_token_hash,null);return Response.json({terms});
+  }});
+  const response=await policyHandler(new Request('https://example.supabase.co/functions/v1/portal/policy',{method:'POST',headers:{origin:settings.allowedOrigins}}));
+  assert.equal(response.status,200);assert.deepEqual(await response.json(),{terms});
+  for(const [error,status] of [['terms_required',400],['terms_outdated',409]]) {
+    const handler=createHandler({...settings,fetcher:async()=>Response.json({error})});
+    const response=await handler(request({action:'user.login',data:{username:'alice',password:'test-only-password',terms_accepted:true,terms_version:'old'}}));
+    assert.equal(response.status,status);assert.deepEqual(await response.json(),{error});
+  }
+});

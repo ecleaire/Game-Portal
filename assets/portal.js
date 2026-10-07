@@ -1,3 +1,4 @@
+import { currentTerms, consentCheckbox, rememberAcceptance } from './terms.js?v=20261008a';
 import { config } from './config.js';
 import { loadTags, tagPicker, tagChips, tagCategories } from './tags.js?v=20261004d';
 let availableTags = [];
@@ -29,6 +30,8 @@ let auditBefore;
 let busy = false;
 let formMessage = null;
 const errors = {
+  terms_required: '利用規約への同意が必要です。内容を確認してチェックを入れてください。投稿時に表示された場合はログインし直してください。',
+  terms_outdated: '利用規約が更新されています。最新の内容を確認して再度同意してください。',
   invalid_shares: '共有相手のアカウントIDを確認してください。有効なユーザーを重複なしで1〜50人指定できます（自分自身は不要です）。',
   self_protected: '自分自身の権限変更・無効化・削除はできません。',
   last_super_admin: '最後の有効なsuper adminは変更・削除できません。',
@@ -190,8 +193,16 @@ function login() {
   const s = section(adminMode ? '管理者ログイン' : 'ログイン');
   s.append(el('p', adminMode ? '管理者アカウントでログインして、投稿の審査とユーザー管理を行います。'
     : 'ゲームの投稿や、自分の作品の管理にはログインが必要です。', { class: 'muted' }));
-  form(s, [username(), password('password', 'パスワード', false)], 'ログイン', async data => {
-    const result = await api(adminMode ? 'admin.login' : 'portal.login', data);
+  let policy;
+  const f = form(s, [username(), password('password', 'パスワード', false)], 'ログイン', async data => {
+    if (!adminMode) { data.terms_accepted = f.elements.terms_accepted.checked; data.terms_version = policy?.version; }
+    let result;
+    try { result = await api(adminMode ? 'admin.login' : 'portal.login', data); }
+    catch (error) {
+      if (!adminMode && error.message === 'terms_outdated') { f.elements.terms_accepted.checked = false; policy = await currentTerms(); f.querySelector('[data-policy-status]').textContent = `規約バージョン：${policy.version}`; }
+      throw error;
+    }
+    if (result.user && result.terms) rememberAcceptance(result.terms.version, result.terms.accepted_at);
     await logoutSessions();
     if (result.admin && !adminMode) {
       sessionStorage.setItem(adminSessionKey, result.token);
@@ -207,6 +218,17 @@ function login() {
     else { location.href = '../account/'; return; }
     notice('ログインしました。');
   });
+  if (!adminMode) {
+    const submit = f.querySelector('[type=submit]');
+    submit.before(consentCheckbox('../terms/')); submit.disabled = true;
+    const status = el('p', '利用規約を確認しています…', { role: 'status', class: 'muted', 'data-policy-status': '' }); f.append(status);
+    const loadPolicy = async () => {
+      try { policy = await currentTerms(); status.textContent = `規約バージョン：${policy.version}`; submit.disabled = false; }
+      catch { status.textContent = '規約情報を取得できません。しばらくして再試行してください。'; }
+    };
+    const retry = el('button', '規約情報を再取得', { type: 'button' }); retry.onclick = loadPolicy; f.append(retry);
+    loadPolicy();
+  }
 }
 async function logout() {
   try { await logoutSessions(); }
@@ -248,6 +270,7 @@ async function account() {
   if(!shared.games?.length)sharedSection.append(el('p','共有されたゲームはありません。',{class:'muted'}));
   for(const game of shared.games ?? []){const card=el('article',null,{class:'row'});card.append(el('h3',game.title),tagChips(game.tags,3),el('a','プレイする →',{href:`../game.html?slug=${encodeURIComponent(game.public_slug)}`}));sharedSection.append(card);}
   const profile = section('プロフィール');
+  profile.append(el('p', '表示名やユーザー名には、本名・メールアドレス・電話番号など個人を特定できる情報を入力しないでください。', { class: 'muted' }));
   profile.append(el('p', '表示名とアイコンはゲーム投稿などで表示するための情報です。ログイン用ユーザー名やパスワードとは別に管理されます。', { class: 'muted' }));
   form(profile, [
     field('display_name', '表示名', 'text', { value: user.display_name, maxlength: '40', autocomplete: 'nickname' }),
@@ -462,6 +485,31 @@ async function dashboard() {
   const [{ admin }, { users }, { submissions }] = await Promise.all([api('admin.me'), api('admin.users', { offset }), api('admin.submissions', { offset: submissionOffset })]);
   root.replaceChildren();
   const top = section(`管理画面 — ${admin.username}`);
+  const reportsSection = section('ゲームの報告', root, 'admin-reports');
+  reportsSection.id = 'reports';
+  let reportOffset = 0;
+  const reportFilter = el('select', null, { 'aria-label': '報告の状態' });
+  const reportLabels = {rights:'著作権・権利侵害',personal_data:'個人情報が含まれている',inappropriate:'不適切な内容',payments:'広告・課金への無断誘導',network:'不審な外部通信',other:'その他'};
+  const reportStates = [['pending','未確認'],['reviewed','確認済み'],['resolved','対応済み'],['dismissed','対応不要'],['all','すべて']];
+  for (const [value,label] of reportStates) reportFilter.append(el('option',label,{value}));
+  reportsSection.append(reportFilter);
+  const reportList = el('div', null, { class: 'list' }); reportsSection.append(reportList);
+  const loadReports = async () => {
+    const { reports } = await api('admin.reports', { status: reportFilter.value, offset: reportOffset }); reportList.replaceChildren();
+    if (!reports.length) reportList.append(el('p','報告はありません。'));
+    for (const report of reports) {
+      const row = el('div',null,{class:'row'});
+      const key = /^[a-f0-9]{36}$/.test(report.game_id) ? 'slug' : 'id';
+      row.append(el('a', report.game_id, {href:`../game.html?${key}=${encodeURIComponent(report.game_id)}`,target:'_blank',rel:'noopener noreferrer'}),el('p',`${reportLabels[report.category] ?? report.category} · ${report.created_at}`),el('p',report.detail));
+      const state = el('select',null,{'aria-label':'報告の対応状態'});
+      for(const [value,label] of reportStates.filter(([value])=>value!=='all')) state.append(el('option',label,{value})); state.value=report.status;row.append(state);
+      button(row,'状態を保存',async()=>{await api('admin.report.update',{report_id:report.id,status:state.value});await loadReports();notice('報告の状態を更新しました。');});reportList.append(row);
+    }
+    if(reportOffset)button(reportList,'前の100件',async()=>{reportOffset=Math.max(0,reportOffset-100);await loadReports();});
+    if(reports.length===100)button(reportList,'次の100件',async()=>{reportOffset+=100;await loadReports();});
+  };
+  reportFilter.onchange=()=>run(async()=>{reportOffset=0;await loadReports();});
+  try { await loadReports(); } catch { reportList.append(el('p','報告を取得できませんでした。'), el('p','ページを更新して再試行してください。')); }
   top.append(el('p', `このページの表示: ユーザー ${users.length}件 · 投稿 ${submissions.length}件 · 審査待ち ${submissions.filter(game => game.status === 'pending').length}件`, { class: 'muted' }));
   const jumps = el('div', null, { class: 'actions dashboard-jumps' });
   jumps.append(el('a', '投稿の審査へ ↓', { href: '#reviews' }), el('a', 'ユーザー一覧へ ↓', { href: '#users' }), el('a', 'タグ管理へ ↓', { href: '#tag-management' }));
@@ -732,6 +780,7 @@ async function upload() {
     data.published_at = data.published_at ? new Date(data.published_at).toISOString() : '';
     const file = await packageWebFiles(selectedFiles);
     await checkWebGameZip(file);
+    const policy = await currentTerms(); data.terms_version = policy.version;
     if (!pendingSubmissionId) { const { submission } = await api('user.submission.create', data); pendingSubmissionId = submission.id; }
     const completed = await uploadPackage(pendingSubmissionId, file, null, thumbnail);
     pendingSubmissionId = null;
@@ -769,6 +818,7 @@ async function upload() {
   dropZone.addEventListener('drop', event => { event.preventDefault(); dropZone.classList.remove('is-dragging'); setFiles(event.dataTransfer.files); });
   dropZone.append(packageInput, selection);
   submissionForm.querySelector('button[type=submit]').before(dropZone);
+  submissionForm.querySelector('button[type=submit]').before(consentCheckbox('../terms/', 'rights_confirmed', 'この作品を投稿・公開するために必要な権利を有している、または必要な許諾を得ており、利用規約および禁止事項に適合していることを確認しました。'));
   const { submissions } = await api('user.submissions');
   const history = section('投稿履歴');
   submissionList(history, submissions, { userId: user.id, statusLabel, visibilityLabel,
