@@ -262,6 +262,18 @@ body[data-page="upload"] .portal .stacked-form { padding: 26px; }
 .play-page .player-shell:fullscreen, .play-page .player-shell.is-expanded { width: 100%; height: 100%; border: 0; border-radius: 0; display: flex; flex-direction: column; }
 .play-page .player-shell.is-expanded { position: fixed; inset: 0; z-index: 100; height: 100dvh; }
 .player-shell:fullscreen .player-viewport, .player-shell.is-expanded .player-viewport { flex: 1; min-height: 0; aspect-ratio: auto; }
+.player-shell:fullscreen .player-toolbar, .player-shell.is-expanded .player-toolbar {
+  position: absolute; z-index: 3; top: max(8px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right));
+  width: auto; padding: 4px; gap: 0; flex-wrap: nowrap; border: 1px solid rgba(187,212,243,.2);
+  border-radius: 16px; background: rgba(9,16,27,.82); box-shadow: 0 4px 20px rgba(0,0,0,.2);
+}
+.player-shell:fullscreen .player-status, .player-shell.is-expanded .player-status { display: none; }
+.player-shell:fullscreen .player-actions, .player-shell.is-expanded .player-actions { width: auto; gap: 4px; }
+.player-shell:fullscreen .player-actions .action-button, .player-shell.is-expanded .player-actions .action-button {
+  flex: none; width: 44px; height: 44px; min-height: 44px; padding: 0; border-radius: 12px; font-size: 0;
+}
+.player-shell:fullscreen #reloadButton::before, .player-shell.is-expanded #reloadButton::before { content: '↻'; font-size: 25px; }
+.player-shell:fullscreen #fullscreenButton::before, .player-shell.is-expanded #fullscreenButton::before { content: '⤡'; font-size: 24px; }
 body.player-expanded { overflow: hidden; }
 @media (max-width: 700px) {
   .play-page .play-container { padding-top: 12px; }
@@ -272,5 +284,4 @@ body.player-expanded { overflow: hidden; }
   .player-actions { width: 100%; }
   .player-actions .action-button { flex: 1; font-size: .82rem; }
   .play-page .meta-card { padding: 19px; }
-  .player-shell:fullscreen .player-toolbar, .player-shell.is-expanded .player-toolbar { padding-top: max(10px, env(safe-area-inset-top)); }
 }

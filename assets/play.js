@@ -1,7 +1,7 @@
 import { config } from './config.js';
 import { userSessionKey } from './navigation.js?v=20261003a';
 import { tagChips } from './tags.js?v=20261004a';
-import { unpackPrivateZip, privatePreviewDocument } from './private-preview.js?v=20261007c';
+import { unpackPrivateZip, mountPrivatePreview } from './private-preview.js?v=20261007d';
 
 const params = new URLSearchParams(location.search);
 const frame = document.getElementById('gameFrame');
@@ -60,11 +60,12 @@ async function fetchGame(mode, slug) {
     throw error;
   }
 }
-function setFrame(attribute, source) {
-  frame.addEventListener('load', () => {
+function gameReady() {
     loading.hidden = true; frame.style.visibility = 'visible'; shell.setAttribute('aria-busy', 'false');
     status.textContent = 'ゲームを表示しました'; reloadButton.disabled = false; fullscreenButton.disabled = false; loadingGame = false;
-  }, { once: true });
+}
+function setFrame(attribute, source) {
+  frame.addEventListener('load', gameReady, { once: true });
   frame[attribute] = source;
 }
 async function load() {
@@ -90,7 +91,8 @@ async function load() {
     const files = await unpackPrivateZip(archive.buffer);
     frame.setAttribute('sandbox', 'allow-scripts');
     frame.setAttribute('referrerpolicy', 'no-referrer');
-    setFrame('srcdoc', privatePreviewDocument(files));
+    await mountPrivatePreview(frame, files);
+    gameReady();
   } else {
     const response = await fetch('games.json');
     if (!response.ok) throw new Error('unavailable');
@@ -110,6 +112,7 @@ function updateFullscreen() {
   const expanded = document.fullscreenElement === shell || shell.classList.contains('is-expanded');
   fullscreenButton.textContent = expanded ? '全画面を終了' : '全画面で遊ぶ';
   fullscreenButton.setAttribute('aria-pressed', String(expanded));
+  fullscreenButton.title = expanded ? '全画面を終了（Esc）' : '全画面で遊ぶ';
 }
 function exitExpanded() { shell.classList.remove('is-expanded'); document.body.classList.remove('player-expanded'); updateFullscreen(); }
 fullscreenButton.addEventListener('click', async () => {

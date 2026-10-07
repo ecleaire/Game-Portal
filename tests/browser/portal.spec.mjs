@@ -1,5 +1,39 @@
 import { test, expect } from '@playwright/test';
 import { packageWebFiles } from '../../assets/zip-upload.js';
+import { writeFile } from 'node:fs/promises';
+
+test('binary sandbox loading preserves WASM, assets and isolation without Base64 overhead', async ({page}) => {
+  await goto(page, './');
+  const result = await page.evaluate(async () => {
+    const {privatePreviewDocument, mountPrivatePreview} = await import('./assets/private-preview.js');
+    const encode = text => new TextEncoder().encode(text);
+    const files = new Map([
+      ['index.html', encode('<!doctype html><html><head><link rel="stylesheet" href="style.css"><script src="game.js"></script></head><body>loading</body></html>')],
+      ['style.css', encode('body{color:rgb(1,2,3)}')],
+      ['game.js', encode(`Promise.all([fetch('game.wasm').then(r=>WebAssembly.instantiateStreaming(r)),fetch('payload.pck').then(r=>r.arrayBuffer())]).then(async ([wasm,bytes])=>{let isolated=false;try{parent.document.body}catch{isolated=true}let blocked=false;try{await fetch('https://example.com/blocked')}catch{blocked=true}document.body.textContent='ready:'+bytes.byteLength+':'+new Uint8Array(bytes)[bytes.byteLength-1]+':'+isolated+':'+blocked;parent.postMessage('bench-ready','*');});`)],
+      ['game.wasm', new Uint8Array([0,97,115,109,1,0,0,0])],
+      ['payload.pck', new Uint8Array(12*1024*1024).fill(90)],
+    ]);
+    const times = {};
+    for (const mode of ['baseline','binary']) {
+      const frame=document.createElement('iframe');frame.setAttribute('sandbox','allow-scripts');frame.id='bench-'+mode;document.body.append(frame);
+      const started=performance.now();
+      const ready=new Promise(resolve=>{const receive=event=>{if(event.source===frame.contentWindow&&event.data==='bench-ready'){window.removeEventListener('message',receive);resolve();}};window.addEventListener('message',receive);});
+      if(mode==='baseline')frame.srcdoc=privatePreviewDocument(files);
+      else await mountPrivatePreview(frame,files);
+      await ready;
+      times[mode]=performance.now()-started;
+    }
+    return {...times,detached:files.get('payload.pck').byteLength===0,bootstrapLength:document.querySelector('#bench-binary').srcdoc.length};
+  });
+  for(const mode of ['baseline','binary']) {
+    await expect(page.frameLocator('#bench-'+mode).locator('body')).toHaveText('ready:12582912:90:true:true');
+    await expect(page.frameLocator('#bench-'+mode).locator('body')).toHaveCSS('color','rgb(1, 2, 3)');
+  }
+  expect(result.detached).toBe(true);expect(result.bootstrapLength).toBeLessThan(16000);
+  await writeFile('test-results/binary-loading-performance.json',JSON.stringify(result,null,2));
+  console.log('12 MiB sandbox startup benchmark (synthetic game, milliseconds):',result);
+});
 
 async function goto(page, path) {
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -81,6 +115,12 @@ test('published ZIP game opens through the isolated public player', async ({ con
   await expect(page.locator('#controlsText')).toHaveText('ゲーム内の案内をご確認ください。');
   await page.getByRole('button', { name: '全画面で遊ぶ' }).click();
   await expect(page.locator('#playerShell')).toHaveClass(/is-expanded/);
+  expect((await page.locator('.player-toolbar').boundingBox()).height).toBeLessThanOrEqual(56);
+  await expect(page.locator('#playerStatus')).toBeHidden();
+  await page.screenshot({ path: 'test-results/player-fullscreen-desktop.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect((await page.locator('.player-toolbar').boundingBox()).height).toBeLessThanOrEqual(56);
+  await page.screenshot({ path: 'test-results/player-fullscreen-mobile.png' });
   await page.getByRole('button', { name: '全画面を終了' }).click();
   await expect(page.locator('#playerShell')).not.toHaveClass(/is-expanded/);
   await page.setViewportSize({ width: 390, height: 844 });

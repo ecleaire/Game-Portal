@@ -6,7 +6,7 @@ function gameTagPicker(game = {}) {
   for (const tag of game.tags ?? []) if (!merged.has(tag.id)) merged.set(tag.id, tag);
   return tagPicker([...merged.values()], game.tags ?? []);
 }
-import { checkWebGameZip, unpackPrivateZip, privatePreviewDocument } from './private-preview.js?v=20261007c';
+import { checkWebGameZip, unpackPrivateZip, mountPrivatePreview } from './private-preview.js?v=20261007d';
 import { packageWebFiles } from './zip-upload.js?v=20261003a';
 import { sendUpload, uploadWithRecovery } from './upload-request.js?v=20261004d';
 import { submissionList } from './submission-list.js?v=20261003a';
@@ -434,11 +434,12 @@ async function previewSubmission(submissionId) {
   if (!response.ok) { const result = await response.json().catch(() => ({})); throw new Error(result.error ?? 'unavailable'); }
   const files = await unpackPrivateZip(await response.arrayBuffer());
   const frame = el('iframe', null, { title: '非公開ゲームプレビュー', sandbox: 'allow-scripts', referrerpolicy: 'no-referrer' });
-  frame.className = 'private-preview'; frame.srcdoc = privatePreviewDocument(files);
+  frame.className = 'private-preview';
   root.replaceChildren();
   const heading = section('自分だけでプレイ');
   heading.append(el('a', '← ゲームの管理に戻る', { href: `./?game=${encodeURIComponent(submissionId)}`, class: 'editor-back' }));
   root.append(frame); notice('このゲームは本人専用の隔離された画面で実行しています。');
+  await mountPrivatePreview(frame, files);
 }
 async function showSubmissionThumbnail(parent, submissionId, mode) {
   try {

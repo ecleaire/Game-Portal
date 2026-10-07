@@ -123,9 +123,9 @@ function dataUrl(bytes, type) {
   return `data:${type};base64,${btoa(parts.join(''))}`;
 }
 
-export function privatePreviewDocument(files) {
+export function privatePreviewDocument(files, resourceUrl = dataUrl, readyScript = '') {
   const resource = new Map();
-  for (const [name, bytes] of files) if (!name.endsWith('.css') && name !== 'index.html') resource.set(name, dataUrl(bytes, mime(name)));
+  for (const [name, bytes] of files) if (!name.endsWith('.css') && name !== 'index.html') resource.set(name, resourceUrl(bytes, mime(name)));
   const local = (value, base = '') => {
     if (!value || /^(?:[a-z][a-z\d+.-]*:|\/\/|#)/i.test(value)) return null;
     const path = `${base}${value.split(/[?#]/)[0]}`;
@@ -139,7 +139,7 @@ export function privatePreviewDocument(files) {
     const base = name.includes('/') ? name.slice(0, name.lastIndexOf('/') + 1) : '';
     const css = decoder.decode(bytes).replace(/url\(\s*(['"]?)([^)'"\s]+)\1\s*\)/gi,
       (match, _quote, value) => resource.get(local(value, base)) ? `url("${resource.get(local(value, base))}")` : match);
-    resource.set(name, dataUrl(new TextEncoder().encode(css), 'text/css'));
+    resource.set(name, resourceUrl(new TextEncoder().encode(css), 'text/css'));
   }
   const doc = new DOMParser().parseFromString(decoder.decode(files.get('index.html')), 'text/html');
   doc.querySelectorAll('meta[http-equiv="Content-Security-Policy"],base').forEach(node => node.remove());
@@ -155,5 +155,43 @@ export function privatePreviewDocument(files) {
   const manifest = JSON.stringify(Object.fromEntries(resource)).replaceAll('<', '\\u003c');
   shim.textContent = `const portalFiles=${manifest}; const portalFetch=window.fetch.bind(window); window.fetch=(input,init)=>{const raw=typeof input==='string'?input:input.url; if(/^(data:|blob:)/.test(raw))return portalFetch(input,init); try{const base=new URL(document.baseURI),url=new URL(raw,base); if(url.origin!==base.origin)throw 0; const directory=base.pathname.endsWith('/')?base.pathname:base.pathname.slice(0,base.pathname.lastIndexOf('/')+1); let path=decodeURIComponent(url.pathname); path=path.startsWith(directory)?path.slice(directory.length):path.replace(/^\\/+/, ''); if(portalFiles[path])return portalFetch(portalFiles[path],init);}catch{} return Promise.reject(new TypeError('Game resource unavailable'));};`;
   doc.head.prepend(csp, shim);
+  shim.textContent += readyScript;
   return '<!doctype html>\n' + doc.documentElement.outerHTML;
+}
+
+// Transfer bytes into the opaque sandbox and create its Blob URLs there.
+// Parent-origin Blob URLs cannot safely be fetched from an opaque game frame.
+// No credentials, parent DOM access, or external network access are provided.
+export function mountPrivatePreview(frame, files) {
+  if (frame.getAttribute('sandbox') !== 'allow-scripts') throw new Error('invalid_preview');
+  const channel = new MessageChannel();
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => finish(new Error('preview_timeout')), 90000);
+    function finish(error) {
+      clearTimeout(timeout); channel.port1.close(); channel.port2.close();
+      error ? reject(error) : resolve();
+    }
+    channel.port1.onmessage = event => {
+      if (event.data === 'ready') finish();
+      else if (event.data === 'error') finish(new Error('invalid_preview'));
+    };
+    frame.addEventListener('load', () => {
+      // All views of a stored ZIP share a buffer. Transfer each buffer once.
+      const buffers = [...new Set([...files.values()].map(bytes => bytes.buffer))];
+      frame.contentWindow.postMessage({ type: 'portal-resources', files }, '*', [channel.port2, ...buffers]);
+    }, { once: true });
+    const script = `const decoder=new TextDecoder();const mimeTypes=${JSON.stringify(mimeTypes)};
+      const mime=${mime.toString()};const privatePreviewDocument=${privatePreviewDocument.toString()};
+      window.addEventListener('message',event=>{
+        if(event.source!==parent||event.data?.type!=='portal-resources'||!event.ports[0])return;
+        const port=event.ports[0];
+        try{
+          window.__portalReady=()=>{port.postMessage('ready');port.close();delete window.__portalReady;};
+          const html=privatePreviewDocument(event.data.files,(bytes,type)=>URL.createObjectURL(new Blob([bytes],{type})),
+            ";window.addEventListener('load',()=>window.__portalReady?.(),{once:true});");
+          document.open();document.write(html);document.close();
+        }catch{port.postMessage('error');port.close();}
+      },{once:true});`;
+    frame.srcdoc = `<!doctype html><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' data: blob: 'wasm-unsafe-eval'; connect-src data: blob:; img-src data: blob:; style-src 'unsafe-inline' data: blob:; font-src data: blob:; media-src data: blob:; worker-src blob:"><script>${script.replaceAll('</script', '<\\/script')}<\/script>`;
+  });
 }
