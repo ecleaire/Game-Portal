@@ -39,17 +39,17 @@ function render() {
       ? `<img src="${escapeHTML(game.thumbnail)}" alt="${escapeHTML(game.title)} のサムネイル">`
       : `<div class="thumb-fallback">${escapeHTML(game.title.slice(0, 2).toUpperCase())}</div>`;
 
+    const gameUrl = `game.html?${game.slug ? `slug=${encodeURIComponent(game.slug)}` : `id=${encodeURIComponent(game.id)}`}`;
     card.innerHTML = `
-      <div class="game-thumb">${thumb}</div>
+      <a class="game-thumb-link" href="${gameUrl}" aria-label="${escapeHTML(game.title)}"><div class="game-thumb">${thumb}</div></a>
       <div class="game-card-body">
         <span class="game-type">${escapeHTML(game.engine)}</span>
-        <h4>${escapeHTML(game.title)}</h4>
+        <h4><a class="game-title-link" href="${gameUrl}">${escapeHTML(game.title)}</a></h4>
         <p>${escapeHTML(game.description || '作品の詳細を見る')}</p>
-        <a class="play-link" href="game.html?${game.slug ? `slug=${encodeURIComponent(game.slug)}` : `id=${encodeURIComponent(game.id)}`}">遊ぶ ▶</a>
       </div>
     `;
     grid.appendChild(card);
-    card.querySelector('.play-link').before(tagChips(game.tags,3,'./'));
+    card.querySelector('.game-card-body').append(tagChips(game.tags,3,'./'));
     if (game.slug && game.has_thumbnail && config.supabaseUrl) {
       fetch(`${config.supabaseUrl}/functions/v1/portal/public-thumbnail`, { method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(config.anonKey ? { apikey: config.anonKey } : {}) },

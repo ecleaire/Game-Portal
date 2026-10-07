@@ -15,7 +15,8 @@ test('existing listing, search and public game player work without backend confi
   await expect(page.locator('.game-card')).toHaveCount(2);
   await page.locator('#searchInput').fill('Scratch');
   await expect(page.locator('.game-card')).toHaveCount(1);
-  await page.locator('.play-link').click();
+  await expect(page.locator('.play-link')).toHaveCount(0);
+  await page.locator('.game-title-link').click();
   await expect(page.locator('#gameTitle')).toHaveText('Scratch Demo');
   await expect(page.locator('#gameFrame')).toHaveAttribute('src', 'games/scratch-demo/index.html');
   await expect(page.frameLocator('#gameFrame').locator('body')).not.toBeEmpty();
