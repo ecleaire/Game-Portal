@@ -6,7 +6,7 @@ function gameTagPicker(game = {}) {
   for (const tag of game.tags ?? []) if (!merged.has(tag.id)) merged.set(tag.id, tag);
   return tagPicker([...merged.values()], game.tags ?? []);
 }
-import { checkWebGameZip, unpackPrivateZip, privatePreviewDocument } from './private-preview.js?v=20260929a';
+import { checkWebGameZip, unpackPrivateZip, privatePreviewDocument } from './private-preview.js?v=20261007c';
 import { packageWebFiles } from './zip-upload.js?v=20261003a';
 import { sendUpload, uploadWithRecovery } from './upload-request.js?v=20261004d';
 import { submissionList } from './submission-list.js?v=20261003a';

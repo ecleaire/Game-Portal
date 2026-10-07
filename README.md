@@ -2,6 +2,8 @@
 
 [Codex Cloudで開発するための環境作成・セットアップ手順](docs/CODEX_CLOUD.md)
 
+[ゲーム読み込みの仕組みと最適化](docs/GAME_LOADING.md)
+
 Godot / Scratch のWebゲームをまとめて遊べるゲームポータルです。
 
 ## 公開URL

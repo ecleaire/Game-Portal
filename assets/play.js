@@ -1,7 +1,7 @@
 import { config } from './config.js';
 import { userSessionKey } from './navigation.js?v=20261003a';
 import { tagChips } from './tags.js?v=20261004a';
-import { unpackPrivateZip, privatePreviewDocument } from './private-preview.js?v=20260929a';
+import { unpackPrivateZip, privatePreviewDocument } from './private-preview.js?v=20261007c';
 
 const params = new URLSearchParams(location.search);
 const frame = document.getElementById('gameFrame');

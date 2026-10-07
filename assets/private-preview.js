@@ -63,6 +63,7 @@ async function inflate(raw, expected) {
     }
   } finally { reader.releaseLock(); }
   if (size !== expected) throw new Error('invalid_preview');
+  if (chunks.length === 1) return chunks[0];
   const result = new Uint8Array(size); let at = 0;
   for (const chunk of chunks) { result.set(chunk, at); at += chunk.length; }
   return result;
@@ -81,28 +82,37 @@ export async function unpackPrivateZip(buffer) {
   if (end < 0) throw new Error('invalid_preview');
   const count = u16(end + 10), centralSize = u32(end + 12), centralOffset = u32(end + 16);
   if (count > MAX_ENTRIES || centralOffset + centralSize > end) throw new Error('invalid_preview');
-  const files = new Map(); let at = centralOffset, total = 0;
+  const entries = []; const names = new Set(); let at = centralOffset, total = 0;
   for (let n = 0; n < count; n++) {
     if (at + 46 > end || u32(at) !== 0x02014b50) throw new Error('invalid_preview');
     const flags = u16(at + 8), method = u16(at + 10), packed = u32(at + 20), size = u32(at + 24);
     const nameLength = u16(at + 28), extraLength = u16(at + 30), commentLength = u16(at + 32), local = u32(at + 42);
     const next = at + 46 + nameLength + extraLength + commentLength;
     if (next > end || flags & 1 || ![0, 8].includes(method)) throw new Error('invalid_preview');
-    const name = decoder.decode(data.slice(at + 46, at + 46 + nameLength));
+    const name = decoder.decode(data.subarray(at + 46, at + 46 + nameLength));
     at = next;
     if (name.endsWith('/')) continue;
-    if (!name || name.startsWith('/') || name.includes('\\') || name.split('/').includes('..') || name.includes(':') || files.has(name)) throw new Error('invalid_preview');
+    if (!name || name.startsWith('/') || name.includes('\\') || name.split('/').includes('..') || name.includes(':') || names.has(name)) throw new Error('invalid_preview');
+    names.add(name);
     total += size; if (total > MAX_UNPACKED || local + 30 > centralOffset || u32(local) !== 0x04034b50) throw new Error('invalid_preview');
     const start = local + 30 + u16(local + 26) + u16(local + 28);
     if (start + packed > centralOffset) throw new Error('invalid_preview');
-    const raw = data.slice(start, start + packed);
-    const content = method === 0 ? raw : await inflate(raw, size);
-    if (content.length !== size) throw new Error('invalid_preview');
-    files.set(name, content);
+    if (method === 0 && packed !== size) throw new Error('invalid_preview');
+    entries.push({ name, method, size, start, packed });
   }
-  const layout = webArchiveLayout([...files.keys()]);
+  const layout = webArchiveLayout(entries.map(entry => entry.name));
   if (!layout) throw new Error('invalid_preview');
-  const normalized = new Map([...files].map(([name, content]) => [name.slice(layout.root.length), content]));
+  // Validate the entire directory and size budget before starting any work.
+  // Bound concurrent inflation so large exports do not open hundreds of streams.
+  const contents = new Array(entries.length); let cursor = 0;
+  await Promise.all(Array.from({ length: Math.min(4, entries.length) }, async () => {
+    while (cursor < entries.length) {
+      const index = cursor++, entry = entries[index];
+      const raw = data.subarray(entry.start, entry.start + entry.packed);
+      contents[index] = entry.method === 0 ? raw : await inflate(raw, entry.size);
+    }
+  }));
+  const normalized = new Map(entries.map((entry, index) => [entry.name.slice(layout.root.length), contents[index]]));
   normalized.set('index.html', normalized.get(layout.entry));
   return normalized;
 }
