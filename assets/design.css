@@ -66,7 +66,7 @@ a, button, input, select { -webkit-tap-highlight-color: transparent; }
 .search-box input { min-height: 44px; border-color: var(--line); border-radius: 12px; background: var(--panel); }
 .search-options { flex: 0 0 100%; min-width: 0; padding: 14px 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
 .search-options summary { cursor: pointer; font-weight: 700; color: var(--accent); }
-.search-options-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 18px; }
+.search-options-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 18px; }
 .search-options label { display: grid; gap: 8px; min-width: 0; font-size: .85rem; }
 .search-options select { width: 100%; min-width: 0; min-height: 44px; padding: 9px; border: 1px solid var(--line); border-radius: 9px; color: var(--text); background: var(--bg); font: inherit; }
 .search-options p { margin: 16px 0 12px; font-size: .8rem; color: var(--muted); overflow-wrap: anywhere; }

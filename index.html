@@ -6,21 +6,25 @@
   <meta name="theme-color" content="#111827" />
   <title>GAME PORTAL</title>
   <link rel="stylesheet" href="assets/style.css?v=20261005b" />
-  <link rel="stylesheet" href="assets/design.css?v=20261007c" />
+  <link rel="stylesheet" href="assets/design.css?v=20261007f" />
+  <link rel="stylesheet" href="./assets/support.css?v=20261007a">
+  <link rel="stylesheet" href="assets/theme.css?v=20261007a">
+  <script src="assets/theme.js?v=20261007a"></script>
 </head>
-<body>
+<body class="home-page">
+  <a class="skip-link" href="#mainContent">本文へ移動</a>
   <header class="site-header">
     <div class="header-inner">
       <div>
         <p class="eyebrow">MY GAME LIBRARY</p>
         <h1><a href="./" aria-label="GAME PORTAL ホーム">GAME PORTAL</a></h1>
       </div>
-      <nav class="site-nav" aria-label="メインメニュー"><a href="./" aria-current="page">ホーム</a><a href="login/" data-portal-login>ログイン</a><a href="account/" data-portal-account hidden>アカウント</a><a href="upload/">ゲームを投稿</a><a href="admin/" data-portal-admin hidden>管理画面</a></nav>
+      <nav class="site-nav" aria-label="メインメニュー"><a href="./" aria-current="page">ホーム</a><a href="login/" data-portal-login>ログイン</a><a href="account/" data-portal-account hidden>アカウント</a><a href="upload/">ゲームを投稿</a><a href="admin/" data-portal-admin hidden>管理画面</a><a href="./faq/">FAQ</a></nav>
     </div>
   </header>
 
-  <main class="container">
-    <section class="hero">
+  <main class="container" id="mainContent">
+    <section class="hero hero-layout" aria-label="GAME PORTALについて">
       <div>
         <p class="hero-kicker">DISCOVER & PLAY</p>
         <h2><span>遊ぶ。つくる。</span><br><span>ここでつながる。</span></h2>
@@ -29,9 +33,17 @@
         </p>
         <div class="hero-actions"><a class="hero-primary" href="#games">ゲームを探す <span aria-hidden="true">↗</span></a><a class="hero-secondary" href="upload/">作品を投稿する</a></div>
       </div>
+      <aside class="hero-guide" aria-label="はじめての方へ">
+        <p class="eyebrow">START HERE</p><h3>あなたの楽しみ方で。</h3>
+        <a href="#games"><span class="guide-number" aria-hidden="true">01</span><span><strong>ゲームを探す</strong><small>キーワードやタグで、お気に入りに出会う。</small></span><span aria-hidden="true">↗</span></a>
+        <a href="upload/"><span class="guide-number" aria-hidden="true">02</span><span><strong>作品を届ける</strong><small>あなたのゲームを投稿・管理する。</small></span><span aria-hidden="true">↗</span></a>
+        <a class="guide-help" href="faq/">はじめての方はFAQへ →</a>
+      </aside>
     </section>
 
-    <section class="toolbar" aria-label="ゲーム絞り込み" id="games">
+    <section class="game-explorer" id="games" aria-labelledby="gamesHeading">
+      <div class="section-heading"><div><p class="eyebrow">GAME LIBRARY</p><h3 id="gamesHeading">ゲームを探す</h3><p class="section-description">気になる作品を選んで、そのままプレイ。</p></div><span id="gameCount" role="status"></span></div>
+      <div class="toolbar" aria-label="ゲーム絞り込み" id="gameFilters">
       <div class="filters" id="filters">
         <button class="filter-button active" data-filter="all" aria-pressed="true">すべて</button>
         <button class="filter-button" data-filter="godot" aria-pressed="false">Godot</button>
@@ -54,39 +66,25 @@
               <option value="all">タグ・タイトル・キャプション</option>
             </select>
           </label>
-          <label for="keywordMode">複数キーワードの条件
-            <select id="keywordMode">
+          <label for="matchMode">キーワード・タグの一致条件
+            <select id="matchMode">
               <option value="all">すべて一致（AND）</option>
               <option value="any">いずれか一致（OR）</option>
             </select>
           </label>
-          <label for="tagMode">選択した複数タグの条件
-            <select id="tagMode">
-              <option value="all">すべてのタグを含む（AND）</option>
-              <option value="any">いずれかのタグを含む（OR）</option>
-            </select>
-          </label>
         </div>
-        <p id="searchHelp">キーワードはスペースで区切れます。タグの完全一致はタグ名・slug全体との一致、部分一致はその一部との一致です。選択タグとエンジンの絞り込みは、キーワード条件と組み合わせて適用します。</p>
+        <p id="searchHelp">キーワードはスペースで区切れます。一致条件は入力したキーワードと選択したタグをまとめて判定します。タグの完全一致はタグ名・slug全体との一致、部分一致はその一部との一致です。エンジンの絞り込みはどちらの一致条件でも適用します。</p>
         <button id="resetSearchOptions" type="button">オプションを初期設定に戻す</button>
       </details>
-    </section>
-
-    <section>
-      <div class="section-heading">
-        <h3>公開中のゲーム</h3>
-        <span id="gameCount"></span>
       </div>
       <div id="gameGrid" class="game-grid" aria-live="polite"></div>
       <p id="emptyMessage" class="empty-message" hidden>該当するゲームがありません。</p>
     </section>
   </main>
 
-  <footer class="site-footer">
-    <p>GAME PORTAL / Godot + Scratch</p>
-  </footer>
+  <footer class="site-footer"><div class="footer-inner"><div><a class="footer-brand" href="./">GAME PORTAL</a><p>遊ぶ人とつくる人が集まる場所。</p></div><nav aria-label="サポート・ポリシー"><a href="./faq/">FAQ</a><a href="./terms/">利用規約</a><a href="./privacy/">プライバシーポリシー</a></nav></div></footer>
 
   <script type="module" src="assets/navigation.js?v=20261003a"></script>
-  <script type="module" src="assets/app.js?v=20261007d"></script>
+  <script type="module" src="assets/app.js?v=20261007g"></script>
 </body>
 </html>

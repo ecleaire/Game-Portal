@@ -2,6 +2,98 @@ import { test, expect } from '@playwright/test';
 import { packageWebFiles } from '../../assets/zip-upload.js';
 import { writeFile } from 'node:fs/promises';
 
+test('theme defaults to dark and persists across pages with accessible mobile controls', async ({ page, context }) => {
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.goto('./');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await expect(page.locator('body')).toHaveCSS('color', 'rgb(245, 248, 252)');
+  const toggle = page.getByRole('button', { name: 'ライトモードに切り替える' });
+  await toggle.focus(); await page.keyboard.press('Enter');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await expect(page.locator('body')).toHaveCSS('color', 'rgb(24, 40, 61)');
+  for (const path of ['faq/', 'terms/', 'privacy/', 'login/', 'account/', 'upload/', 'admin/', 'game.html?id=scratch-demo']) {
+    await page.goto(path);
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await expect(page.getByRole('button', { name: 'ダークモードに切り替える' })).toBeVisible();
+    await page.setViewportSize({ width: 320, height: 900 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+  await page.goto('./'); await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await page.locator('#searchOptions summary').click();
+  await expect(page.locator('#searchTarget')).toHaveCSS('color', 'rgb(24, 40, 61)');
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+  await page.screenshot({ path: 'test-results/home-light-320.png', fullPage: true });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+  await page.screenshot({ path: 'test-results/home-light-1440.png', fullPage: true });
+  const other = await context.newPage(); await other.goto('faq/');
+  await page.getByRole('button', { name: 'ダークモードに切り替える' }).click();
+  await expect(other.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await page.reload(); await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await other.close();
+});
+
+test('theme switching works when browser storage is unavailable', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'localStorage', { get() { throw new Error('storage disabled'); } });
+  });
+  await page.goto('login/');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await page.getByRole('button', { name: 'ライトモードに切り替える' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+});
+
+test('help and policy pages are linked, keyboard accessible and responsive', async ({ page }) => {
+  await page.goto('./');
+  await page.getByRole('navigation', { name: 'メインメニュー' }).getByRole('link', { name: 'FAQ', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'よくある質問', exact: true })).toBeVisible();
+  const question = page.locator('.faq-item').first();
+  await question.locator('summary').focus(); await page.keyboard.press('Enter');
+  await expect(question).toHaveAttribute('open', '');
+  await expect(question.locator('div')).toContainText('公開ゲーム');
+  for (const width of [1440, 768, 390, 320]) {
+    await page.setViewportSize({ width, height: 1000 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+  await page.getByRole('navigation', { name: 'サポート・ポリシー' }).getByRole('link', { name: '利用規約', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '利用規約', exact: true })).toBeVisible();
+  await expect(page.locator('.policy-draft')).toContainText('公開前の確認用ドラフト');
+  await expect(page.locator('#operator')).toContainText('GAMEPORTAL運営');
+  await expect(page.locator('#operator')).toContainText('問い合わせ窓口を設けていません');
+  await page.getByRole('navigation', { name: 'サポート・ポリシー' }).getByRole('link', { name: 'プライバシーポリシー', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'プライバシーポリシー', exact: true })).toBeVisible();
+  await expect(page.locator('#providers')).toContainText('Google Drive');
+  await expect(page.locator('#operator')).toContainText('GAMEPORTAL運営');
+  for (const width of [1440, 768, 390, 320]) {
+    await page.setViewportSize({ width, height: 1000 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: `test-results/privacy-${width}.png`, fullPage: true });
+  }
+  await page.goto('./');
+  for (const width of [1440, 1024, 768, 390, 320]) {
+    await page.setViewportSize({ width, height: 1000 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const lines = await page.locator('.hero h2 span').evaluateAll(nodes => nodes.map(n => { const r=document.createRange(); r.selectNodeContents(n); return [...r.getClientRects()].map(rect=>({top:rect.top,right:rect.right})); }));
+    expect(lines).toHaveLength(2); for(const line of lines) expect(line).toHaveLength(1);
+    expect(lines[1][0].top).toBeGreaterThan(lines[0][0].top);
+    for(const line of lines) expect(line[0].right).toBeLessThanOrEqual(width);
+    await page.screenshot({ path: `test-results/home-layout-${width}.png`, fullPage: true });
+  }
+  for (const path of ['login/', 'account/', 'upload/', 'admin/', 'game.html?id=scratch-demo']) {
+    await page.goto(path);
+    const footer=page.getByRole('navigation', { name: 'サポート・ポリシー' });
+    await expect(footer.getByRole('link', { name: 'FAQ', exact: true })).toHaveAttribute('href', /faq\/$/);
+    await footer.getByRole('link', { name: 'FAQ', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'よくある質問', exact: true })).toBeVisible();
+  }
+  await page.evaluate(() => sessionStorage.setItem('game-portal.user.session.v1', 'a'.repeat(64)));
+  await page.reload();
+  await page.getByRole('navigation', { name: 'メインメニュー' }).getByRole('link', { name: 'ログアウト', exact: true }).click();
+  await expect(page).toHaveURL(/\/Game-Portal\/$/);
+  expect(await page.evaluate(() => sessionStorage.getItem('game-portal.user.session.v1'))).toBeNull();
+});
+
 test('binary sandbox loading preserves WASM, assets and isolation without Base64 overhead', async ({page}) => {
   await goto(page, './');
   const result = await page.evaluate(async () => {
@@ -52,6 +144,9 @@ test('search options distinguish keyword fields, exact/partial tags and AND/OR o
   await page.goto('./');
   const cards = page.locator('.game-card');
   await expect(cards).toHaveCount(5);
+  await expect(page.locator('#searchOptions')).not.toHaveAttribute('open', '');
+  await expect(page.locator('#searchTarget')).toBeHidden();
+  await expect(page.locator('.home-help')).toHaveCount(0);
   await page.locator('#searchOptions summary').click();
   await page.locator('#searchTarget').selectOption('title');
   await page.locator('#searchInput').fill('星');
@@ -65,10 +160,10 @@ test('search options distinguish keyword fields, exact/partial tags and AND/OR o
   await page.locator('#searchTarget').selectOption('tag-partial'); await expect(cards).toHaveCount(2);
   await page.locator('#searchInput').fill('アクション　３Ｄ');
   await page.locator('#searchTarget').selectOption('tag-exact'); await expect(cards).toHaveCount(1);
-  await page.locator('#keywordMode').selectOption('any'); await expect(cards).toHaveCount(2);
+  await page.locator('#matchMode').selectOption('any'); await expect(cards).toHaveCount(2);
   await page.locator('#searchTarget').selectOption('tag-partial'); await expect(cards).toHaveCount(3);
   await page.locator('#searchTarget').selectOption('all');
-  await page.locator('#keywordMode').selectOption('all');
+  await page.locator('#matchMode').selectOption('all');
   await page.locator('#searchInput').fill('星 アクション'); await expect(cards).toHaveCount(2);
   await page.locator('#resetSearchOptions').click();
   await expect(page.locator('#searchTarget')).toHaveValue('text');
@@ -76,11 +171,16 @@ test('search options distinguish keyword fields, exact/partial tags and AND/OR o
 
   await page.goto('?tag=action&tag=3d'); await expect(cards).toHaveCount(1);
   await page.locator('#searchOptions summary').click();
-  await page.locator('#tagMode').selectOption('any'); await expect(cards).toHaveCount(2);
-  await expect(page.locator('.tag-filter-hint')).toHaveText('選択したタグのいずれかが付いた作品を表示します。');
+  await page.locator('#matchMode').selectOption('any'); await expect(cards).toHaveCount(2);
+  await expect(page.locator('.tag-filter-hint')).toHaveText('キーワード・選択タグのいずれかに一致する作品を表示します。');
+  await page.locator('#searchInput').fill('海'); await expect(cards).toHaveCount(3);
+  await page.locator('#matchMode').selectOption('all'); await expect(cards).toHaveCount(1);
+  await page.locator('#matchMode').selectOption('any');
+  await page.locator('#searchInput').fill('');
   await page.getByRole('button', { name: 'Scratch', exact: true }).click(); await expect(cards).toHaveCount(0);
   await page.getByRole('button', { name: 'すべて', exact: true }).click(); await expect(cards).toHaveCount(2);
-  await page.reload(); await expect(page.locator('#tagMode')).toHaveValue('any'); await expect(cards).toHaveCount(2);
+  await page.reload(); await expect(page.locator('#matchMode')).toHaveValue('any'); await expect(cards).toHaveCount(2);
+  await expect(page.locator('#searchTarget')).toBeHidden();
   await page.locator('#searchOptions summary').click();
   for (const width of [1440, 768, 390, 320]) {
     await page.setViewportSize({ width, height: 1000 });

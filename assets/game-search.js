@@ -3,13 +3,13 @@ const combine = (conditions, mode) => !conditions.length ||
   (mode === 'any' ? conditions.some(Boolean) : conditions.every(Boolean));
 
 // Exact tag matching compares each tag name/slug, not the game's entire tag set.
-export function matchesGameSearch(game, { keyword = '', target = 'text', keywordMode = 'all', selectedTags = [], tagMode = 'all' } = {}) {
+export function matchesGameSearch(game, { keyword = '', target = 'text', matchMode = 'all', selectedTags = [] } = {}) {
   const tags = game.tags ?? [];
-  if (!combine([...selectedTags].map(slug => tags.some(tag => tag.slug === slug)), tagMode)) return false;
+  const tagConditions = [...selectedTags].map(slug => tags.some(tag => tag.slug === slug));
   const terms = normalize(keyword).split(/\s+/u).filter(Boolean);
   const title = normalize(game.title), description = normalize(game.description);
   const tagNames = tags.flatMap(tag => [normalize(tag.name), normalize(tag.slug)]);
-  return combine(terms.map(term => {
+  const keywordConditions = terms.map(term => {
     switch (target) {
       case 'title': return title.includes(term);
       case 'description': return description.includes(term);
@@ -18,5 +18,6 @@ export function matchesGameSearch(game, { keyword = '', target = 'text', keyword
       case 'all': return title.includes(term) || description.includes(term) || tagNames.some(name => name.includes(term));
       default: return title.includes(term) || description.includes(term);
     }
-  }), keywordMode);
+  });
+  return combine([...keywordConditions, ...tagConditions], matchMode);
 }

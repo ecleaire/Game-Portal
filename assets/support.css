@@ -1,0 +1,62 @@
+.skip-link { position: absolute; top: -100px; left: 16px; z-index: 100; padding: 12px 18px; color: var(--bg); background: var(--accent); border-radius: 10px; }
+.skip-link:focus { top: 12px; }
+.home-page .hero-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 42px; align-items: center; }
+.home-page .hero-guide { position: relative; z-index: 1; padding: 24px; background: rgba(8,17,31,.6); border: 1px solid var(--line); border-radius: 20px; }
+.hero-guide h3 { margin: 8px 0 18px; font-size: 1.1rem; }
+.hero-guide > a { display: flex; align-items: start; gap: 12px; padding: 15px 0; border-top: 1px solid var(--line); text-decoration: none; }
+.hero-guide > a:hover strong, .hero-guide > a:hover { color: var(--accent); }
+.hero-guide strong, .hero-guide small { display: block; }
+.hero-guide small { margin-top: 5px; color: var(--muted); line-height: 1.6; }
+.guide-number { color: var(--accent); font-size: .75rem; padding-top: 3px; }
+.hero-guide .guide-help { padding-bottom: 0; font-size: .8rem; color: var(--muted); }
+.game-explorer { margin-top: 48px; scroll-margin-top: 170px; }
+.section-description { margin: 10px 0 0; color: var(--muted); font-size: .9rem; }
+.home-page .toolbar { margin: 22px 0; padding: 20px; border: 1px solid var(--line); border-radius: 18px; background: rgba(17,26,43,.65); gap: 18px; }
+.home-page .search-box { flex: 1; min-width: 250px; justify-content: flex-end; }
+.home-page .search-box input { flex: 1; width: auto; max-width: 460px; min-width: 0; }
+.home-page .search-options { padding: 12px 14px; background: rgba(9,14,25,.35); }
+.home-page .game-thumb-link { text-decoration: none; }
+.site-footer { margin-top: 32px; padding: 32px 0; }
+.footer-inner { width: min(1240px, calc(100% - 48px)); margin-inline: auto; display: flex; justify-content: space-between; align-items: center; gap: 24px; text-align: left; }
+.footer-brand { font-weight: 800; letter-spacing: .04em; text-decoration: none; color: var(--text); }
+.footer-inner p { margin: 7px 0 0; font-size: .8rem; color: var(--muted); }
+.footer-inner nav { display: flex; flex-wrap: wrap; gap: 8px 22px; }
+.footer-inner nav a { display: inline-flex; align-items: center; min-height: 44px; font-size: .85rem; color: var(--muted); text-decoration: none; }
+.footer-inner nav a:hover { color: var(--accent); }
+.support-heading { max-width: 760px; margin-bottom: 32px; }
+.support-heading h2 { margin: 12px 0; font-size: clamp(1.8rem, 4vw, 2.8rem); line-height: 1.3; overflow-wrap: anywhere; }
+.support-heading > p:last-child { color: var(--muted); }
+.support-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 36px; align-items: start; }
+.support-toc { position: sticky; top: 120px; padding: 22px; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); }
+.support-toc nav, .support-related { display: grid; gap: 6px; }
+.support-toc strong { margin-bottom: 8px; font-size: .85rem; }
+.support-toc a { padding: 8px 0; font-size: .85rem; color: var(--muted); text-decoration: none; }
+.support-toc a:hover { color: var(--accent); }
+.support-related { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--line); }
+.support-content { min-width: 0; max-width: 860px; }
+.support-content section { margin-bottom: 34px; scroll-margin-top: 180px; }
+.support-content h3 { margin: 0 0 16px; font-size: 1.25rem; }
+.support-content p, .support-content li, .support-content dd { color: var(--muted); line-height: 1.9; overflow-wrap: anywhere; }
+.support-content ul { padding-left: 24px; }
+.support-content a { color: var(--accent); text-underline-offset: 3px; }
+.faq-item { margin-bottom: 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+.faq-item summary { padding: 18px 20px; cursor: pointer; line-height: 1.65; font-weight: 650; }
+.faq-item[open] summary { border-bottom: 1px solid var(--line); color: var(--accent); }
+.faq-item > div { padding: 18px 20px; }
+.faq-item > div > :last-child { margin-bottom: 0; }
+.policy-draft { margin-bottom: 28px; padding: 18px 22px; border: 1px solid rgba(255,199,108,.3); border-radius: 14px; background: rgba(255,199,108,.06); }
+.policy-draft strong { color: #ffd18b; }
+.policy-draft p { margin: 8px 0 0; color: var(--muted); }
+.policy-facts { display: grid; grid-template-columns: minmax(100px, 180px) minmax(0, 1fr); margin: 18px 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.policy-facts dt, .policy-facts dd { margin: 0; padding: 14px; border-bottom: 1px solid var(--line); }
+.policy-facts dt { font-size: .9rem; background: var(--panel); }
+.policy-facts > :nth-last-child(-n+2) { border-bottom: 0; }
+@media (max-width: 1050px) { .home-page .hero-layout { grid-template-columns: minmax(0, 1fr) 260px; gap: 24px; } .home-page .hero h2 { font-size: clamp(2.4rem, 4.5vw, 3.5rem); } }
+@media (max-width: 900px) { .home-page .hero-layout { grid-template-columns: 1fr; } .support-layout { grid-template-columns: 1fr; gap: 26px; } .support-toc { position: static; } .support-toc nav { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 18px; } .support-toc strong { grid-column: 1 / -1; } .support-related { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 700px) { .home-page .hero h2 { font-size: clamp(2.35rem, 8vw, 3.3rem); } .home-page .hero-guide { padding: 18px; } .home-page .toolbar { padding: 16px; } .home-page .search-box { min-width: 0; width: 100%; } .footer-inner { flex-direction: column; align-items: flex-start; } .footer-inner { width: calc(100% - 28px); } .footer-inner nav { column-gap: 18px; } .policy-facts { grid-template-columns: 1fr; } .policy-facts dt { border-bottom: 0; } }
+@media (max-width: 700px) {
+  .home-page .hero-guide { padding: 16px 0 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: transparent; }
+  .home-page .hero-guide .eyebrow, .home-page .hero-guide h3, .home-page .hero-guide > a:not(.guide-help) { display: none; }
+  .home-page .hero-guide .guide-help { border: 0; padding: 0; }
+}
+@media (max-width: 420px) { .home-page .hero h2 { font-size: clamp(1.875rem, 9vw, 2.35rem); } .support-toc nav, .support-related { grid-template-columns: 1fr; } }

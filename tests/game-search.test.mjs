@@ -22,17 +22,20 @@ test('exact tag names do not match prefixes, and partial names do', () => {
   assert.equal(matchesGameSearch(game, { keyword: '星 アクション', target: 'all' }), true);
 });
 
-test('multiple keywords and selected tags have independent AND/OR conditions', () => {
+test('keywords and selected tags share one AND/OR condition', () => {
   assert.equal(matchesGameSearch(game, { keyword: '星 月' }), false);
-  assert.equal(matchesGameSearch(game, { keyword: '星 月', keywordMode: 'any' }), true);
+  assert.equal(matchesGameSearch(game, { keyword: '星 月', matchMode: 'any' }), true);
   assert.equal(matchesGameSearch(game, { selectedTags: ['3d', 'puzzle'] }), false);
-  assert.equal(matchesGameSearch(game, { selectedTags: ['3d', 'puzzle'], tagMode: 'any' }), true);
-  assert.equal(matchesGameSearch(game, { keyword: '月', selectedTags: ['3d'], tagMode: 'any' }), false);
+  assert.equal(matchesGameSearch(game, { selectedTags: ['3d', 'puzzle'], matchMode: 'any' }), true);
+  assert.equal(matchesGameSearch(game, { keyword: '月', selectedTags: ['3d'], matchMode: 'any' }), true);
   assert.equal(matchesGameSearch(game, { keyword: '星', selectedTags: ['puzzle'] }), false);
+  assert.equal(matchesGameSearch(game, { keyword: '星', selectedTags: ['puzzle'], matchMode: 'any' }), true);
+  assert.equal(matchesGameSearch(game, { keyword: '月', selectedTags: ['puzzle'], matchMode: 'any' }), false);
+  assert.equal(matchesGameSearch(game, { keyword: '星', selectedTags: ['3d'] }), true);
 });
 
 test('empty filters include untagged games, but active tag filters exclude them', () => {
-  assert.equal(matchesGameSearch({}, { keyword: ' 　', target: 'tag-exact', keywordMode: 'any', tagMode: 'any' }), true);
+  assert.equal(matchesGameSearch({}, { keyword: ' 　', target: 'tag-exact', matchMode: 'any' }), true);
   assert.equal(matchesGameSearch({}, { keyword: '3d', target: 'tag-exact' }), false);
-  assert.equal(matchesGameSearch({}, { selectedTags: ['3d'], tagMode: 'any' }), false);
+  assert.equal(matchesGameSearch({}, { selectedTags: ['3d'], matchMode: 'any' }), false);
 });

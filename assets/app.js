@@ -1,6 +1,6 @@
 import { config } from './config.js';
 import { loadTags, tagFilter, tagChips } from './tags.js?v=20261004d';
-import { matchesGameSearch } from './game-search.js?v=20261007a';
+import { matchesGameSearch } from './game-search.js?v=20261007b';
 let selectedTags = new Set(new URLSearchParams(location.search).getAll('tag'));
 let games = [];
 let activeFilter = "all";
@@ -9,12 +9,14 @@ const grid = document.getElementById("gameGrid");
 const count = document.getElementById("gameCount");
 const searchInput = document.getElementById("searchInput");
 const emptyMessage = document.getElementById("emptyMessage");
+// Keep advanced controls collapsed on each visit, even when filters are in the URL.
+document.getElementById('searchOptions').open = false;
 const searchTarget = document.getElementById('searchTarget');
-const keywordMode = document.getElementById('keywordMode');
-const tagMode = document.getElementById('tagMode');
+const matchMode = document.getElementById('matchMode');
 const searchParams = new URLSearchParams(location.search);
-for (const control of [searchTarget, keywordMode, tagMode]) {
-  const value = searchParams.get(control.id);
+for (const control of [searchTarget, matchMode]) {
+  const value = searchParams.get(control.id) ?? (control === matchMode
+    ? searchParams.get('keywordMode') ?? searchParams.get('tagMode') : null);
   if ([...control.options].some(option => option.value === value)) control.value = value;
 }
 
@@ -30,11 +32,11 @@ function escapeHTML(value = "") {
 
 function render() {
   const options = { keyword: searchInput.value, target: searchTarget.value,
-    keywordMode: keywordMode.value, selectedTags, tagMode: tagMode.value };
+    matchMode: matchMode.value, selectedTags };
   const hint = document.querySelector('.tag-filter-hint');
-  if (hint) hint.textContent = tagMode.value === 'any'
-    ? '選択したタグのいずれかが付いた作品を表示します。'
-    : '選択したタグがすべて付いた作品を表示します。';
+  if (hint) hint.textContent = matchMode.value === 'any'
+    ? 'キーワード・選択タグのいずれかに一致する作品を表示します。'
+    : 'キーワード・選択タグのすべてに一致する作品を表示します。';
   const filtered = games.filter(game => {
     const engineMatch = activeFilter === "all" || game.engine.toLowerCase() === activeFilter;
     return engineMatch && matchesGameSearch(game, options);
@@ -91,16 +93,18 @@ document.getElementById("filters").addEventListener("click", event => {
 searchInput.addEventListener("input", render);
 function updateSearchOptions() {
   const url = new URL(location.href);
-  for (const control of [searchTarget, keywordMode, tagMode]) {
+  url.searchParams.delete('keywordMode');
+  url.searchParams.delete('tagMode');
+  for (const control of [searchTarget, matchMode]) {
     url.searchParams.delete(control.id);
     if (control.value !== control.options[0].value) url.searchParams.set(control.id, control.value);
   }
   history.replaceState(null, '', url);
   render();
 }
-for (const control of [searchTarget, keywordMode, tagMode]) control.addEventListener('change', updateSearchOptions);
+for (const control of [searchTarget, matchMode]) control.addEventListener('change', updateSearchOptions);
 document.getElementById('resetSearchOptions').addEventListener('click', () => {
-  for (const control of [searchTarget, keywordMode, tagMode]) control.selectedIndex = 0;
+  for (const control of [searchTarget, matchMode]) control.selectedIndex = 0;
   updateSearchOptions();
 });
 
@@ -132,6 +136,6 @@ gamesReady.then(()=>loadTags()).then(tags=>{
     const url=new URL(location.href);url.searchParams.delete('tag');for(const slug of selectedTags)url.searchParams.append('tag',slug);
     history.replaceState(null,'',url);render();
   });
-  document.getElementById('games').append(filter);
+  document.getElementById('gameFilters').append(filter);
   render();
 }).catch(console.error);
