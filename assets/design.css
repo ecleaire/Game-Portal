@@ -65,12 +65,15 @@ a, button, input, select { -webkit-tap-highlight-color: transparent; }
 .search-box input { min-height: 44px; border-color: var(--line); border-radius: 12px; background: var(--panel); }
 .section-heading h3 { font-size: 1.35rem; letter-spacing: -.02em; }
 .game-grid { gap: 22px; }
-.game-card { border-color: rgba(187,212,243,.12); border-radius: 20px; box-shadow: 0 14px 40px rgba(0,0,0,.15); }
+.game-card { position: relative; border-color: rgba(187,212,243,.12); border-radius: 20px; box-shadow: 0 14px 40px rgba(0,0,0,.15); }
 .game-card:hover { border-color: rgba(115,231,209,.4); }
 .game-card-body { padding: 22px; }
 .game-card h4 { font-size: 1.2rem; }
 .game-thumb-link { display: block; }
 .game-title-link { color: inherit; text-decoration: none; }
+.game-title-link::after { content: ''; position: absolute; inset: 0; border-radius: 20px; }
+.game-title-link:focus-visible::after { outline: 2px solid var(--accent); outline-offset: 3px; }
+.game-card .tag-chip { position: relative; z-index: 1; }
 .game-title-link:hover { color: var(--accent); }
 .game-thumb-link:focus-visible, .game-title-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 8px; }
 .game-card p { min-height: 3.4em; }
