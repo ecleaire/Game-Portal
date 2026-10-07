@@ -2,24 +2,35 @@ import { test, expect } from '@playwright/test';
 import { packageWebFiles } from '../../assets/zip-upload.js';
 import { writeFile } from 'node:fs/promises';
 
-test('theme defaults to dark and persists across pages with accessible mobile controls', async ({ page, context }) => {
+test('footer theme follows device changes and persists explicit overrides across pages', async ({ page, context }) => {
   await page.emulateMedia({ colorScheme: 'light' });
   await page.goto('./');
+  const control = page.getByRole('combobox', { name: '表示モード', exact: true });
+  await expect(control).toHaveValue('system');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await expect(page.locator('.site-nav').getByRole('link', { name: 'FAQ', exact: true })).toHaveCount(0);
+  await expect(page.locator('.site-nav select')).toHaveCount(0);
+  await page.emulateMedia({ colorScheme: 'dark' });
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await expect(page.locator('body')).toHaveCSS('color', 'rgb(245, 248, 252)');
-  const toggle = page.getByRole('button', { name: 'ライトモードに切り替える' });
-  await toggle.focus(); await page.keyboard.press('Enter');
+  await control.selectOption('light');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.emulateMedia({ colorScheme: 'dark' });
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   await expect(page.locator('body')).toHaveCSS('color', 'rgb(24, 40, 61)');
   for (const path of ['faq/', 'terms/', 'privacy/', 'login/', 'account/', 'upload/', 'admin/', 'game.html?id=scratch-demo']) {
     await page.goto(path);
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-    await expect(page.getByRole('button', { name: 'ダークモードに切り替える' })).toBeVisible();
+    await expect(control).toHaveValue('light');
+    await expect(page.locator('.site-footer').getByRole('combobox', { name: '表示モード', exact: true })).toBeVisible();
+    await expect(page.locator('.site-nav').getByRole('link', { name: 'FAQ', exact: true })).toHaveCount(0);
     await page.setViewportSize({ width: 320, height: 900 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
   await page.goto('./'); await page.reload();
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await expect(control).toHaveValue('light');
+  await control.focus(); await expect(control).toBeFocused();
   await page.locator('#searchOptions summary').click();
   await expect(page.locator('#searchTarget')).toHaveCSS('color', 'rgb(24, 40, 61)');
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
@@ -28,26 +39,37 @@ test('theme defaults to dark and persists across pages with accessible mobile co
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
   await page.screenshot({ path: 'test-results/home-light-1440.png', fullPage: true });
   const other = await context.newPage(); await other.goto('faq/');
-  await page.getByRole('button', { name: 'ダークモードに切り替える' }).click();
+  await control.selectOption('dark');
   await expect(other.locator('html')).toHaveAttribute('data-theme', 'dark');
-  await page.reload(); await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await page.reload(); await expect(control).toHaveValue('dark');
+  await page.emulateMedia({ colorScheme: 'light' });
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await control.selectOption('system');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await page.reload(); await expect(control).toHaveValue('system');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await other.close();
 });
 
-test('theme switching works when browser storage is unavailable', async ({ page }) => {
+test('device theme and manual switching work when browser storage is unavailable', async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(window, 'localStorage', { get() { throw new Error('storage disabled'); } });
   });
+  await page.emulateMedia({ colorScheme: 'dark' });
   await page.goto('login/');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  await page.getByRole('button', { name: 'ライトモードに切り替える' }).click();
+  await page.emulateMedia({ colorScheme: 'light' });
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await page.getByRole('combobox', { name: '表示モード', exact: true }).selectOption('dark');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
 });
 
 test('help and policy pages are linked, keyboard accessible and responsive', async ({ page }) => {
   await page.goto('./');
-  await page.getByRole('navigation', { name: 'メインメニュー' }).getByRole('link', { name: 'FAQ', exact: true }).click();
+  await page.getByRole('navigation', { name: 'サポート・ポリシー' }).getByRole('link', { name: 'FAQ', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'よくある質問', exact: true })).toBeVisible();
+  await expect(page.locator('summary').filter({ hasText: '問い合わせ窓口はありますか？' })).toHaveCount(0);
   const question = page.locator('.faq-item').first();
   await question.locator('summary').focus(); await page.keyboard.press('Enter');
   await expect(question).toHaveAttribute('open', '');
@@ -628,13 +650,23 @@ test('tag filters combine with engine and text search, and cards cap visible tag
  await page.mouse.click(cardTag.x+cardTag.width/2,cardTag.y+cardTag.height/2);
  await expect(page).toHaveURL(/\?tag=3d#games$/);await expect(page.locator('.game-card')).toHaveCount(1);
  await page.goto('?tag=action');await expect(page.locator('.game-card')).toHaveCount(2);
- await page.getByRole('button',{name:/タグで絞り込み/}).click();
+ await expect(page.locator('#searchOptions')).not.toHaveAttribute('open','');
+ await expect(page.locator('#activeTagFilters')).toContainText('アクション');
+ await expect(page.getByRole('button',{name:/タグで絞り込み/})).toHaveCount(0);
+ await page.locator('#searchOptions summary').click();
  await page.getByRole('searchbox',{name:'タグを検索',exact:true}).fill('3D');
  await page.locator('.tag-filter-options').getByRole('button',{name:'3D',exact:true}).click();await expect(page.locator('.game-card')).toHaveCount(1);
+ await page.locator('#searchOptions summary').click();
+ await expect(page.getByRole('searchbox',{name:'タグを検索',exact:true})).toBeHidden();
+ await expect(page.locator('#activeTagFilters')).toContainText('3D');
+ await page.locator('#searchOptions summary').click();
  await page.screenshot({path:'test-results/tag-filter-desktop.png',fullPage:true});
  await page.setViewportSize({width:390,height:844});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.locator('.tag-filter').screenshot({path:'test-results/tag-filter-mobile.png'});
+ await page.getByRole('searchbox',{name:'タグを検索',exact:true}).press('Escape');
+ await expect(page.locator('#searchOptions')).not.toHaveAttribute('open','');
+ await expect(page.locator('#searchOptions summary')).toBeFocused();
  await page.getByRole('button',{name:'Scratch',exact:true}).click();await expect(page.locator('.game-card')).toHaveCount(0);
  await page.getByRole('button',{name:'すべて',exact:true}).click();await page.locator('#searchInput').fill('Tag game');await expect(page.locator('.game-card')).toHaveCount(1);
  await page.reload();await expect(page.locator('.game-card')).toHaveCount(1);

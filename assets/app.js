@@ -1,5 +1,5 @@
 import { config } from './config.js';
-import { loadTags, tagFilter, tagChips } from './tags.js?v=20261004d';
+import { loadTags, tagFilter, tagChips } from './tags.js?v=20261007a';
 import { matchesGameSearch } from './game-search.js?v=20261007b';
 let selectedTags = new Set(new URLSearchParams(location.search).getAll('tag'));
 let games = [];
@@ -31,6 +31,7 @@ function escapeHTML(value = "") {
 }
 
 function render() {
+  document.getElementById('activeTagFilters').hidden = !selectedTags.size;
   const options = { keyword: searchInput.value, target: searchTarget.value,
     matchMode: matchMode.value, selectedTags };
   const hint = document.querySelector('.tag-filter-hint');
@@ -135,7 +136,8 @@ gamesReady.then(()=>loadTags()).then(tags=>{
     selectedTags=new Set(all.filter(t=>ids.includes(t.id)).map(t=>t.slug));
     const url=new URL(location.href);url.searchParams.delete('tag');for(const slug of selectedTags)url.searchParams.append('tag',slug);
     history.replaceState(null,'',url);render();
-  });
-  document.getElementById('gameFilters').append(filter);
+  }, { disclosure: document.getElementById('searchOptions') });
+  document.getElementById('activeTagFilters').append(filter.querySelector('.tag-filter-bar'));
+  document.getElementById('searchOptions').append(filter);
   render();
 }).catch(console.error);

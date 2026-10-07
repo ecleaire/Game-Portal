@@ -52,23 +52,28 @@ export function tagPicker(tags, selected = [], { maximum = 22, title = 'タグ',
   update(); return { element:box, values:()=>[...picked] };
 }
 
-export function tagFilter(tags, selected = [], onChange = () => {}) {
+export function tagFilter(tags, selected = [], onChange = () => {}, { disclosure = null } = {}) {
   const picked = new Set(selected.map(tag => tag.id));
   let category = tagCategories.find(value => tags.some(tag => tag.category === value)) ?? tags[0]?.category;
   const box = node('div', null, 'tag-filter');
   const bar = node('div', null, 'tag-filter-bar');
-  const toggle = node('button', null, 'tag-filter-toggle'); toggle.type = 'button';
-  toggle.append(node('span', '☷', 'tag-filter-icon'), node('span', 'タグで絞り込み'));
-  const badge = node('span', '', 'tag-filter-badge'); toggle.append(badge, node('span', '⌄', 'tag-filter-chevron'));
-  toggle.setAttribute('aria-expanded', 'false'); toggle.setAttribute('aria-controls', 'tag-filter-panel');
+  const toggle = disclosure ? disclosure.querySelector('summary') : node('button', null, 'tag-filter-toggle');
+  const badge = node('span', '', 'tag-filter-badge');
+  if (!disclosure) {
+    toggle.type = 'button';
+    toggle.append(node('span', '☷', 'tag-filter-icon'), node('span', 'タグで絞り込み'), badge, node('span', '⌄', 'tag-filter-chevron'));
+    toggle.setAttribute('aria-expanded', 'false'); toggle.setAttribute('aria-controls', 'tag-filter-panel');
+    bar.append(toggle);
+  }
   const selection = node('div', null, 'tag-filter-selection'); selection.setAttribute('aria-label', '選択中のタグ');
   const clear = node('button', 'クリア', 'tag-filter-clear'); clear.type = 'button'; clear.setAttribute('aria-label', 'タグをすべて解除');
-  bar.append(toggle, selection, clear); box.append(bar);
-  const panel = node('section', null, 'tag-filter-panel'); panel.id = 'tag-filter-panel'; panel.hidden = true;
+  bar.append(selection, clear); box.append(bar);
+  const panel = node('section', null, 'tag-filter-panel'); panel.id = 'tag-filter-panel'; panel.hidden = !disclosure;
   panel.setAttribute('aria-label', 'タグを選ぶ');
   const header = node('div', null, 'tag-filter-heading');
-  header.append(node('strong', 'どんなゲームを探す？'));
-  const close = node('button', '閉じる', 'tag-filter-close'); close.type = 'button'; header.append(close);
+  header.append(node('strong', 'タグで絞り込み'));
+  const close = node('button', '閉じる', 'tag-filter-close'); close.type = 'button';
+  if (!disclosure) header.append(close);
   const search = node('input'); search.type = 'search'; search.placeholder = 'タグを検索'; search.setAttribute('aria-label', 'タグを検索');
   const categories = node('div', null, 'tag-filter-categories'); categories.setAttribute('aria-label', 'タグのカテゴリ');
   const names = [...new Set([...tagCategories, ...tags.map(tag => tag.category)])].filter(value => tags.some(tag => tag.category === value));
@@ -79,8 +84,12 @@ export function tagFilter(tags, selected = [], onChange = () => {}) {
   const options = node('div', null, 'tag-chips tag-filter-options');
   const hint = node('p', '複数選択すると、すべてのタグに一致する作品を表示します。', 'tag-filter-hint');
   panel.append(header, search, categories, options, hint); box.append(panel);
-  const setOpen = open => { panel.hidden = !open; toggle.setAttribute('aria-expanded', String(open)); };
-  toggle.addEventListener('click', () => setOpen(panel.hidden)); close.addEventListener('click', () => { setOpen(false); toggle.focus(); });
+  const setOpen = open => {
+    if (disclosure) disclosure.open = open;
+    else { panel.hidden = !open; toggle.setAttribute('aria-expanded', String(open)); }
+  };
+  if (!disclosure) toggle.addEventListener('click', () => setOpen(panel.hidden));
+  close.addEventListener('click', () => { setOpen(false); toggle.focus(); });
   box.addEventListener('keydown', event => { if (event.key === 'Escape') { setOpen(false); toggle.focus(); } });
   function change(id) { if (picked.has(id)) picked.delete(id); else picked.add(id); update(); onChange([...picked]); }
   function renderOptions() {
@@ -95,6 +104,7 @@ export function tagFilter(tags, selected = [], onChange = () => {}) {
   }
   function update() {
     badge.textContent = String(picked.size); badge.hidden = !picked.size; clear.hidden = !picked.size;
+    if (disclosure) bar.hidden = !picked.size;
     selection.replaceChildren();
     for (const tag of tags.filter(tag => picked.has(tag.id))) {
       const b = node('button', `${tag.name} ×`, 'tag-chip'); b.type = 'button'; b.setAttribute('aria-label', `${tag.name}を解除`);

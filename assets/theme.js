@@ -1,31 +1,40 @@
-// Apply the saved palette before rendering; the existing dark palette is the default.
+// Resolve the device palette before rendering, unless the visitor chose an override.
 (() => {
   const key = 'game-portal.theme.v1';
   const root = document.documentElement;
-  let button;
+  const device = window.matchMedia('(prefers-color-scheme: dark)');
+  let preference = 'system';
+  let select;
   function apply(value) {
-    const light = value === 'light';
+    preference = ['light', 'dark'].includes(value) ? value : 'system';
+    const light = preference === 'light' || (preference === 'system' && !device.matches);
     root.dataset.theme = light ? 'light' : 'dark';
+    root.dataset.themePreference = preference;
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.content = light ? '#f4f7fb' : '#090e19';
-    if (button) {
-      button.textContent = light ? '☾ ダーク' : '☀ ライト';
-      button.setAttribute('aria-label', light ? 'ダークモードに切り替える' : 'ライトモードに切り替える');
-    }
+    if (select) select.value = preference;
   }
-  try { apply(localStorage.getItem(key)); } catch { apply('dark'); }
+  try { apply(localStorage.getItem(key)); } catch { apply('system'); }
+  device.addEventListener('change', () => {
+    if (preference === 'system') apply('system');
+  });
   document.addEventListener('DOMContentLoaded', () => {
-    const nav = document.querySelector('.site-nav');
+    const nav = document.querySelector('.site-footer nav');
     if (!nav) return;
-    button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'theme-toggle';
-    button.addEventListener('click', () => {
-      apply(root.dataset.theme === 'light' ? 'dark' : 'light');
-      try { localStorage.setItem(key, root.dataset.theme); } catch { /* In-page switching still works. */ }
+    const label = document.createElement('label');
+    label.className = 'theme-control';
+    label.append('表示モード');
+    select = document.createElement('select');
+    for (const [value, text] of [['system', 'デバイス設定'], ['light', 'ライト'], ['dark', 'ダーク']]) {
+      const option = document.createElement('option');
+      option.value = value; option.textContent = text; select.append(option);
+    }
+    select.addEventListener('change', () => {
+      apply(select.value);
+      try { localStorage.setItem(key, preference); } catch { /* In-page switching still works. */ }
     });
-    nav.append(button);
-    apply(root.dataset.theme);
+    label.append(select); nav.append(label);
+    apply(preference);
   });
   window.addEventListener('storage', event => {
     if (event.key === key || event.key === null) apply(event.newValue);
