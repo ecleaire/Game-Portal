@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#111827" />
   <title>GAME PORTAL</title>
   <link rel="stylesheet" href="assets/style.css?v=20261005b" />
-  <link rel="stylesheet" href="assets/design.css?v=20261007b" />
+  <link rel="stylesheet" href="assets/design.css?v=20261007c" />
 </head>
 <body>
   <header class="site-header">
@@ -23,9 +23,9 @@
     <section class="hero">
       <div>
         <p class="hero-kicker">DISCOVER & PLAY</p>
-        <h2>あなたの次の<br>お気に入りを。</h2>
+        <h2><span>遊ぶ。つくる。</span><br><span>ここでつながる。</span></h2>
         <p class="hero-text">
-          みんなが作ったゲームを探して、そのまま遊ぼう。あなたの作品もここから投稿できます。
+          新しいゲームに出会ったり、自分のゲームを届けたり。遊ぶ人とつくる人が集まる場所です。
         </p>
         <div class="hero-actions"><a class="hero-primary" href="#games">ゲームを探す <span aria-hidden="true">↗</span></a><a class="hero-secondary" href="upload/">作品を投稿する</a></div>
       </div>
@@ -39,8 +39,37 @@
       </div>
       <label class="search-box">
         <span>検索</span>
-        <input id="searchInput" type="search" placeholder="ゲーム名を検索" />
+        <input id="searchInput" type="search" placeholder="キーワードを入力" aria-describedby="searchHelp" />
       </label>
+      <details class="search-options" id="searchOptions">
+        <summary>検索オプション</summary>
+        <div class="search-options-fields">
+          <label for="searchTarget">検索対象
+            <select id="searchTarget">
+              <option value="text">タイトル・キャプション</option>
+              <option value="title">タイトルのみ</option>
+              <option value="description">キャプション（説明文）のみ</option>
+              <option value="tag-exact">タグ（完全一致）</option>
+              <option value="tag-partial">タグ（部分一致）</option>
+              <option value="all">タグ・タイトル・キャプション</option>
+            </select>
+          </label>
+          <label for="keywordMode">複数キーワードの条件
+            <select id="keywordMode">
+              <option value="all">すべて一致（AND）</option>
+              <option value="any">いずれか一致（OR）</option>
+            </select>
+          </label>
+          <label for="tagMode">選択した複数タグの条件
+            <select id="tagMode">
+              <option value="all">すべてのタグを含む（AND）</option>
+              <option value="any">いずれかのタグを含む（OR）</option>
+            </select>
+          </label>
+        </div>
+        <p id="searchHelp">キーワードはスペースで区切れます。タグの完全一致はタグ名・slug全体との一致、部分一致はその一部との一致です。選択タグとエンジンの絞り込みは、キーワード条件と組み合わせて適用します。</p>
+        <button id="resetSearchOptions" type="button">オプションを初期設定に戻す</button>
+      </details>
     </section>
 
     <section>
@@ -58,6 +87,6 @@
   </footer>
 
   <script type="module" src="assets/navigation.js?v=20261003a"></script>
-  <script type="module" src="assets/app.js?v=20261007a"></script>
+  <script type="module" src="assets/app.js?v=20261007d"></script>
 </body>
 </html>

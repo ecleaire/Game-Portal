@@ -35,6 +35,64 @@ test('binary sandbox loading preserves WASM, assets and isolation without Base64
   console.log('12 MiB sandbox startup benchmark (synthetic game, milliseconds):',result);
 });
 
+test('search options distinguish keyword fields, exact/partial tags and AND/OR on mobile', async ({ context, page }) => {
+  const tags = [
+    { id: '6b61c4a0-1204-4000-8000-000000000101', name: 'アクション', slug: 'action', category: 'ジャンル', is_active: true },
+    { id: '6b61c4a0-1204-4000-8000-000000000102', name: 'アクションRPG', slug: 'action-rpg', category: 'ジャンル', is_active: true },
+    { id: '6b61c4a0-1204-4000-8000-000000000103', name: '3D', slug: '3d', category: 'ジャンル', is_active: true },
+  ];
+  await context.route('**/assets/config.js', route => route.fulfill({ contentType: 'text/javascript',
+    body: 'export const config={supabaseUrl:"http://127.0.0.1:54321",anonKey:""};' }));
+  await context.route('**/functions/v1/portal/tags', route => route.fulfill({ json: { tags } }));
+  await context.route('**/functions/v1/portal/catalog', route => route.fulfill({ json: { games: [
+    { slug: 'e'.repeat(36), title: '星の冒険', description: '海のパズル', engine: 'godot', tags: [tags[0], tags[2]] },
+    { slug: 'f'.repeat(36), title: '海のレース', description: '星を集める', engine: 'scratch', tags: [tags[1]] },
+    { slug: 'a'.repeat(36), title: '夜の冒険', description: '静かな探索', engine: 'godot', tags: [tags[2]] },
+  ] } }));
+  await page.goto('./');
+  const cards = page.locator('.game-card');
+  await expect(cards).toHaveCount(5);
+  await page.locator('#searchOptions summary').click();
+  await page.locator('#searchTarget').selectOption('title');
+  await page.locator('#searchInput').fill('星');
+  await expect(cards).toHaveCount(1); await expect(cards).toContainText('星の冒険');
+  await page.locator('#searchTarget').selectOption('description');
+  await expect(cards).toHaveCount(1); await expect(cards).toContainText('海のレース');
+  await page.locator('#searchTarget').selectOption('text'); await expect(cards).toHaveCount(2);
+  await page.locator('#searchInput').fill('アクション');
+  await page.locator('#searchTarget').selectOption('tag-exact');
+  await expect(cards).toHaveCount(1); await expect(cards).toContainText('星の冒険');
+  await page.locator('#searchTarget').selectOption('tag-partial'); await expect(cards).toHaveCount(2);
+  await page.locator('#searchInput').fill('アクション　３Ｄ');
+  await page.locator('#searchTarget').selectOption('tag-exact'); await expect(cards).toHaveCount(1);
+  await page.locator('#keywordMode').selectOption('any'); await expect(cards).toHaveCount(2);
+  await page.locator('#searchTarget').selectOption('tag-partial'); await expect(cards).toHaveCount(3);
+  await page.locator('#searchTarget').selectOption('all');
+  await page.locator('#keywordMode').selectOption('all');
+  await page.locator('#searchInput').fill('星 アクション'); await expect(cards).toHaveCount(2);
+  await page.locator('#resetSearchOptions').click();
+  await expect(page.locator('#searchTarget')).toHaveValue('text');
+  await expect(page.locator('#searchInput')).toHaveValue('星 アクション'); await expect(cards).toHaveCount(0);
+
+  await page.goto('?tag=action&tag=3d'); await expect(cards).toHaveCount(1);
+  await page.locator('#searchOptions summary').click();
+  await page.locator('#tagMode').selectOption('any'); await expect(cards).toHaveCount(2);
+  await expect(page.locator('.tag-filter-hint')).toHaveText('選択したタグのいずれかが付いた作品を表示します。');
+  await page.getByRole('button', { name: 'Scratch', exact: true }).click(); await expect(cards).toHaveCount(0);
+  await page.getByRole('button', { name: 'すべて', exact: true }).click(); await expect(cards).toHaveCount(2);
+  await page.reload(); await expect(page.locator('#tagMode')).toHaveValue('any'); await expect(cards).toHaveCount(2);
+  await page.locator('#searchOptions summary').click();
+  for (const width of [1440, 768, 390, 320]) {
+    await page.setViewportSize({ width, height: 1000 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await expect(page.locator('#searchTarget')).toBeVisible();
+    await expect(page.locator('.hero h2')).toHaveText('遊ぶ。つくる。ここでつながる。');
+    await page.screenshot({ path: `test-results/search-options-${width}.png`, fullPage: true });
+  }
+  await page.locator('#resetSearchOptions').click(); await expect(cards).toHaveCount(1);
+  await page.getByRole('button', { name: 'タグをすべて解除', exact: true }).click(); await expect(cards).toHaveCount(5);
+});
+
 async function goto(page, path) {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try { return await page.goto(path); }

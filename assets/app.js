@@ -1,5 +1,6 @@
 import { config } from './config.js';
 import { loadTags, tagFilter, tagChips } from './tags.js?v=20261004d';
+import { matchesGameSearch } from './game-search.js?v=20261007a';
 let selectedTags = new Set(new URLSearchParams(location.search).getAll('tag'));
 let games = [];
 let activeFilter = "all";
@@ -8,6 +9,14 @@ const grid = document.getElementById("gameGrid");
 const count = document.getElementById("gameCount");
 const searchInput = document.getElementById("searchInput");
 const emptyMessage = document.getElementById("emptyMessage");
+const searchTarget = document.getElementById('searchTarget');
+const keywordMode = document.getElementById('keywordMode');
+const tagMode = document.getElementById('tagMode');
+const searchParams = new URLSearchParams(location.search);
+for (const control of [searchTarget, keywordMode, tagMode]) {
+  const value = searchParams.get(control.id);
+  if ([...control.options].some(option => option.value === value)) control.value = value;
+}
 
 function escapeHTML(value = "") {
   return value.replace(/[&<>"']/g, c => ({
@@ -20,11 +29,15 @@ function escapeHTML(value = "") {
 }
 
 function render() {
-  const keyword = searchInput.value.trim().toLowerCase();
+  const options = { keyword: searchInput.value, target: searchTarget.value,
+    keywordMode: keywordMode.value, selectedTags, tagMode: tagMode.value };
+  const hint = document.querySelector('.tag-filter-hint');
+  if (hint) hint.textContent = tagMode.value === 'any'
+    ? '選択したタグのいずれかが付いた作品を表示します。'
+    : '選択したタグがすべて付いた作品を表示します。';
   const filtered = games.filter(game => {
     const engineMatch = activeFilter === "all" || game.engine.toLowerCase() === activeFilter;
-    const text = `${game.title} ${game.description} ${game.engine}`.toLowerCase();
-    return engineMatch && text.includes(keyword) && [...selectedTags].every(slug => (game.tags ?? []).some(tag => tag.slug === slug));
+    return engineMatch && matchesGameSearch(game, options);
   });
 
   count.textContent = `${filtered.length}作品`;
@@ -76,6 +89,20 @@ document.getElementById("filters").addEventListener("click", event => {
 });
 
 searchInput.addEventListener("input", render);
+function updateSearchOptions() {
+  const url = new URL(location.href);
+  for (const control of [searchTarget, keywordMode, tagMode]) {
+    url.searchParams.delete(control.id);
+    if (control.value !== control.options[0].value) url.searchParams.set(control.id, control.value);
+  }
+  history.replaceState(null, '', url);
+  render();
+}
+for (const control of [searchTarget, keywordMode, tagMode]) control.addEventListener('change', updateSearchOptions);
+document.getElementById('resetSearchOptions').addEventListener('click', () => {
+  for (const control of [searchTarget, keywordMode, tagMode]) control.selectedIndex = 0;
+  updateSearchOptions();
+});
 
 async function loadGames() {
   const legacy = await fetch('games.json').then(response => {
@@ -106,4 +133,5 @@ gamesReady.then(()=>loadTags()).then(tags=>{
     history.replaceState(null,'',url);render();
   });
   document.getElementById('games').append(filter);
+  render();
 }).catch(console.error);
