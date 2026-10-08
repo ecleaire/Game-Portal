@@ -11,6 +11,18 @@
   --radius: 22px;
 }
 
+.group-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 12px; margin: 20px 0; }
+.group-list .row { margin: 0; min-width: 0; }
+.group-detail { scroll-margin-top: 120px; }
+.group-roster, .group-games { max-height: 620px; overflow-y: auto; overscroll-behavior: contain; padding: 4px; scrollbar-gutter: stable; }
+.group-roster .row { overflow-wrap: anywhere; }
+.group-audience { border: 1px solid var(--line); border-radius: 16px; padding: 16px; }
+.group-audience[hidden] { display: none; }
+.group-chip { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 14px; margin: 4px; border: 1px solid var(--line); border-radius: 999px; cursor: pointer; background: var(--panel); }
+.group-chip:has(input:checked) { color: var(--accent); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--panel)); }
+.group-chip input { width: 18px; min-height: 18px; margin: 0; accent-color: var(--accent); }
+@media (max-width: 600px) { .group-roster, .group-games { max-height: 480px; } .group-list .row button { width: 100%; } }
+
 html { scroll-behavior: smooth; }
 body {
   background: radial-gradient(ellipse 780px 480px at 86% -10%, rgba(88, 130, 215, .14), transparent 65%),

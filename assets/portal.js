@@ -1,7 +1,11 @@
 import { currentTerms, consentCheckbox, rememberAcceptance } from './terms.js?v=20261008a';
 import { config } from './config.js';
+import { groupFields, groupData, groupManagement, scopedDashboard } from './groups.js?v=20261009a';
 import { loadTags, tagPicker, tagChips, tagCategories } from './tags.js?v=20261004d';
 let availableTags = [];
+let availableGroups = [];
+const groupTools = () => ({ el, section, field, form, button, api, notice, username, password, role, logoutButton, reviewSubmission, downloadSubmission, repairPublication, gameTagPicker, tagChips, statusBadge });
+const managementGroupField = (game = {}) => field('management_group_id', '管理グループ', 'select', { optional: true, value: game.management_group_id ?? (availableGroups.length === 1 ? availableGroups[0].id : ''), choices: [['','グループを指定しない'], ...availableGroups.map(group => [group.id,group.name])] });
 function gameTagPicker(game = {}) {
   const merged = new Map(availableTags.map(tag => [tag.id, tag]));
   for (const tag of game.tags ?? []) if (!merged.has(tag.id)) merged.set(tag.id, tag);
@@ -30,6 +34,9 @@ let auditBefore;
 let busy = false;
 let formMessage = null;
 const errors = {
+  invalid_groups: '所属グループから共有先を選び、管理グループも共有先に含めてください。',
+  group_locked: '管理グループは投稿後に変更できません。',
+  group_private_required: 'このアカウントはグループ内の共有に限定されています。下書き、または所属グループだけへの共有を選んでください。',
   terms_required: '利用規約への同意が必要です。内容を確認してチェックを入れてください。投稿時に表示された場合はログインし直してください。',
   terms_outdated: '利用規約が更新されています。最新の内容を確認して再度同意してください。',
   invalid_shares: '共有相手のアカウントIDを確認してください。有効なユーザーを重複なしで1〜50人指定できます（自分自身は不要です）。',
@@ -135,7 +142,7 @@ const password = (name = 'password', title = 'パスワード', fresh = true) =>
   autocomplete: fresh ? 'new-password' : 'current-password', minlength: '5', maxlength: '72',
 });
 const role = (allowTrusted = false) => field('role', 'ユーザー権限', 'select', { choices: [
-  ['player', '一般ユーザー'], ['uploader', '投稿可能ユーザー'],
+  ['player', 'プレイ専用（投稿不可）'], ['uploader', '投稿可能ユーザー'],
   ...(allowTrusted ? [['trusted_uploader', '信頼済み投稿者（審査省略）']] : []),
 ] });
 const avatars = [
@@ -144,7 +151,7 @@ const avatars = [
   ['cat', '🐱 ねこ'], ['fox', '🦊 きつね'], ['panda', '🐼 パンダ'],
 ];
 const avatarGlyph = key => ({ gamepad: '🎮', star: '⭐', rocket: '🚀', puzzle: '🧩', palette: '🎨', lightning: '⚡', cat: '🐱', fox: '🦊', panda: '🐼' }[key] ?? '🎮');
-const roleLabel = value => ({ player: '一般ユーザー', uploader: '投稿可能ユーザー', trusted_uploader: '信頼済み投稿者' }[value] ?? value);
+const roleLabel = value => ({ player: 'プレイ専用', uploader: '投稿可能ユーザー', trusted_uploader: '信頼済み投稿者', admin: '管理アカウント', super_admin: '全権管理アカウント' }[value] ?? value);
 const accountStatusLabel = value => ({ active: '利用中', disabled: '無効' }[value] ?? value);
 function visibilityGuidance(formElement, help) {
   const visibility = formElement.elements.visibility;
@@ -159,6 +166,7 @@ function visibilityGuidance(formElement, help) {
       formElement.elements.published_at.disabled = draft;
     }
     help.textContent = draft ? '自分だけが閲覧・プレイできます。管理者の審査には送られません。'
+      : visibility.value === 'group' ? '承認後、選択したグループに所属するユーザーだけがログインして閲覧・プレイできます。URLだけでは遊べず、公開一覧にも表示されません。'
       : visibility.value === 'shared' ? '承認後、指定したアカウントだけがログインして閲覧・プレイできます。ゲーム一覧には表示されません。'
       : visibility.value === 'unlisted' ? '承認後、URLを知る人だけが閲覧できます。ゲーム一覧には表示されません。'
         : '承認後、誰でも閲覧でき、サイトのゲーム一覧に表示されます。';
@@ -239,6 +247,7 @@ function logoutButton(parent) {
 }
 async function account() {
   availableTags = await loadTags();
+  availableGroups = (await api('user.groups')).groups ?? [];
   const [{ user }, { submissions }] = await Promise.all([api('user.me'), api('user.submissions')]);
   root.replaceChildren();
   const gameId = new URLSearchParams(location.search).get('game');
@@ -259,9 +268,10 @@ async function account() {
   if (user.created_at) details.append(el('p', `登録日: ${new Date(user.created_at).toLocaleDateString('ja-JP')}`, { class: 'muted' }));
   overview.append(details); s.append(overview);
   logoutButton(s);
+  if (availableGroups.length) { const memberships = section('所属グループ'); for (const group of availableGroups) memberships.append(el('span', group.name, {class:'visibility-badge'})); memberships.append(el('p','所属の変更は管理者が行います。',{class:'muted'})); }
   const gamesSection = section('投稿したゲーム', root, 'account-games');
   const gameActions = el('div', null, { class: 'actions' });
-  gameActions.append(el('a', '新しいゲームを投稿する →', { href: '../upload/', class: 'editor-back' }));
+  if (user.role !== 'player') gameActions.append(el('a', '新しいゲームを投稿する →', { href: '../upload/', class: 'editor-back' }));
   gamesSection.append(gameActions);
   submissionList(gamesSection, submissions, { userId: user.id, statusLabel, visibilityLabel,
     renderCard: game => submissionCard(game, './') });
@@ -361,7 +371,8 @@ function submissionEditor(game) {
       field('description', '説明（任意）', 'textarea', { value: game.description, maxlength: '4000', rows: '5', optional: true }),
       field('version', 'バージョン', 'text', { value: game.version, maxlength: '80' }),
       field('controls', '操作説明（任意）', 'textarea', { value: game.controls, maxlength: '2000', rows: '3', optional: true }),
-      field('visibility', '公開範囲', 'select', { value: game.visibility, choices: visibilityChoices }),
+      field('visibility', '公開範囲', 'select', { value: game.visibility, choices: availableVisibility() }),
+      managementGroupField(game),
       shareField(game.shared_user_ids),
       field('published_at', '公開日時（空欄で即時）', 'datetime-local', { value: game.published_at ? localDateTime(game.published_at) : '', optional: true }),
     ], '変更を保存', async data => {
@@ -372,6 +383,7 @@ function submissionEditor(game) {
       if (selectedFiles.length) { archive = await packageWebFiles(selectedFiles); await checkWebGameZip(archive); }
       delete data.thumbnail; delete data.package;
       data.tag_ids = picker.values();
+      Object.assign(data, groupData(saveForm));
       data.published_at = data.published_at ? new Date(data.published_at).toISOString() : '';
       notice('変更を保存中…');
       await api('user.submission.save', { ...data, submission_id: game.id });
@@ -412,6 +424,7 @@ function submissionEditor(game) {
     const basics = section('基本情報', saveForm); basics.append(...labels.slice(0, 5), picker.element);
     const visibility = section('公開設定', saveForm); visibility.append(...labels.slice(5));
     const help = el('p', '', { class: 'muted' }); visibility.append(help); visibilityGuidance(saveForm, help);
+    visibility.append(groupFields({ el, form: saveForm, groups: availableGroups, game }));
     const files = section(game.status === 'uploading' ? 'ゲームファイルを再送' : 'ゲームファイルを変更', saveForm);
     files.append(el('p', '変更する場合だけ、HTML・ZIP・Web書き出しのファイル一式を選んでください（最大50MB）。', { class: 'muted' }));
     files.append(el('p', 'ファイルを差し替えると再審査になります。下書きと信頼済み投稿者は審査を省略します。', { class: 'muted' }));
@@ -437,8 +450,9 @@ function submissionEditor(game) {
     notice(result.cleanup_pending ? 'ゲームを削除しました。保管ファイルの削除は保留中です。管理者に連絡してください。' : 'ゲームを削除しました。');
   }, true);
 }
-const visibilityChoices = [['draft', '下書き（自分だけ）'], ['unlisted', '限定公開（URLを知る人）'], ['shared','アカウント指定で共有'], ['public', '公開（一覧に表示）']];
-const visibilityLabel = value => ({ draft: '下書き', unlisted: '限定公開', shared:'指定ユーザーに共有', public: '公開' }[value] ?? value);
+const visibilityChoices = [['draft', '下書き（自分だけ）'], ['group','グループ内で共有'], ['unlisted', '限定公開（URLを知る人）'], ['shared','アカウント指定で共有'], ['public', '公開（一覧に表示）']];
+const availableVisibility = () => availableGroups.some(group => group.restrict_sharing) ? visibilityChoices.slice(0,2) : visibilityChoices;
+const visibilityLabel = value => ({ draft: '下書き', group:'グループ共有', unlisted: '限定公開', shared:'指定ユーザーに共有', public: '公開' }[value] ?? value);
 const shareField=(ids=[])=>field('shared_user_ids','共有相手のアカウントID（改行またはカンマ区切り・最大50人）','textarea',{value:ids.join('\n'),rows:'3',optional:true,placeholder:'相手の「アカウント」画面に表示されるID'});
 function confirmDeletion(label, name, detail='') {
   if(!confirm(`【確認 1/2】${label}「${name}」を完全削除しますか？\n${detail}\n元に戻せません。`))return false;
@@ -482,6 +496,8 @@ async function showSubmissionThumbnail(parent, submissionId, mode) {
 }
 async function dashboard() {
   availableTags = await loadTags();
+  const principal = (await api('admin.me')).admin;
+  if (principal.role === 'admin') { root.replaceChildren(); await scopedDashboard(root, groupTools(), principal); return; }
   const [{ admin }, { users }, { submissions }] = await Promise.all([api('admin.me'), api('admin.users', { offset }), api('admin.submissions', { offset: submissionOffset })]);
   root.replaceChildren();
   const top = section(`管理画面 — ${admin.username}`);
@@ -515,6 +531,7 @@ async function dashboard() {
   jumps.append(el('a', '投稿の審査へ ↓', { href: '#reviews' }), el('a', 'ユーザー一覧へ ↓', { href: '#users' }), el('a', 'タグ管理へ ↓', { href: '#tag-management' }));
   top.append(jumps);
   logoutButton(top);
+  await groupManagement(root, groupTools(), admin);
   button(top, '投稿保管を確認', checkStorageHealth);
   button(top,'保管ファイルの削除を再試行',async()=>{const result=await api('admin.cleanup');notice(result.cleanup_pending?'保管先の削除が残っています。しばらくして再試行してください。':'この回の保管ファイル削除が完了しました。');});
   const create = section('ユーザー作成');
@@ -522,10 +539,10 @@ async function dashboard() {
     await api('admin.create', data); await dashboard(); notice('ユーザーを作成しました。');
   });
   if (admin.role === 'super_admin') {
-    const administrators = section('審査管理者を作成');
-    administrators.append(el('p', '作成した管理者は投稿の承認・却下を行えます。管理者アカウントの作成と信頼済み投稿者の指定はsuper adminだけが行えます。', { class: 'muted' }));
+    const administrators = section('管理アカウントを作成');
+    administrators.append(el('p', '作成後、グループ設定から担当を付与してください。担当グループ内の作品・所属ユーザーを管理できます。', { class: 'muted' }));
     form(administrators, [username(), password('password', '初期管理者パスワード')], '管理者を作成', async data => {
-      await api('admin.admin.create', data); await dashboard(); notice('審査管理者を作成しました。');
+      await api('admin.admin.create', data); await dashboard(); notice('管理アカウントを作成しました。グループ設定から担当を付与できます。');
     });
   }
   const list = section('ユーザー一覧', root, 'admin-users');
@@ -672,6 +689,8 @@ async function uploadPackage(submissionId, file, refresh = upload, thumbnail = n
 }
 async function manageAdmin(user,admin) {
   const s=section(`${user.username} の管理`);s.id='selected-user';
+  s.append(el('p',`アカウントID: ${user.id}`,{class:'account-id muted'}));
+  button(s,'アカウントIDをコピー',async()=>{await navigator.clipboard.writeText(user.id);notice('アカウントIDをコピーしました。');});
   s.append(el('p',`${user.role} · ${accountStatusLabel(user.status)}`,{class:'muted'}));
   const change=async(action,data={})=>{
     await api(action,{...data,admin_id:user.id});
@@ -682,7 +701,7 @@ async function manageAdmin(user,admin) {
   form(s,[password('password','新しい管理者パスワード')],'管理者パスワードを変更',data=>change('admin.admin.password',data));
   button(s,'KICK（全端末をログアウト）',async()=>{if(confirm(`${user.username} の全セッションを失効させますか？`))await change('admin.admin.kick');},true);
   if(user.id!==admin.id){
-    form(s,[field('role','管理者権限','select',{value:user.role,choices:[['admin','admin'],['super_admin','super admin']]})],'管理者権限を変更',data=>change('admin.admin.role',data));
+    form(s,[field('role','管理者権限','select',{value:user.role,choices:[['admin','管理アカウント（担当グループのみ）'],['super_admin','全権管理アカウント']]})],'管理者権限を変更',data=>change('admin.admin.role',data));
     button(s,user.status==='disabled'?'管理アカウントを再有効化':'管理アカウントを無効化',async()=>{if(confirm(`${user.username} のアカウント状態を変更しますか？`))await change(user.status==='disabled'?'admin.admin.enable':'admin.admin.disable');},true);
     button(s,'管理アカウントを完全削除',async()=>{if(confirmDeletion('管理アカウント',user.username,'認証情報と全セッションを削除します。監査記録は残します。'))await change('admin.admin.delete',{username:user.username,confirmation:'delete'});},true);
   }else s.append(el('p','自分自身の権限変更・無効化・削除はできません。',{class:'muted'}));
@@ -725,6 +744,7 @@ async function downloadSubmission(submissionId) {
 }
 async function upload() {
   availableTags = await loadTags();
+  availableGroups = (await api('user.groups')).groups ?? [];
   const { user } = await api('user.me'); root.replaceChildren();
   const s = section('ゲーム投稿'); logoutButton(s);
   if (!['uploader', 'trusted_uploader'].includes(user.role)) { s.append(el('p', 'このアカウントには投稿権限がありません。管理者に投稿可能ユーザーへの変更を依頼してください。')); return; }
@@ -770,13 +790,15 @@ async function upload() {
     field('description', '説明（任意）', 'text', { maxlength: '4000', optional: true }),
     field('version', 'バージョン', 'text', { value: '1.0.0', maxlength: '80' }),
     field('controls', '操作説明（任意）', 'text', { maxlength: '2000', optional: true }),
-    field('visibility', '公開範囲', 'select', { value: 'draft', choices: visibilityChoices }),
+    field('visibility', '公開範囲', 'select', { value: 'draft', choices: availableVisibility() }),
+    managementGroupField(),
     shareField(),
     field('published_at', '公開日時（空欄で即時公開）', 'datetime-local', { optional: true }),
   ], 'ゲームを投稿', async data => {
     const thumbnail = submissionForm.elements.thumbnail?.files?.[0];
     delete data.package; delete data.thumbnail;
     data.tag_ids = picker.values();
+    Object.assign(data, groupData(submissionForm));
     data.published_at = data.published_at ? new Date(data.published_at).toISOString() : '';
     const file = await packageWebFiles(selectedFiles);
     await checkWebGameZip(file);
@@ -792,6 +814,7 @@ async function upload() {
   const visibilityHelp = el('p', '', { class: 'muted' });
   submissionForm.elements.visibility.closest('label').append(visibilityHelp);
   visibilityGuidance(submissionForm, visibilityHelp);
+  submissionForm.elements.visibility.closest('label').after(groupFields({ el, form: submissionForm, groups: availableGroups }));
   const thumbnailLabel = el('label', 'ゲームサムネイル（任意・5MB以下）');
   const thumbnailInput = el('input', null, { type: 'file', name: 'thumbnail', accept: 'image/png,image/jpeg,image/webp' });
   const thumbnailPreview = el('img', null, { class: 'thumbnail-preview', alt: 'サムネイルのプレビュー', hidden: '' });

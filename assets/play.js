@@ -1,7 +1,7 @@
 import { gameReport } from './reports.js?v=20261008a';
 import { requireTerms } from './terms.js?v=20261008a';
 import { config } from './config.js';
-import { userSessionKey } from './navigation.js?v=20261003a';
+import { userSessionKey, adminSessionKey } from './navigation.js?v=20261003a';
 import { tagChips } from './tags.js?v=20261004a';
 import { unpackPrivateZip, mountPrivatePreview } from './private-preview.js?v=20261007d';
 
@@ -38,7 +38,7 @@ function showGame(game) {
   gameReport(document.getElementById('playContent'), params.get('slug') || params.get('id'), game.title);
 }
 async function publicPost(path, slug, signal) {
-  const token=sessionStorage.getItem(userSessionKey);
+  const token=sessionStorage.getItem(userSessionKey) || sessionStorage.getItem(adminSessionKey);
   const response = await fetch(`${config.supabaseUrl}/functions/v1/portal/${path}`, { method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(config.anonKey ? { apikey: config.anonKey } : {}),...(path.startsWith('shared-')&&token?{'X-Portal-Session':token}:{}) },
     body: JSON.stringify({ slug }), signal: AbortSignal.any([signal, AbortSignal.timeout(90000)]) });
@@ -82,7 +82,7 @@ async function load() {
     let result;
     try { result = await fetchGame('public', slug); }
     catch(error){if(error.message!=='not_found')throw error;
-      if(!/^[a-f0-9]{64}$/.test(sessionStorage.getItem(userSessionKey)??''))throw new Error('private_or_missing');
+      if(!/^[a-f0-9]{64}$/.test(sessionStorage.getItem(userSessionKey)||sessionStorage.getItem(adminSessionKey)||''))throw new Error('private_or_missing');
       result = await fetchGame('shared', slug);
     }
     let archive;
