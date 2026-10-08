@@ -25,6 +25,7 @@ https://ecleaire.github.io/Game-Portal/
 - [API仕様](docs/API.md)
 - [ゲームタグの設定・管理・検索・権限制御](docs/TAGS.md)
 - [グループ共有・担当管理権限・プレイ専用アカウント](docs/GROUPS.md)
+- [いいね・個人リスト・URL共有・非公開フォロー](docs/LIBRARY.md)
 - [投稿後のサムネイル追加・変更](docs/THUMBNAILS.md)
 - [Google Driveの所有者設定とPhase 3への引き継ぎ](docs/GOOGLE_DRIVE_SETUP.md)
 

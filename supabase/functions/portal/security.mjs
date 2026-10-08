@@ -1,4 +1,7 @@
 export const actions = new Set([
+  'social.game', 'social.like', 'social.likes', 'social.follow', 'social.following', 'social.lists',
+  'social.list.create', 'social.list.update', 'social.list.delete', 'social.list.get', 'social.list.shared',
+  'social.list.item', 'social.list.order', 'social.list.share',
   'admin.group.rename', 'admin.group.directory', 'admin.group.membership', 'admin.shared.games',
   'user.groups', 'admin.groups', 'admin.group.create', 'admin.group.update', 'admin.group.detail', 'admin.group.member', 'admin.group.manager', 'admin.group.account.create', 'admin.submission.save',
   'report.create', 'admin.reports', 'admin.report.update',
@@ -48,8 +51,8 @@ export async function readBody(request, maximum = 32768) {
   if (body.data !== undefined && (!body.data || Array.isArray(body.data) || typeof body.data !== 'object')) throw new Error('invalid_request');
   const data = body.data ?? {};
   for (const [name, value] of Object.entries(data)) {
-    if (name === 'tag_ids' || name === 'shared_user_ids' || name === 'group_ids') {
-      if (!Array.isArray(value) || value.length > ({tag_ids:22,shared_user_ids:50,group_ids:20}[name]) || new Set(value).size !== value.length || value.some(id => typeof id !== 'string' || !/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(id))) throw new Error({tag_ids:'invalid_tags',shared_user_ids:'invalid_shares',group_ids:'invalid_groups'}[name]);
+    if (name === 'tag_ids' || name === 'shared_user_ids' || name === 'group_ids' || name === 'entry_ids') {
+      if (!Array.isArray(value) || value.length > ({tag_ids:22,shared_user_ids:50,group_ids:20,entry_ids:500}[name]) || new Set(value).size !== value.length || value.some(id => typeof id !== 'string' || !/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(id))) throw new Error({tag_ids:'invalid_tags',shared_user_ids:'invalid_shares',group_ids:'invalid_groups',entry_ids:'invalid_request'}[name]);
     } else if (name === 'terms_accepted') {
       if (typeof value !== 'boolean') throw new Error('invalid_request');
     } else if (name === 'offset' || name === 'before_id') {
