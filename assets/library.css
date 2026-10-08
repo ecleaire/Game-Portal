@@ -1,0 +1,30 @@
+.social-panel { margin: 0 0 22px; }
+.social-actions,.library-tabs,.library-row-actions { display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
+.social-actions button,.library-tabs button,.library-row-actions button,.library-sharing button,.library-dialog button,.library-create button { min-height:44px; padding:10px 16px; border:1px solid var(--line); border-radius:14px; background:var(--panel); color:var(--text); cursor:pointer; font:inherit; }
+.social-actions button[aria-pressed=true],.library-tabs button[aria-pressed=true] { background:color-mix(in srgb,var(--accent) 15%,var(--panel)); color:var(--accent); border-color:var(--accent); }
+.social-actions button:disabled { cursor:default; opacity:.65; }
+.social-status:empty { display:none; }
+.library-dialog { width:min(520px,calc(100% - 32px)); max-height:85dvh; overflow:auto; background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:22px; padding:24px; }
+.library-dialog::backdrop { background:rgba(0,0,0,.65); }
+.library-list-choices { max-height:300px; overflow:auto; }
+.library-choice { display:flex; align-items:center; gap:12px; padding:12px; min-height:48px; border-radius:12px; cursor:pointer; overflow-wrap:anywhere; }
+.library-choice:has(input:checked) { background:color-mix(in srgb,var(--accent) 12%,var(--panel)); }
+.library-choice input { width:20px; height:20px; min-height:20px; accent-color:var(--accent); flex:none; }
+.library-create { display:flex; flex-wrap:wrap; gap:10px; margin:20px 0; }
+.library-create input { flex:1 1 200px; min-width:0; }
+.library-tabs { margin-bottom:28px; }
+.library-list-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr)); gap:16px; margin:24px 0; }
+.library-list-card { text-align:left; background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:18px; padding:24px; cursor:pointer; display:grid; gap:12px; min-height:120px; overflow-wrap:anywhere; }
+.library-list-card strong { font-size:1.2rem; }
+.library-sharing { border:1px solid var(--line); background:var(--panel); border-radius:18px; padding:18px; margin:22px 0; }
+.library-sharing button { margin:4px; }
+#shareOutput { margin-top:12px; }
+.library-games { max-height:650px; overflow:auto; overscroll-behavior:contain; margin:20px 0; padding:4px; scrollbar-gutter:stable; }
+.library-game { display:flex; justify-content:space-between; align-items:center; gap:20px; padding:18px; margin-bottom:12px; background:var(--panel); border:1px solid var(--line); border-radius:18px; overflow-wrap:anywhere; }
+.library-game>div:first-child { min-width:0; }
+.library-game-link { font-size:1.08rem; font-weight:700; }
+.library-row-actions { flex-shrink:0; }
+.library-game p { margin:8px 0 0; }
+.library-empty { padding:28px 12px; color:var(--muted); }
+.library-creator { border:1px solid var(--line); border-radius:18px; padding:20px; margin:20px 0; }
+@media(max-width:600px) { .library-game { align-items:flex-start; flex-direction:column; gap:12px; } .library-create { flex-direction:column; } .library-create input { flex:auto; } .library-tabs button { flex:1 1 auto; padding:10px; font-size:.88rem; } }

@@ -1,6 +1,7 @@
 import { currentTerms, consentCheckbox, rememberAcceptance } from './terms.js?v=20261008a';
 import { config } from './config.js';
 import { groupFields, groupData, groupManagement, scopedDashboard } from './groups.js?v=20261009a';
+import { gameSocial } from './game-social.js?v=20261009b';
 import { loadTags, tagPicker, tagChips, tagCategories } from './tags.js?v=20261004d';
 let availableTags = [];
 let availableGroups = [];
@@ -15,7 +16,7 @@ import { checkWebGameZip, unpackPrivateZip, mountPrivatePreview } from './privat
 import { packageWebFiles } from './zip-upload.js?v=20261003a';
 import { sendUpload, uploadWithRecovery } from './upload-request.js?v=20261004d';
 import { submissionList } from './submission-list.js?v=20261003a';
-import { adminSessionKey, confirmAdminSession, hasAdminSession, logoutSessions, navigationReady, syncNavigation } from './navigation.js?v=20261003a';
+import { adminSessionKey, confirmAdminSession, hasAdminSession, logoutSessions, navigationReady, syncNavigation } from './navigation.js?v=20261009b';
 
 const root = document.querySelector('#portal');
 const message = document.querySelector('#message');
@@ -268,6 +269,7 @@ async function account() {
   if (user.created_at) details.append(el('p', `登録日: ${new Date(user.created_at).toLocaleDateString('ja-JP')}`, { class: 'muted' }));
   overview.append(details); s.append(overview);
   logoutButton(s);
+  s.append(el('a', 'いいね・リスト・フォローを開く →', { href: '../library/', class: 'editor-back' }));
   if (availableGroups.length) { const memberships = section('所属グループ'); for (const group of availableGroups) memberships.append(el('span', group.name, {class:'visibility-badge'})); memberships.append(el('p','所属の変更は管理者が行います。',{class:'muted'})); }
   const gamesSection = section('投稿したゲーム', root, 'account-games');
   const gameActions = el('div', null, { class: 'actions' });
@@ -361,6 +363,7 @@ function submissionEditor(game) {
   if (['draft', 'pending', 'approved', 'rejected'].includes(game.status)) button(quick, '自分だけでプレイ', () => previewSubmission(game.id));
   editor.append(quick);
   const grid = el('div', null, { class: 'editor-grid' }); editor.append(grid);
+  if (['draft','pending','approved','rejected'].includes(game.status)) gameSocial(game.public_slug, grid, '../');
   const editable = ['uploading', 'draft', 'pending', 'rejected', 'approved'].includes(game.status);
   if (editable) {
     const picker = gameTagPicker(game);

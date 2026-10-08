@@ -16,6 +16,7 @@ export function syncNavigation() {
   const admin = hasAdminSession();
   document.querySelectorAll('[data-portal-admin]').forEach(link => { link.hidden = !admin; });
   document.querySelectorAll('[data-portal-account]').forEach(link => { link.hidden = !user; });
+  document.querySelectorAll('[data-portal-library]').forEach(link => { link.hidden = !user && !admin; });
   document.querySelectorAll('[data-portal-login]').forEach(link => {
     if (!link.dataset.loginHref) link.dataset.loginHref = link.href;
     link.textContent = user || admin ? 'ログアウト' : 'ログイン';

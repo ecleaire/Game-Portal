@@ -1,5 +1,5 @@
 import { config } from './config.js';
-import { userSessionKey } from './navigation.js?v=20261003a';
+import { userSessionKey } from './navigation.js?v=20261009b';
 export function gameReport(parent, gameId, title) {
   if (document.getElementById('gameReport') || !config.supabaseUrl) return;
   const box = document.createElement('details'); box.id = 'gameReport'; box.className = 'report-panel';

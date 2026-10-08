@@ -1,7 +1,8 @@
-import { gameReport } from './reports.js?v=20261008a';
+import { gameReport } from './reports.js?v=20261009b';
+import { gameSocial } from './game-social.js?v=20261009b';
 import { requireTerms } from './terms.js?v=20261008a';
 import { config } from './config.js';
-import { userSessionKey, adminSessionKey } from './navigation.js?v=20261003a';
+import { userSessionKey, adminSessionKey } from './navigation.js?v=20261009b';
 import { tagChips } from './tags.js?v=20261004a';
 import { unpackPrivateZip, mountPrivatePreview } from './private-preview.js?v=20261007d';
 
@@ -35,6 +36,7 @@ function showGame(game) {
   document.getElementById('versionText').textContent = game.version ? `v${game.version}` : '';
   document.getElementById('versionText').hidden = !game.version;
   shareButton.disabled = false;
+  gameSocial(params.get('slug'), shell);
   gameReport(document.getElementById('playContent'), params.get('slug') || params.get('id'), game.title);
 }
 async function publicPost(path, slug, signal) {
