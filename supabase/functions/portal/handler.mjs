@@ -107,7 +107,9 @@ export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleS
       try {
         const {slug}=await privateJson();
         if(typeof slug!=='string'||!/^[a-f0-9]{36}$/.test(slug))return reply({error:'invalid_request'},400);
-        const checked=await rpc('user.shared.game',{slug},supplied);const failed=internalError(checked);if(failed)return failed;
+        let checked=await rpc('user.shared.game',{slug},supplied);
+        if (checked.response.ok && checked.result.error === 'forbidden') checked=await rpc('admin.shared.game',{slug},supplied);
+        const failed=internalError(checked);if(failed)return failed;
         const game=checked.result.game;
         if(requestUrl.pathname.endsWith('/shared-package')) {
           const response=await fetcher(storageUrl('portal-packages',game.package_storage_key),{headers:{apikey:serviceKey,Authorization:`Bearer ${serviceKey}`},signal:AbortSignal.timeout(60000)});
@@ -239,6 +241,7 @@ export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleS
       try {
         const checked = await rpc('admin.me', {}, supplied);
         const failed = internalError(checked); if (failed) return failed;
+        if (checked.result.admin?.role !== 'super_admin') return reply({ error: 'forbidden' }, 403);
         if (!(googleServiceAccountJson || googleDriveOAuthJson) || !googlePendingFolderId || !googleApprovedFolderId || !googleRejectedFolderId) return reply({ error: 'drive_unavailable' }, 503);
         await checkPrivateFolders({ serviceAccountJson: googleServiceAccountJson, oauthJson: googleDriveOAuthJson,
           folderIds: [googlePendingFolderId, googleApprovedFolderId, googleRejectedFolderId], fetcher });
