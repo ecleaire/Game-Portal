@@ -13,7 +13,9 @@ test('anonymous search waits for explicit consent, preserves access to policies 
  for (const width of [390,1440]) {
   await page.setViewportSize({width,height:900});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-  await page.screenshot({path:`test-results/consent-home-${width}.png`,fullPage:true});
+  // Capture the visible consent gate after resizing; full-page compositor capture
+  // intermittently fails on the Linux CI runner before any consent interaction.
+  await page.screenshot({path:`test-results/consent-home-${width}.png`,fullPage:false,animations:'disabled'});
  }
  await page.getByRole('button',{name:'同意してゲームを探す',exact:true}).click();await expect(page.locator('#searchInput')).toBeHidden();
  const popupPromise=page.waitForEvent('popup');await page.locator('.terms-gate').getByRole('link',{name:'利用規約',exact:true}).click();
