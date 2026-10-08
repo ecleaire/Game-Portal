@@ -25,33 +25,36 @@ export async function groupManagement(parent, tools, admin) {
   const global = admin.role === 'super_admin';
   const main = section('グループ管理', parent, 'group-management'); main.id = 'group-management';
   const { groups } = await api('admin.groups');
-  if (global) form(main, [field('name', '新しいグループ名', 'text', { maxlength: '80' })], 'グループを作成', async data => {
+  if (global) form(main, [field('name', '新しいグループ名', 'text', { maxlength: '80' }), field('description','グループ概要（任意）','textarea',{optional:true,maxlength:'2000',rows:'3'})], 'グループを作成', async data => {
     await api('admin.group.create', data); await refresh(); notice('グループを作成しました。');
   });
   const list = el('div', null, { class: 'group-list' }); const detail = el('div', null, { class: 'group-detail' }); main.append(list, detail);
+  let updateParticipation;
   async function refresh() {
     const current = await api('admin.groups'); list.replaceChildren(); detail.replaceChildren();
     if (!current.groups.length) list.append(el('p', '担当グループはありません。サイト管理者が担当を設定すると表示されます。', { class: 'muted' }));
     for (const group of current.groups) {
       const card = el('article', null, { class: 'row' });
       card.append(el('h3', group.name), el('p', `${group.member_count}人 · ${group.active ? '利用中' : '無効'} · ${group.restrict_sharing ? 'グループ内の共有に限定' : '外部公開も選択可'}`, { class: 'muted' }));
+      if (group.description) card.append(el('p',group.description,{class:'muted'}));
       if (global || group.active) button(card, '所属・設定を開く', () => open(group.id)); list.append(card);
     }
+    if (updateParticipation) await updateParticipation();
   }
   async function open(groupId) {
     const { group, members, managers } = await api('admin.group.detail', { group_id: groupId }); detail.replaceChildren();
     const header = section(group.name, detail);
-    if (global) form(header, [field('name', 'グループ名', 'text', { value: group.name, maxlength: '80' }),
+    if (global) form(header, [field('name', 'グループ名', 'text', { value: group.name, maxlength: '80' }),field('description','グループ概要（任意）','textarea',{value:group.description,optional:true,maxlength:'2000',rows:'3'}),
       field('active', 'グループの状態', 'select', { value: String(group.active), choices: [['true','利用中'],['false','無効（共有と管理を停止）']] }),
       field('restrict_sharing', '所属ユーザーの公開範囲', 'select', { value: String(group.restrict_sharing), choices: [['true','下書き・グループ共有のみ'],['false','公開・限定公開・個別共有も許可']] })], 'グループ設定を保存', async data => {
         await api('admin.group.update', { ...data, group_id: groupId }); await refresh(); notice('グループ設定を保存しました。');
       });
-    if (!global) form(header, [field('name', 'グループ名', 'text', { value: group.name, maxlength: '80' })], 'グループ名を変更', async data => {
-      await api('admin.group.rename', { ...data, group_id: groupId }); await refresh(); notice('グループ名を変更しました。');
+    if (!global) form(header, [field('name', 'グループ名', 'text', { value: group.name, maxlength: '80' }),field('description','グループ概要（任意）','textarea',{value:group.description,optional:true,maxlength:'2000',rows:'3'})], 'グループ設定を保存', async data => {
+      await api('admin.group.rename', { ...data, group_id: groupId }); await refresh(); notice('グループ設定を保存しました。');
     });
     const create = section('このグループのアカウントを作成', detail);
     form(create, [username(), password('password','初期パスワード'), role(false)], '所属アカウントを作成', async data => {
-      const result = await api('admin.group.account.create', { ...data, group_id: groupId }); await open(groupId);
+      const result = await api('admin.group.account.create', { ...data, group_id: groupId }); await refresh(); await open(groupId);
       notice(`アカウントを作成して所属させました。ID: ${result.user_id}`);
     });
     const roster = section('所属ユーザー', detail);
@@ -79,7 +82,7 @@ export async function groupManagement(parent, tools, admin) {
     }
     detail.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
-  await refresh(); await groupParticipation(parent, tools); return groups;
+  await refresh(); updateParticipation = await groupParticipation(parent, tools); return groups;
 }
 
 async function groupParticipation(parent, { el, section, button, api, notice }) {
@@ -90,6 +93,7 @@ async function groupParticipation(parent, { el, section, button, api, notice }) 
     const { groups } = await api('admin.group.directory'); list.replaceChildren(); games.replaceChildren();
     for (const group of groups) {
       const row = el('div', null, { class: 'row' }); row.append(el('h3', group.name), el('p', `${group.joined ? '参加中' : '未参加'}${group.manages ? ' · 管理担当' : ''}`, { class: 'muted' }));
+      if (group.description) row.append(el('p',group.description,{class:'muted'}));
       button(row, group.joined ? '退出する' : '参加する', async () => {
         await api('admin.group.membership', { group_id: group.id, operation: group.joined ? 'leave' : 'join' }); await refresh(); notice(group.joined ? '退出しました。' : '参加しました。');
       }); list.append(row);
@@ -100,7 +104,7 @@ async function groupParticipation(parent, { el, section, button, api, notice }) 
     }
     if (!shared.games.length) games.append(el('p', '参加グループの共有作品はまだありません。', { class: 'muted' }));
   }
-  await refresh();
+  await refresh(); return refresh;
 }
 
 export async function scopedDashboard(root, tools, admin) {

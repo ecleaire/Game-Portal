@@ -3,6 +3,7 @@ create table portal_private.groups (
  id uuid primary key default extensions.gen_random_uuid(), name text not null check(length(btrim(name)) between 1 and 80),
  active boolean not null default true, restrict_sharing boolean not null default true, created_at timestamptz not null default now()
 );
+alter table portal_private.groups add column description text not null default '' check(length(description)<=2000);
 create table portal_private.group_members (
  group_id uuid references portal_private.groups(id) on delete cascade,
  user_id uuid references portal_private.users(id) on delete cascade, primary key(group_id,user_id)
@@ -55,7 +56,7 @@ create function portal_private.submission_action(u portal_private.users,action t
 declare s portal_private.game_submissions; result jsonb; groups_json jsonb; audience text; gid uuid; ids jsonb; restrict_group uuid;
 begin
  if action='user.groups' then
-  select coalesce(jsonb_agg(jsonb_build_object('id',g.id,'name',g.name,'restrict_sharing',g.restrict_sharing) order by g.name,g.id),'[]') into groups_json
+  select coalesce(jsonb_agg(jsonb_build_object('id',g.id,'name',g.name,'description',g.description,'restrict_sharing',g.restrict_sharing) order by g.name,g.id),'[]') into groups_json
    from portal_private.groups g join portal_private.group_members m on m.group_id=g.id where m.user_id=u.id and g.active;
   return jsonb_build_object('groups',groups_json);
  end if;
@@ -119,7 +120,7 @@ declare g portal_private.groups; s portal_private.game_submissions; u portal_pri
 begin
  if action='admin.me' then return portal_private.admin_action_before_groups(a,action,body);end if;
  if action='admin.group.directory' then
-  select coalesce(jsonb_agg(jsonb_build_object('id',gr.id,'name',gr.name,
+  select coalesce(jsonb_agg(jsonb_build_object('id',gr.id,'name',gr.name,'description',gr.description,
     'joined',exists(select 1 from portal_private.group_admin_members where group_id=gr.id and admin_id=a.id),
     'manages',portal_private.manages_group(a,gr.id)) order by gr.name,gr.id),'[]') into groups_json
    from portal_private.groups gr where gr.active;
@@ -149,14 +150,14 @@ begin
   return jsonb_build_object('games',groups_json);
  end if;
  if action='admin.groups' then
-  select coalesce(jsonb_agg(jsonb_build_object('id',gr.id,'name',gr.name,'active',gr.active,'restrict_sharing',gr.restrict_sharing,
+  select coalesce(jsonb_agg(jsonb_build_object('id',gr.id,'name',gr.name,'description',gr.description,'active',gr.active,'restrict_sharing',gr.restrict_sharing,
     'member_count',(select count(*) from portal_private.group_members where group_id=gr.id)) order by gr.name,gr.id),'[]') into groups_json
    from portal_private.groups gr where a.role='super_admin' or exists(select 1 from portal_private.group_admins where group_id=gr.id and admin_id=a.id);
   return jsonb_build_object('groups',groups_json);
  end if;
  if action in ('admin.group.create','admin.group.update','admin.group.manager') and a.role<>'super_admin' then return '{"error":"forbidden"}';end if;
  if action='admin.group.create' then
-  insert into portal_private.groups(name) values(btrim(body->>'name')) returning * into g;
+  insert into portal_private.groups(name,description) values(btrim(body->>'name'),coalesce(body->>'description','')) returning * into g;
  elsif action like 'admin.group.%' then
   gid:=(body->>'group_id')::uuid;
   select * into g from portal_private.groups where id=gid for update;
@@ -165,10 +166,10 @@ begin
    return jsonb_build_object('group',to_jsonb(g),'members',coalesce((select jsonb_agg(jsonb_build_object('id',r.id,'username',r.username,'role',r.role,'status',r.status) order by r.username) from portal_private.group_members m join portal_private.users r on r.id=m.user_id where m.group_id=gid),'[]'),
     'managers',case when a.role='super_admin' then coalesce((select jsonb_agg(jsonb_build_object('id',r.id,'username',r.username,'role',r.role)) from portal_private.group_admins m join portal_private.admin_users r on r.id=m.admin_id where m.group_id=gid),'[]') else '[]'::jsonb end);
   elsif action='admin.group.rename' then
-   update portal_private.groups set name=btrim(body->>'name') where id=gid returning * into g;
+   update portal_private.groups set name=btrim(body->>'name'),description=coalesce(body->>'description',description) where id=gid returning * into g;
   elsif action='admin.group.update' then
    if body->>'active' not in ('true','false') or body->>'restrict_sharing' not in ('true','false') then return '{"error":"invalid_request"}';end if;
-   update portal_private.groups set name=btrim(body->>'name'),active=(body->>'active')::boolean,restrict_sharing=(body->>'restrict_sharing')::boolean where id=gid returning * into g;
+   update portal_private.groups set name=btrim(body->>'name'),description=coalesce(body->>'description',description),active=(body->>'active')::boolean,restrict_sharing=(body->>'restrict_sharing')::boolean where id=gid returning * into g;
   elsif action='admin.group.manager' then
    select * into target_admin from portal_private.admin_users where id=(body->>'admin_id')::uuid for update;
    if target_admin.id is null or target_admin.role<>'admin' or not target_admin.active then return '{"error":"invalid_request"}';end if;

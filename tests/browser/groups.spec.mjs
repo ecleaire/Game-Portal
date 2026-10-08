@@ -14,8 +14,9 @@ test('assigned group management, independent participation, and play-only accoun
  await expect(page.getByRole('heading',{name:'ユーザー一覧',exact:true})).toHaveCount(0);
  await expect(page.getByRole('button',{name:'グループを作成',exact:true})).toHaveCount(0);
  await page.locator('#group-management').getByRole('button',{name:'所属・設定を開く',exact:true}).click();
- await page.getByLabel('グループ名',{exact:true}).fill('Updated group');await page.getByRole('button',{name:'グループ名を変更',exact:true}).click();
+ await page.getByLabel('グループ名',{exact:true}).fill('Updated group');await page.getByLabel('グループ概要（任意）',{exact:true}).fill('A private community');await page.getByRole('button',{name:'グループ設定を保存',exact:true}).click();
  await expect(page.locator('#group-management')).toContainText('Updated group');
+ await expect(page.locator('#group-management')).toContainText('A private community');
  await page.locator('#group-management').getByRole('button',{name:'所属・設定を開く',exact:true}).click();
  await page.getByLabel('ユーザー名',{exact:true}).fill('browser_group_player');await page.getByLabel('初期パスワード',{exact:true}).fill('browser-groups-only');
  await page.getByRole('combobox',{name:'ユーザー権限',exact:true}).selectOption('player');await page.getByRole('button',{name:'所属アカウントを作成',exact:true}).click();

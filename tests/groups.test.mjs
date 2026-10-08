@@ -31,7 +31,8 @@ after(async()=>{await db?.close();});
 test('only assigned groups allow management; participation cannot grant rights',async()=>{
  assert.deepEqual((await api('admin.groups',{},manager)).groups.map(g=>g.id),[groupA]);
  assert.equal((await api('admin.group.detail',{group_id:groupB},manager)).error,'not_found');
- assert.equal((await api('admin.group.rename',{group_id:groupA,name:'Renamed A'},manager)).ok,true);
+ const changed=await api('admin.group.rename',{group_id:groupA,name:'Renamed A',description:'Private games'},manager);
+ assert.equal(changed.ok,true);assert.equal(changed.group.description,'Private games');
  assert.equal((await api('admin.group.rename',{group_id:groupB,name:'Hacked'},manager)).error,'not_found');
  assert.equal((await api('admin.group.update',{group_id:groupA,name:'A',active:'true',restrict_sharing:'false'},manager)).error,'forbidden');
  for(const action of ['admin.users','admin.reports','admin.audit','admin.tag.create','admin.admin.create','admin.account.delete','admin.group.manager','admin.group.create'])assert.equal((await api(action,{},manager)).error,'forbidden',action);
