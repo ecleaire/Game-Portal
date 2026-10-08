@@ -16,6 +16,7 @@ export function gameSocial(slug, before, root = './') {
   };
   const render = () => {
     actions.replaceChildren();
+    actions.append(node('a', `${state.creator} のプロフィール →`, { href: `${root}profile/?game=${encodeURIComponent(slug)}`, class: 'creator-profile-link' }));
     const like = node('button', `${state.liked ? '♥' : '♡'} いいね ${state.like_count}`, { type: 'button', 'aria-pressed': String(state.liked) });
     actions.append(like);
     if (!currentSession()) {

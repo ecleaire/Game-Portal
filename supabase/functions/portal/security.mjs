@@ -1,5 +1,5 @@
 export const actions = new Set([
-  'social.game', 'social.like', 'social.likes', 'social.follow', 'social.following', 'social.lists',
+  'social.creator', 'social.game', 'social.like', 'social.likes', 'social.follow', 'social.following', 'social.lists',
   'social.list.create', 'social.list.update', 'social.list.delete', 'social.list.get', 'social.list.shared',
   'social.list.item', 'social.list.order', 'social.list.share',
   'admin.group.rename', 'admin.group.directory', 'admin.group.membership', 'admin.shared.games',

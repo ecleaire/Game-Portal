@@ -1,7 +1,7 @@
 import { currentTerms, consentCheckbox, rememberAcceptance } from './terms.js?v=20261008a';
 import { config } from './config.js';
 import { groupFields, groupData, groupManagement, scopedDashboard } from './groups.js?v=20261009a';
-import { gameSocial } from './game-social.js?v=20261009b';
+import { gameSocial } from './game-social.js?v=20261009c';
 import { loadTags, tagPicker, tagChips, tagCategories } from './tags.js?v=20261004d';
 let availableTags = [];
 let availableGroups = [];

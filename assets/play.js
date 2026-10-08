@@ -1,5 +1,5 @@
 import { gameReport } from './reports.js?v=20261009b';
-import { gameSocial } from './game-social.js?v=20261009b';
+import { gameSocial } from './game-social.js?v=20261009c';
 import { requireTerms } from './terms.js?v=20261008a';
 import { config } from './config.js';
 import { userSessionKey, adminSessionKey } from './navigation.js?v=20261009b';

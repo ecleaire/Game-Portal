@@ -19,6 +19,12 @@ test('likes, private lists, ordering, URL sharing and private following work thr
  await page.goto('./');await page.evaluate(token=>sessionStorage.setItem('game-portal.user.session.v1',token),player.token);
  await page.goto(`game.html?slug=${games[0].public_slug}`);
  await expect(page.frameLocator('#gameFrame').locator('body')).toHaveText('Library game');
+ await page.getByRole('link',{name:'browser_library_author のプロフィール →',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'browser_library_author',exact:true})).toBeVisible();
+ await expect(page.locator('.profile-game')).toHaveCount(2);
+ for(const width of [390,1440]){await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:`test-results/profile-${width}.png`,fullPage:false,animations:'disabled'});}
+ await page.getByRole('link',{name:/Library first/}).click();
+ await expect(page.frameLocator('#gameFrame').locator('body')).toHaveText('Library game');
  const like=page.getByRole('button',{name:'♡ いいね 0',exact:true});await like.click();await expect(page.getByRole('button',{name:'♥ いいね 1',exact:true})).toHaveAttribute('aria-pressed','true');
  await page.getByRole('button',{name:'＋ 作者をフォロー',exact:true}).click();await expect(page.getByRole('button',{name:'✓ フォロー中',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'＋ リストに保存',exact:true}).click();const dialog=page.getByRole('dialog',{name:'リストに保存'});

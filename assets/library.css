@@ -28,3 +28,11 @@
 .library-empty { padding:28px 12px; color:var(--muted); }
 .library-creator { border:1px solid var(--line); border-radius:18px; padding:20px; margin:20px 0; }
 @media(max-width:600px) { .library-game { align-items:flex-start; flex-direction:column; gap:12px; } .library-create { flex-direction:column; } .library-create input { flex:auto; } .library-tabs button { flex:1 1 auto; padding:10px; font-size:.88rem; } }
+.creator-profile-link { flex-basis:100%; font-weight:700; }
+.profile-heading { display:flex; gap:1rem; align-items:center; margin:1rem 0 2rem; }
+.profile-heading h2 { overflow-wrap:anywhere; }
+.profile-avatar { display:grid; place-items:center; font-size:2.5rem; width:5rem; height:5rem; flex-shrink:0; border-radius:24px; background:var(--surface); }
+.profile-game { text-decoration:none; min-height:140px; }
+.profile-game strong { overflow-wrap:anywhere; }
+.profile-tags { display:flex; flex-wrap:wrap; gap:.4rem; }
+.profile-tags span { font-size:.8rem; border:1px solid var(--border); border-radius:999px; padding:.25rem .6rem; }

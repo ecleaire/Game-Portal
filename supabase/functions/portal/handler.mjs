@@ -307,7 +307,7 @@ export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleS
     catch (error) { return reply({ error: error.message }, error.message === 'body_too_large' ? 413 : 400); }
     const login = ['portal.login', 'user.login', 'admin.login'].includes(input.action);
     const supplied = request.headers.get('x-portal-session');
-    const anonymousRead = ['social.game', 'social.list.shared'].includes(input.action);
+    const anonymousRead = ['social.creator', 'social.game', 'social.list.shared'].includes(input.action);
     if (!login && input.action !== 'report.create' && !/^[a-f0-9]{64}$/.test(supplied ?? '') && !(anonymousRead && supplied === null)) return reply({ error: 'unauthorized' }, 401);
     const fresh = login ? token() : null;
     try {
