@@ -106,6 +106,15 @@ test('help and policy pages are linked, keyboard accessible and responsive', asy
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: `test-results/privacy-${width}.png`, fullPage: true });
   }
+  await page.getByRole('navigation', { name: 'サポート・ポリシー' }).getByRole('link', { name: '権利表記', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '権利表記', exact: true })).toBeVisible();
+  await expect(page.locator('#independence')).toContainText('提携しておらず');
+  await expect(page.locator('#godot a').first()).toHaveAttribute('href', 'https://godot.foundation/policies-and-procedures/trademark-policy');
+  for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({ width, height: 1000 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: `test-results/rights-${width}.png`, fullPage: true, animations:'disabled' });
+  }
   await page.goto('./');
   for (const width of [1440, 1024, 768, 390, 320]) {
     await page.setViewportSize({ width, height: 1000 });
@@ -116,9 +125,10 @@ test('help and policy pages are linked, keyboard accessible and responsive', asy
     for(const line of lines) expect(line[0].right).toBeLessThanOrEqual(width);
     await page.screenshot({ path: `test-results/home-layout-${width}.png`, fullPage: true });
   }
-  for (const path of ['login/', 'account/', 'upload/', 'admin/', 'game.html?id=scratch-demo']) {
+  for (const path of ['login/', 'account/', 'upload/', 'admin/', 'library/', 'profile/', 'rights/', 'game.html?id=scratch-demo']) {
     await page.goto(path);
     const footer=page.getByRole('navigation', { name: 'サポート・ポリシー' });
+    await expect(footer.getByRole('link', { name: '権利表記', exact: true })).toHaveAttribute('href', /rights\/$/);
     await expect(footer.getByRole('link', { name: 'FAQ', exact: true })).toHaveAttribute('href', /faq\/$/);
     await footer.getByRole('link', { name: 'FAQ', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'よくある質問', exact: true })).toBeVisible();

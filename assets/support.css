@@ -67,3 +67,4 @@
   .home-page .hero-guide .guide-help { border: 0; padding: 0; }
 }
 @media (max-width: 420px) { .home-page .hero h2 { font-size: clamp(1.875rem, 9vw, 2.35rem); } .support-toc nav, .support-related { grid-template-columns: 1fr; } }
+.footer-disclaimer { width:min(1240px, calc(100% - 48px)); margin:20px auto 0; color:var(--muted); font-size:.75rem; line-height:1.7; text-align:left; overflow-wrap:anywhere; }

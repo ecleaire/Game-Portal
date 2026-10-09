@@ -9,7 +9,7 @@ test('Pages artifact preserves games and excludes backend, local config and secr
   const temp = await mkdtemp(join(tmpdir(), 'portal-build-test-'));
   try {
     const root = new URL('../', import.meta.url);
-    for (const entry of ['scripts', 'index.html', 'game.html', 'games.json', 'games', 'assets', 'login', 'account', 'admin', 'upload', 'faq', 'terms', 'privacy', 'library', 'profile']) {
+    for (const entry of ['scripts', 'index.html', 'game.html', 'games.json', 'games', 'assets', 'login', 'account', 'admin', 'upload', 'faq', 'terms', 'privacy', 'library', 'profile', 'rights']) {
       await cp(new URL(entry, root), join(temp, entry), { recursive: true });
     }
     await writeFile(join(temp, '.env'), 'NOT_A_REAL_SECRET=must-not-publish');
@@ -27,7 +27,7 @@ test('Pages artifact preserves games and excludes backend, local config and secr
       assert.deepEqual(await readFile(join(temp, 'dist', game.path)), await readFile(new URL(game.path, root)));
     }
     assert.deepEqual(await readFile(join(temp, 'dist/game.html')), await readFile(new URL('game.html', root)));
-    for (const page of ['faq', 'terms', 'privacy', 'library', 'profile']) {
+    for (const page of ['faq', 'terms', 'privacy', 'library', 'profile', 'rights']) {
       assert.deepEqual(await readFile(join(temp, 'dist', page, 'index.html')), await readFile(new URL(`${page}/index.html`, root)));
     }
     assert.notEqual(build().status, 0, 'stale output must fail closed');

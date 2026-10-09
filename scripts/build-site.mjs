@@ -7,7 +7,7 @@ const out = join(root, 'dist');
 await mkdir(out, { recursive: true });
 // Fail on stale output rather than risk publishing leftovers from a previous build.
 if ((await readdir(out)).length) throw new Error('dist must be empty. Remove only dist/ before rebuilding.');
-for (const entry of ['index.html', 'game.html', 'games.json', 'assets', 'games', 'login', 'account', 'admin', 'upload', 'faq', 'terms', 'privacy', 'library', 'profile']) {
+for (const entry of ['index.html', 'game.html', 'games.json', 'assets', 'games', 'login', 'account', 'admin', 'upload', 'faq', 'terms', 'privacy', 'library', 'profile', 'rights']) {
   await cp(join(root, entry), join(out, entry), {
     recursive: true,
     filter: source => !/(^|[\\/])\.[^\\/]+/.test(source.slice(root.length)) && !source.endsWith('config.local.js'),
