@@ -18,11 +18,26 @@ before(async()=>{
  alice=await login('library_alice');bob=await login('library_bob');creator=await login('library_author');game=await makeGame('Public game','public');secret=await makeGame('Private title','draft');
 });
 after(async()=>await db?.close());
+test('profile bios are editable only by the session owner, moderated atomically and gated by game access',async()=>{
+ const bio='短いゲームをつくっています。\n<script>text only</script>';
+ assert.equal((await api('user.profile',{display_name:'作者の表示名',avatar_key:'fox',bio,user_id:(await api('user.me',{},alice)).user.id},creator)).user.bio,bio);
+ assert.equal((await api('user.me',{},alice)).user.bio,'');
+ assert.equal((await api('social.creator',{slug:game.public_slug},null)).creator.bio,bio);
+ assert.equal((await api('social.creator',{slug:secret.public_slug},bob)).error,'not_found');
+ const saved=(await api('user.me',{},creator)).user;
+ for(const [value,error] of [['死ね','content_blocked'],['https://example.com','url_not_allowed'],['x'.repeat(1001),'invalid_bio'],[[], 'invalid_bio']]) {
+  assert.equal((await api('user.profile',{display_name:'Must not save',avatar_key:'cat',bio:value},creator)).error,error);
+  const current=(await api('user.me',{},creator)).user;assert.equal(current.display_name,saved.display_name);assert.equal(current.avatar_key,saved.avatar_key);assert.equal(current.bio,bio);
+ }
+ assert.equal((await api('user.profile',{display_name:'作者の表示名',avatar_key:'fox'},creator)).user.bio,bio);
+ assert.equal((await api('user.profile',{display_name:'作者の表示名',avatar_key:'fox',bio:''},creator)).user.bio,'');
+ assert.equal((await api('user.profile',{display_name:'No',avatar_key:'fox',bio:'forged'},owner)).error,'forbidden');
+});
 test('creator profiles show display settings and discoverable games without leaking private or unlisted works',async()=>{
  await api('user.profile',{display_name:'作者の表示名',avatar_key:'fox'},creator);
  const unlisted=await makeGame('Hidden unlisted title','unlisted');
  const result=await api('social.creator',{slug:game.public_slug},null);
- assert.deepEqual(result.creator,{name:'作者の表示名',avatar_key:'fox'});
+ assert.deepEqual(result.creator,{name:'作者の表示名',avatar_key:'fox',bio:''});
  assert.deepEqual(result.games.map(g=>g.title),['Public game']);
  assert.equal(JSON.stringify(result).includes('library_author'),false);
  assert.equal(JSON.stringify(result).includes('Private title'),false);

@@ -1,7 +1,7 @@
 # Portal API (Phase 1/2)
 
 `POST {SUPABASE_URL}/functions/v1/portal`、JSON `{ "action": "…", "data": { … } }`。
-任意の公開`apikey`と、ログイン以外では`X-Portal-Session`が必要です。生のトークンはログイン応答にだけ含みます。Supabase JWTではありません。body上限は8192バイト。
+任意の公開`apikey`と、保護された操作では`X-Portal-Session`が必要です。生のトークンはログイン応答にだけ含みます。Supabase JWTではありません。通常のJSON body上限は32768バイト。カタログ・タグ・公開ゲーム・公開範囲で許可されるプロフィール等には匿名読み取りの専用入口があります。
 
 | action | data | 認可 / 応答 |
 | --- | --- | --- |
@@ -10,7 +10,7 @@
 | admin.login | username, password | 公開 / token, expires_at, admin |
 | logout | なし | 有効セッション / ok |
 | user.me | なし | 一般セッション / user |
-| user.profile | display_name, avatar_key | 一般セッション / user。表示名は1〜40文字、アイコンは固定候補の識別子のみ |
+| user.profile | display_name, avatar_key, bio（任意） | 一般セッション / user。表示名は1〜40文字、アイコンは固定候補の識別子のみ。自己紹介は0〜1000文字、URL・禁止語は拒否。bio省略で既存値維持 |
 | user.rename | username | 一般セッション / user |
 | user.password | current_password, password | 本人用パスワード照合 / ok, reauthenticate |
 | user.submissions | なし | 一般セッション / 自分の投稿一覧（最大100件） |
