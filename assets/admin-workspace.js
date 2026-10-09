@@ -21,7 +21,8 @@ export function collectionTools(container, { label, rows = ':scope > .row', stat
     const items = [...container.querySelectorAll(rows)];
     const query=search.value.normalize('NFKC').toLocaleLowerCase().trim();let visible=0;
     for(const row of items) {
-      row.hidden=Boolean((query&&!row.textContent.normalize('NFKC').toLocaleLowerCase().includes(query))||(state.value&&row.dataset.filterState!==state.value));
+      const text=row.dataset.searchText??row.textContent;
+      row.hidden=Boolean((query&&!text.normalize('NFKC').toLocaleLowerCase().includes(query))||(state.value&&row.dataset.filterState!==state.value));
       if(!row.hidden)visible++;
     }
     count.textContent=`表示 ${visible} / ${items.length}件`;

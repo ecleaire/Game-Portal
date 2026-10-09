@@ -1,9 +1,9 @@
 import { currentTerms, consentCheckbox, rememberAcceptance } from './terms.js?v=20261010d';
 import { config } from './config.js';
-import { organizeAdmin, collectionTools } from './admin-workspace.js?v=20261010d';
+import { organizeAdmin, collectionTools } from './admin-workspace.js?v=20261010e';
 import { aiDisclosure, aiSummary } from './ai-disclosure.js?v=20261010b';
 import { avatars, avatarGlyph } from './avatars.js?v=20261010b';
-import { groupFields, groupData, groupManagement, scopedDashboard } from './groups.js?v=20261010d';
+import { groupFields, groupData, groupManagement, scopedDashboard } from './groups.js?v=20261010e';
 import { gameSocial } from './game-social.js?v=20261010a';
 import { loadTags, tagPicker, tagChips, tagCategories } from './tags.js?v=20261004d';
 let availableTags = [];
@@ -586,6 +586,7 @@ async function dashboard() {
   for (const user of users) {
     const row = el('div', null, { class: 'row' });
     row.dataset.filterState=user.kind==='admin'?'admin':user.banned?'banned':user.status;
+    row.dataset.searchText=[user.username,user.display_name,user.id,roleLabel(user.role)].join(' ');
     row.append(el('h3', user.username), el('p', `${roleLabel(user.role)} · ${user.banned ? 'BAN中' : accountStatusLabel(user.status)}`, { class: 'muted' }));
     if(user.kind==='admin')row.append(el('span','管理アカウント',{class:'visibility-badge'}));
     if(user.kind!=='admin'||admin.role==='super_admin')button(row, '管理', async () => { selected = user.id; await dashboard(); notice('対象ユーザーを選択しました。'); document.querySelector('#selected-user')?.scrollIntoView(); });
@@ -604,6 +605,7 @@ async function dashboard() {
   for (const game of submissions) {
     const row = el('div', null, { class: 'row' });
     row.dataset.filterState=game.status;
+    row.dataset.searchText=[game.title,game.username,game.engine,game.description,game.version,...(game.tags??[]).map(tag=>tag.name)].join(' ');
     row.append(statusBadge(game), el('h3', game.title));
     row.append(tagChips(game.tags));
     const editTags = el('details', null, { class: 'tag-review-editor' });

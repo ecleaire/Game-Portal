@@ -123,6 +123,7 @@ export async function scopedDashboard(root, tools, admin) {
     for (const game of submissions) {
       const row = el('article', null, { class: 'row' });
       row.dataset.filterState=game.status;
+      row.dataset.searchText=[game.title,game.username,game.engine,game.description,game.version,...(game.tags??[]).map(tag=>tag.name)].join(' ');
       row.append(statusBadge(game), el('h3', game.title), el('p', `投稿者: ${game.username}`, { class: 'muted' }), tagChips(game.tags));
       if (game.description) row.append(el('p', game.description));
       if (game.credits) row.append(el('h4','素材の権利表記・提供元'),el('p',game.credits,{class:'game-credits'}));
