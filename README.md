@@ -46,3 +46,5 @@ Godotでは**Web**プリセットから「プロジェクトをエクスポー�
 投稿済みゲームの一括編集・画像表示・保存仕様は[ゲーム編集](docs/GAME_EDITOR.md)を参照してください。
 
 入力制御・AI利用申告・アイコンの設定と反映手順: [docs/CONTENT_MODERATION.md](docs/CONTENT_MODERATION.md)
+
+作品情報の管理編集と隔離プレビュー: [docs/REVIEW_TOOLS.md](docs/REVIEW_TOOLS.md)。自己紹介の保存・閲覧権限: [docs/CREATOR_PROFILES.md](docs/CREATOR_PROFILES.md)。

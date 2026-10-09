@@ -124,7 +124,10 @@ export async function scopedDashboard(root, tools, admin) {
       if (game.description) row.append(el('p', game.description));
       if (game.credits) row.append(el('h4','素材の権利表記・提供元'),el('p',game.credits,{class:'game-credits'}));
       row.append(el('p',aiSummary(game),{class:'muted'}));
-      if (['pending','approved','rejected'].includes(game.status)) button(row,'ZIPを安全にダウンロード',()=>downloadSubmission(game.id));
+      if (['pending','approved','rejected'].includes(game.status)) {
+        button(row,'ZIPを安全にダウンロード',()=>downloadSubmission(game.id));
+        button(row,'隔離してプレビュー',()=>tools.previewReview(game,row));
+      }
       if (game.status==='pending') {
         button(row,'承認して共有設定を反映',()=>reviewSubmission(game.id,'approved'));
         button(row,'却下',async()=>{const reason=prompt('却下理由（任意・500文字まで）','');if(reason!==null)await reviewSubmission(game.id,'rejected',reason);},true);

@@ -1,0 +1,12 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' data: blob: 'wasm-unsafe-eval'; connect-src data: blob:; img-src data: blob:; style-src 'unsafe-inline' data: blob:; font-src data: blob:; media-src data: blob:; worker-src blob:; base-uri 'none'; form-action 'none'; frame-src 'none'">
+<title>隔離ゲームプレビュー</title>
+<script>
+window.addEventListener('message', function bootstrap(event) {
+  if (parent === window || event.source !== parent || event.data?.type !== 'portal-bootstrap' || typeof event.data.html !== 'string') return;
+  window.removeEventListener('message', bootstrap);
+  document.open(); document.write(event.data.html); document.close();
+});
+</script>

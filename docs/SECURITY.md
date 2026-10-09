@@ -2,9 +2,9 @@
 
 ## 信頼境界
 
-ブラウザー → `portal` Edge Function → service_role限定`public.portal_api` → 非公開`portal_private`スキーマという経路です。ブラウザーからDBテーブルへ直接アクセスできません。Supabase Auth JWTと独自セッションを混在させません。APIのaction allowlistにbootstrap、汎用SQL、管理者作成機能はありません。
+ブラウザー → `portal` Edge Function → service_role限定`public.portal_api` → 非公開`portal_private`スキーマという経路です。ブラウザーからDBテーブルへ直接アクセスできません。Supabase Auth JWTと独自セッションを混在させません。APIのaction allowlistにbootstrapや汎用SQLはありません。管理アカウントの作成・権限変更・削除は全権管理者だけに許可されます。
 
-一般ユーザーと管理者は別テーブル、別ログインaction、別セッションprincipalです。ユーザーの`player`/`uploader`権限は管理権限へ昇格できません。保護操作では入力のrole・admin IDを信用せず、DBからprincipal/status/BAN/期限/失効状態を読みます。現段階の`admin`と`super_admin`は同じユーザー管理操作が可能です。管理者の追加/編集はどちらにも公開していません。
+一般ユーザーと管理者は別テーブル、別ログインaction、別セッションprincipalです。ユーザーの`player`/`uploader`権限は管理権限へ昇格できません。保護操作では入力のrole・admin IDを信用せず、DBからprincipal/status/BAN/期限/失効状態を読みます。`super_admin`はサイト全体の管理を担当し、`admin`は全権管理者から付与された担当グループの作品・所属管理・アカウント作成だけを担当します。管理者がグループに参加しても管理権限を得ることはありません。全体のユーザー削除・BAN、タグ・禁止語・管理者権限の操作は担当管理者に許可しません。
 
 ## パスワード
 

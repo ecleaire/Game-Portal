@@ -162,7 +162,7 @@ export function privatePreviewDocument(files, resourceUrl = dataUrl, readyScript
 // Transfer bytes into the opaque sandbox and create its Blob URLs there.
 // Parent-origin Blob URLs cannot safely be fetched from an opaque game frame.
 // No credentials, parent DOM access, or external network access are provided.
-export function mountPrivatePreview(frame, files) {
+export function mountPrivatePreview(frame, files, shellUrl) {
   if (frame.getAttribute('sandbox') !== 'allow-scripts') throw new Error('invalid_preview');
   const channel = new MessageChannel();
   return new Promise((resolve, reject) => {
@@ -175,11 +175,11 @@ export function mountPrivatePreview(frame, files) {
       if (event.data === 'ready') finish();
       else if (event.data === 'error') finish(new Error('invalid_preview'));
     };
-    frame.addEventListener('load', () => {
+    const sendResources = () => {
       // All views of a stored ZIP share a buffer. Transfer each buffer once.
       const buffers = [...new Set([...files.values()].map(bytes => bytes.buffer))];
       frame.contentWindow.postMessage({ type: 'portal-resources', files }, '*', [channel.port2, ...buffers]);
-    }, { once: true });
+    };
     const script = `const decoder=new TextDecoder();const mimeTypes=${JSON.stringify(mimeTypes)};
       const mime=${mime.toString()};const privatePreviewDocument=${privatePreviewDocument.toString()};
       window.addEventListener('message',event=>{
@@ -192,6 +192,16 @@ export function mountPrivatePreview(frame, files) {
           document.open();document.write(html);document.close();
         }catch{port.postMessage('error');port.close();}
       },{once:true});`;
-    frame.srcdoc = `<!doctype html><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' data: blob: 'wasm-unsafe-eval'; connect-src data: blob:; img-src data: blob:; style-src 'unsafe-inline' data: blob:; font-src data: blob:; media-src data: blob:; worker-src blob:"><script>${script.replaceAll('</script', '<\\/script')}<\/script>`;
+    const html = `<!doctype html><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' data: blob: 'wasm-unsafe-eval'; connect-src data: blob:; img-src data: blob:; style-src 'unsafe-inline' data: blob:; font-src data: blob:; media-src data: blob:; worker-src blob:"><script>${script.replaceAll('</script', '<\\/script')}<\/script>`;
+    if (shellUrl) {
+      frame.addEventListener('load', () => {
+        frame.addEventListener('load', sendResources, { once: true });
+        frame.contentWindow.postMessage({ type: 'portal-bootstrap', html }, '*');
+      }, { once: true });
+      frame.src = shellUrl;
+    } else {
+      frame.addEventListener('load', sendResources, { once: true });
+      frame.srcdoc = html;
+    }
   });
 }

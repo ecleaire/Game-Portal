@@ -29,6 +29,9 @@ test('likes, private lists, ordering, URL sharing and private following work thr
  await page.getByRole('checkbox',{name:'画像',exact:true}).check();await page.getByRole('checkbox',{name:'プログラム',exact:true}).check();
  await page.getByRole('button',{name:'変更を保存',exact:true}).click();
  await expect(page.locator('#message')).toContainText('変更を保存しました');
+ await page.goto('account/');
+ await page.getByLabel('自己紹介（任意）',{exact:true}).fill('小さなゲームを制作しています。\n<script>plain profile text</script>');
+ await page.getByRole('button',{name:'プロフィールを保存',exact:true}).click();await expect(page.locator('#message')).toContainText('プロフィールを保存しました');
  await page.evaluate(token=>sessionStorage.setItem('game-portal.user.session.v1',token),player.token);
  await page.goto(`game.html?slug=${games[0].public_slug}`);
  await expect(page.frameLocator('#gameFrame').locator('body')).toHaveText('Library game');
@@ -36,6 +39,7 @@ test('likes, private lists, ordering, URL sharing and private following work thr
  await expect(page.locator('#gameAI')).toHaveText('AI利用あり：画像・プログラム');
  await page.getByRole('link',{name:'browser_library_author のプロフィール →',exact:true}).click();
  await expect(page.getByRole('heading',{name:'browser_library_author',exact:true})).toBeVisible();
+ await expect(page.locator('.profile-bio')).toContainText('小さなゲームを制作しています。');await expect(page.locator('.profile-bio script')).toHaveCount(0);
  await expect(page.locator('.profile-game')).toHaveCount(2);
  for(const width of [390,1440]){await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:`test-results/profile-${width}.png`,fullPage:false,animations:'disabled'});}
  await page.getByRole('link',{name:/Library first/}).click();

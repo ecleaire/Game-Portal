@@ -17,6 +17,7 @@ async function load() {
       root.replaceChildren();
       const header = node('section', '', { class:'profile-heading' });
       header.append(node('span', avatarGlyph(result.creator.avatar_key), { class:'profile-avatar', 'aria-hidden':'true' }), node('h2', result.creator.name));
+      if (result.creator.bio) header.append(node('p',result.creator.bio,{class:'profile-bio'}));
       root.append(header, node('h3', '投稿したゲーム'), node('div', '', { id:'creatorGames', class:'library-list-grid' }));
       document.title = `${result.creator.name} | GAME PORTAL`;
     }

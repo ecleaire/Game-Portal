@@ -11,7 +11,10 @@ await db.exec('create role anon; create role authenticated; create role service_
 const dir = new URL('../../supabase/migrations/', import.meta.url);
 for (const name of (await readdir(dir)).sort()) await db.exec(await readFile(new URL(name, dir), 'utf8'));
 await db.query('select public.portal_bootstrap($1,$2)', ['browser_owner', 'browser-test-admin-only']);
+// Independent fixture identity keeps review tests inside the real login limit.
+await db.query("insert into portal_private.admin_users(username,password_hash,role) values($1,portal_private.password_hash($2),'super_admin')", ['browser_review_owner','browser-review-admin-only']);
 const imageObjects = new Map();
+const driveObjects = new Map();
 const handler = createHandler({
   url: 'http://127.0.0.1:54321', serviceKey: 'browser-test-server-only',
   pepper: 'browser-test-only-pepper-not-for-production', allowedOrigins: 'http://127.0.0.1:4173',
@@ -19,7 +22,23 @@ const handler = createHandler({
   googlePendingFolderId: 'test-pending',
   fetcher: async (_url, options) => {
     if (_url === 'https://oauth2.googleapis.com/token') return Response.json({access_token:'test-only',expires_in:3600});
-    if (_url.startsWith('https://www.googleapis.com/upload/drive/')) return Response.json({id:crypto.randomUUID()});
+    if (_url.startsWith('https://www.googleapis.com/upload/drive/')) {
+      const body = Buffer.from(options.body);
+      const marker = Buffer.from('Content-Type: application/zip\r\n\r\n');
+      const boundary = options.headers['Content-Type'].split('boundary=')[1];
+      const start = body.indexOf(marker) + marker.length;
+      const end = body.lastIndexOf(Buffer.from(`\r\n--${boundary}--`));
+      const id = crypto.randomUUID();
+      driveObjects.set(id, body.subarray(start, end));
+      return Response.json({id});
+    }
+    if (_url.startsWith('https://www.googleapis.com/drive/v3/files/')) {
+      const id = new URL(_url).pathname.split('/').pop();
+      if (options.method === 'DELETE') { driveObjects.delete(id); return new Response(null,{status:204}); }
+      if (options.method === 'PATCH') return Response.json({id});
+      const bytes = driveObjects.get(id);
+      return bytes ? new Response(bytes,{headers:{'Content-Type':'application/zip'}}) : new Response(null,{status:404});
+    }
     if (_url.includes('/storage/v1/object/portal-packages')) {
       if (options.method === 'DELETE') { for (const key of JSON.parse(options.body).prefixes) imageObjects.delete(key); return Response.json({}); }
       const key=decodeURIComponent(_url.split('/portal-packages/')[1]);

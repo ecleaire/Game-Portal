@@ -2,19 +2,19 @@ import { currentTerms, consentCheckbox, rememberAcceptance } from './terms.js?v=
 import { config } from './config.js';
 import { aiDisclosure, aiSummary } from './ai-disclosure.js?v=20261010b';
 import { avatars, avatarGlyph } from './avatars.js?v=20261010b';
-import { groupFields, groupData, groupManagement, scopedDashboard } from './groups.js?v=20261010b';
+import { groupFields, groupData, groupManagement, scopedDashboard } from './groups.js?v=20261010c';
 import { gameSocial } from './game-social.js?v=20261010a';
 import { loadTags, tagPicker, tagChips, tagCategories } from './tags.js?v=20261004d';
 let availableTags = [];
 let availableGroups = [];
-const groupTools = () => ({ el, section, field, form, button, api, notice, username, password, role, logoutButton, reviewSubmission, downloadSubmission, repairPublication, gameTagPicker, tagChips, statusBadge });
+const groupTools = () => ({ el, section, field, form, button, api, notice, username, password, role, logoutButton, reviewSubmission, downloadSubmission, previewReview, repairPublication, gameTagPicker, tagChips, statusBadge });
 const managementGroupField = (game = {}) => field('management_group_id', '管理グループ', 'select', { optional: true, value: game.management_group_id ?? (availableGroups.length === 1 ? availableGroups[0].id : ''), choices: [['','グループを指定しない'], ...availableGroups.map(group => [group.id,group.name])] });
 function gameTagPicker(game = {}) {
   const merged = new Map(availableTags.map(tag => [tag.id, tag]));
   for (const tag of game.tags ?? []) if (!merged.has(tag.id)) merged.set(tag.id, tag);
   return tagPicker([...merged.values()], game.tags ?? []);
 }
-import { checkWebGameZip, unpackPrivateZip, mountPrivatePreview } from './private-preview.js?v=20261007d';
+import { checkWebGameZip, unpackPrivateZip, mountPrivatePreview } from './private-preview.js?v=20261010c';
 import { packageWebFiles } from './zip-upload.js?v=20261003a';
 import { sendUpload, uploadWithRecovery } from './upload-request.js?v=20261004d';
 import { submissionList } from './submission-list.js?v=20261003a';
@@ -37,6 +37,7 @@ let auditBefore;
 let busy = false;
 let formMessage = null;
 const errors = {
+  invalid_bio: '自己紹介は1,000文字以内で入力してください。',
   content_blocked: '使用できない単語が含まれています。表現を変更してください。',
   url_not_allowed: 'URLは素材の権利表記・提供元欄にのみ記入できます。',
   invalid_rule: '禁止語は1〜80文字で入力してください。英単語一致は半角英数字の1単語を指定します。',
@@ -285,11 +286,13 @@ async function account() {
   if(!shared.games?.length)sharedSection.append(el('p','共有されたゲームはありません。',{class:'muted'}));
   for(const game of shared.games ?? []){const card=el('article',null,{class:'row'});card.append(el('h3',game.title),tagChips(game.tags,3),el('a','プレイする →',{href:`../game.html?slug=${encodeURIComponent(game.public_slug)}`}));sharedSection.append(card);}
   const profile = section('プロフィール');
+  profile.append(el('p','自己紹介は、あなたの作品を閲覧できる人に作者プロフィールで表示されます。URLは記入できません。',{class:'muted'}));
   profile.append(el('p', '表示名やユーザー名には、本名・メールアドレス・電話番号など個人を特定できる情報を入力しないでください。', { class: 'muted' }));
   profile.append(el('p', '表示名とアイコンはゲーム投稿などで表示するための情報です。ログイン用ユーザー名やパスワードとは別に管理されます。', { class: 'muted' }));
   form(profile, [
     field('display_name', '表示名', 'text', { value: user.display_name, maxlength: '40', autocomplete: 'nickname' }),
     field('avatar_key', 'アイコン', 'select', { value: user.avatar_key, choices: avatars }),
+    field('bio','自己紹介（任意）','textarea',{value:user.bio ?? '',maxlength:'1000',rows:'5',optional:true,placeholder:'好きなゲームや、つくっている作品について'}),
   ], 'プロフィールを保存', async data => {
     await api('user.profile', data); await account(); notice('プロフィールを保存しました。');
   });
@@ -505,7 +508,7 @@ async function previewSubmission(submissionId) {
   const heading = section('自分だけでプレイ');
   heading.append(el('a', '← ゲームの管理に戻る', { href: `./?game=${encodeURIComponent(submissionId)}`, class: 'editor-back' }));
   root.append(frame); notice('このゲームは本人専用の隔離された画面で実行しています。');
-  await mountPrivatePreview(frame, files);
+  await mountPrivatePreview(frame, files, new URL('./private-preview-shell.html', import.meta.url).href);
 }
 async function showSubmissionThumbnail(parent, submissionId, mode) {
   try {
@@ -527,6 +530,7 @@ async function dashboard() {
   availableTags = await loadTags();
   const principal = (await api('admin.me')).admin;
   if (principal.role === 'admin') { root.replaceChildren(); await scopedDashboard(root, groupTools(), principal); return; }
+  availableGroups = (await api('admin.groups')).groups ?? [];
   const [{ admin }, { users }, { submissions }] = await Promise.all([api('admin.me'), api('admin.users', { offset }), api('admin.submissions', { offset: submissionOffset })]);
   root.replaceChildren();
   const top = section(`管理画面 — ${admin.username}`);
@@ -616,6 +620,10 @@ async function dashboard() {
     if (game.review_reason) row.append(el('p', `審査メモ: ${game.review_reason}`, { class: 'muted' }));
     if (game.status === 'approved' && !game.package_ready) button(row, '配信用ファイルを準備', () => repairPublication(game.id));
     if (game.visibility!=='draft'&&['pending', 'approved', 'rejected'].includes(game.status)) button(row, 'ZIPを安全にダウンロード', () => downloadSubmission(game.id));
+    if (game.visibility!=='draft'&&['pending', 'approved', 'rejected'].includes(game.status)) {
+      button(row,'隔離してプレビュー',()=>previewReview(game,row));
+      adminSubmissionEditor(row,game);
+    }
     if (game.status === 'pending') {
       button(row, '承認して公開設定を反映', () => reviewSubmission(game.id, 'approved'));
       button(row, '却下', async () => {
@@ -882,6 +890,44 @@ async function upload() {
   const history = section('投稿履歴');
   submissionList(history, submissions, { userId: user.id, statusLabel, visibilityLabel,
     renderCard: game => submissionCard(game, '../account/') });
+}
+async function previewReview(game, parent) {
+  const response=await fetch(`${config.supabaseUrl.replace(/\/$/,'')}/functions/v1/portal/download`,{
+    method:'POST',credentials:'omit',headers:{'Content-Type':'application/json',...(config.anonKey?{apikey:config.anonKey}:{}),'X-Portal-Session':session.token},
+    body:JSON.stringify({submission_id:game.id}),signal:AbortSignal.timeout(90000)});
+  if(!response.ok){const result=await response.json().catch(()=>({}));throw new Error(result.error ?? 'unavailable');}
+  const files=await unpackPrivateZip(await response.arrayBuffer());
+  parent.querySelector('.review-preview')?.remove();
+  const panel=el('section',null,{class:'review-preview'});
+  panel.append(el('h4',`${game.title} の審査プレビュー`));
+  const close=el('button','プレビューを閉じる',{type:'button'});close.disabled=true;close.addEventListener('click',()=>panel.remove());panel.append(close);
+  const frame=el('iframe',null,{title:`${game.title} の審査プレビュー`,sandbox:'allow-scripts',referrerpolicy:'no-referrer',class:'private-preview'});
+  panel.append(frame);parent.append(panel);
+  try { await mountPrivatePreview(frame, files, new URL('./private-preview-shell.html', import.meta.url).href);close.disabled=false;notice('隔離された画面でゲームを表示しました。'); }
+  catch(error) { panel.remove();throw error; }
+}
+function adminSubmissionEditor(parent,game) {
+  const edit=el('details',null,{class:'admin-game-editor'});edit.append(el('summary','作品情報・公開設定を編集'));parent.append(edit);
+  const picker=gameTagPicker(game);let ai;
+  const editForm=form(edit,[
+    field('title','ゲーム名','text',{value:game.title,maxlength:'120'}),
+    field('engine','エンジン','select',{value:game.engine,choices:[['godot','Godot'],['scratch','Scratch / TurboWarp'],['other','その他']]}),
+    field('description','説明（任意）','textarea',{value:game.description,optional:true,maxlength:'4000',rows:'4'}),
+    field('version','バージョン','text',{value:game.version,maxlength:'80'}),
+    field('controls','操作説明（任意）','textarea',{value:game.controls,optional:true,maxlength:'2000',rows:'3'}),
+    field('credits','素材の権利表記・提供元（任意）','textarea',{value:game.credits,optional:true,maxlength:'8000',rows:'4'}),
+    field('visibility','公開範囲','select',{value:game.visibility,choices:[['draft','下書き（本人のみ）'],['group','グループ内で共有'],['shared','指定ユーザーに共有'],['unlisted','限定公開'],['public','公開']]}),
+    shareField(game.shared_user_ids),
+    field('published_at','公開日時（空欄で即時公開）','datetime-local',{optional:true,value:game.published_at?localDateTime(game.published_at):''}),
+  ],'作品の変更を保存',async data=>{
+    Object.assign(data,ai.values(),groupData(editForm));data.tag_ids=picker.values();
+    data.published_at=data.published_at?new Date(data.published_at).toISOString():'';
+    await api('admin.submission.save',{...data,submission_id:game.id});await dashboard();notice('作品情報と公開設定を保存しました。');
+  });
+  editForm.classList.add('stacked-form');ai=aiDisclosure(editForm,game);
+  const help=el('p','',{class:'muted'});editForm.elements.visibility.closest('label').append(help);visibilityGuidance(editForm,help);
+  editForm.elements.visibility.closest('label').after(groupFields({el,form:editForm,groups:availableGroups,game}));
+  editForm.querySelector('button[type=submit]').before(ai.element,picker.element,el('p','下書きの内容は審査・編集できません。管理グループは変更されません。',{class:'muted'}),el('p','',{class:'message upload-status',role:'status','aria-live':'polite'}));
 }
 async function repairPublication(submissionId) {
   const response = await fetch(`${config.supabaseUrl.replace(/\/$/, '')}/functions/v1/portal/publish-package`, {
