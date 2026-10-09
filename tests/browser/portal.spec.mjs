@@ -81,6 +81,14 @@ test('device theme and manual switching work when browser storage is unavailable
 });
 
 test('help and policy pages are linked, keyboard accessible and responsive', async ({ page }) => {
+  for (const [path,label] of [['faq/','FAQ'],['terms/','利用規約'],['privacy/','プライバシーポリシー'],['rights/','権利表記']]) {
+    await page.goto(path);
+    const related = page.locator('.support-toc').getByRole('navigation', {name:'関連ページ',exact:true});
+    await expect(related.getByRole('link')).toHaveCount(4);
+    await expect(related.getByRole('link',{name:label,exact:true})).toHaveAttribute('aria-current','page');
+    await related.getByRole('link',{name:'利用規約',exact:true}).click();
+    await expect(page).toHaveURL(/\/terms\/$/);
+  }
   await page.goto('./');
   await page.getByRole('navigation', { name: 'サポート・ポリシー' }).getByRole('link', { name: 'FAQ', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'よくある質問', exact: true })).toBeVisible();
