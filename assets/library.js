@@ -1,4 +1,4 @@
-import { social, currentSession, node, errorText, gameLink } from './library-api.js?v=20261009b';
+import { social, currentSession, node, errorText, gameLink } from './library-api.js?v=20261010b';
 import { requireTerms } from './terms.js?v=20261008a';
 import { logoutSessions } from './navigation.js?v=20261009b';
 

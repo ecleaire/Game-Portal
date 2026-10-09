@@ -19,7 +19,7 @@ export function node(tag, text = '', attributes = {}) {
   return element;
 }
 export function errorText(error) {
-  return ({ unauthorized: 'ログインし直してください。', not_found: '対象が見つからないか、閲覧権限がありません。',
+  return ({ content_blocked:'使用できない単語が含まれています。表現を変更してください。', url_not_allowed:'URLは素材の権利表記・提供元欄にのみ記入できます。', unauthorized: 'ログインし直してください。', not_found: '対象が見つからないか、閲覧権限がありません。',
     limit_reached: '保存できる上限に達しました。不要な項目を削除してください。', conflict: '別の画面で変更されています。ページを更新してください。',
     invalid_request: '入力内容を確認してください。', forbidden: 'この操作は許可されていません。' })[error.message] || '接続できませんでした。しばらくして再試行してください。';
 }

@@ -25,12 +25,15 @@ test('likes, private lists, ordering, URL sharing and private following work thr
  await page.goto(`account/?game=${games[0].id}`);
  const credits='音楽: Test Author\nhttps://example.com/music\n<script>not executable</script>';
  await page.getByLabel('素材の権利表記・提供元（任意）',{exact:true}).fill(credits);
+ await page.getByRole('checkbox',{name:'ゲーム制作や使用素材にAIを利用している',exact:true}).check();
+ await page.getByRole('checkbox',{name:'画像',exact:true}).check();await page.getByRole('checkbox',{name:'プログラム',exact:true}).check();
  await page.getByRole('button',{name:'変更を保存',exact:true}).click();
  await expect(page.locator('#message')).toContainText('変更を保存しました');
  await page.evaluate(token=>sessionStorage.setItem('game-portal.user.session.v1',token),player.token);
  await page.goto(`game.html?slug=${games[0].public_slug}`);
  await expect(page.frameLocator('#gameFrame').locator('body')).toHaveText('Library game');
  await expect(page.locator('#gameCredits')).toHaveText(credits);await expect(page.locator('#gameCredits script')).toHaveCount(0);
+ await expect(page.locator('#gameAI')).toHaveText('AI利用あり：画像・プログラム');
  await page.getByRole('link',{name:'browser_library_author のプロフィール →',exact:true}).click();
  await expect(page.getByRole('heading',{name:'browser_library_author',exact:true})).toBeVisible();
  await expect(page.locator('.profile-game')).toHaveCount(2);

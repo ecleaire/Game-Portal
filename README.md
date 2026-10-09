@@ -44,3 +44,5 @@ Godotでは**Web**プリセットから「プロジェクトをエクスポー�
 [アカウント指定の共有・管理者管理・完全削除](docs/SHARING_AND_ACCOUNT_MANAGEMENT.md)
 
 投稿済みゲームの一括編集・画像表示・保存仕様は[ゲーム編集](docs/GAME_EDITOR.md)を参照してください。
+
+入力制御・AI利用申告・アイコンの設定と反映手順: [docs/CONTENT_MODERATION.md](docs/CONTENT_MODERATION.md)

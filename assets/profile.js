@@ -1,10 +1,10 @@
-import { social, currentSession, node, gameLink, errorText } from './library-api.js?v=20261009b';
+import { social, currentSession, node, gameLink, errorText } from './library-api.js?v=20261010b';
 import { requireTerms } from './terms.js?v=20261008a';
 import { logoutSessions } from './navigation.js?v=20261009b';
+import { avatarGlyph } from './avatars.js?v=20261010b';
 const root = document.getElementById('profile');
 const message = document.getElementById('message');
 const slug = new URLSearchParams(location.search).get('game');
-const icons = { gamepad:'🎮', star:'⭐', rocket:'🚀', puzzle:'🧩', palette:'🎨', lightning:'⚡', cat:'🐱', fox:'🦊', panda:'🐼' };
 let offset = 0, busy = false;
 async function load() {
   if (busy) return;
@@ -16,7 +16,7 @@ async function load() {
     if (!offset) {
       root.replaceChildren();
       const header = node('section', '', { class:'profile-heading' });
-      header.append(node('span', icons[result.creator.avatar_key] || icons.gamepad, { class:'profile-avatar', 'aria-hidden':'true' }), node('h2', result.creator.name));
+      header.append(node('span', avatarGlyph(result.creator.avatar_key), { class:'profile-avatar', 'aria-hidden':'true' }), node('h2', result.creator.name));
       root.append(header, node('h3', '投稿したゲーム'), node('div', '', { id:'creatorGames', class:'library-list-grid' }));
       document.title = `${result.creator.name} | GAME PORTAL`;
     }

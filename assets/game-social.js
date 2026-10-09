@@ -1,4 +1,4 @@
-import { social, currentSession, node, errorText } from './library-api.js?v=20261009b';
+import { social, currentSession, node, errorText } from './library-api.js?v=20261010b';
 
 export function gameSocial(slug, before, root = './') {
   document.getElementById('gameSocial')?.remove();

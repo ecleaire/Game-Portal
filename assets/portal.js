@@ -1,6 +1,8 @@
 import { currentTerms, consentCheckbox, rememberAcceptance } from './terms.js?v=20261008a';
 import { config } from './config.js';
-import { groupFields, groupData, groupManagement, scopedDashboard } from './groups.js?v=20261010a';
+import { aiDisclosure, aiSummary } from './ai-disclosure.js?v=20261010b';
+import { avatars, avatarGlyph } from './avatars.js?v=20261010b';
+import { groupFields, groupData, groupManagement, scopedDashboard } from './groups.js?v=20261010b';
 import { gameSocial } from './game-social.js?v=20261010a';
 import { loadTags, tagPicker, tagChips, tagCategories } from './tags.js?v=20261004d';
 let availableTags = [];
@@ -35,6 +37,12 @@ let auditBefore;
 let busy = false;
 let formMessage = null;
 const errors = {
+  content_blocked: '使用できない単語が含まれています。表現を変更してください。',
+  url_not_allowed: 'URLは素材の権利表記・提供元欄にのみ記入できます。',
+  invalid_rule: '禁止語は1〜80文字で入力してください。英単語一致は半角英数字の1単語を指定します。',
+  rule_conflict: 'その禁止語はすでに登録されています。',
+  rule_limit: '禁止語は無効なものを含めて最大1,000件です。',
+  invalid_ai: 'AIを利用している場合は、画像・音声・テキスト・プログラム・その他から1つ以上選択してください。',
   invalid_groups: '所属グループから共有先を選び、管理グループも共有先に含めてください。',
   group_locked: '管理グループは投稿後に変更できません。',
   group_private_required: 'このアカウントはグループ内の共有に限定されています。下書き、または所属グループだけへの共有を選んでください。',
@@ -146,12 +154,6 @@ const role = (allowTrusted = false) => field('role', 'ユーザー権限', 'sele
   ['player', 'プレイ専用（投稿不可）'], ['uploader', '投稿可能ユーザー'],
   ...(allowTrusted ? [['trusted_uploader', '信頼済み投稿者（審査省略）']] : []),
 ] });
-const avatars = [
-  ['gamepad', '🎮 ゲームパッド'], ['star', '⭐ スター'], ['rocket', '🚀 ロケット'],
-  ['puzzle', '🧩 パズル'], ['palette', '🎨 パレット'], ['lightning', '⚡ ライトニング'],
-  ['cat', '🐱 ねこ'], ['fox', '🦊 きつね'], ['panda', '🐼 パンダ'],
-];
-const avatarGlyph = key => ({ gamepad: '🎮', star: '⭐', rocket: '🚀', puzzle: '🧩', palette: '🎨', lightning: '⚡', cat: '🐱', fox: '🦊', panda: '🐼' }[key] ?? '🎮');
 const roleLabel = value => ({ player: 'プレイ専用', uploader: '投稿可能ユーザー', trusted_uploader: '信頼済み投稿者', admin: '管理アカウント', super_admin: '全権管理アカウント' }[value] ?? value);
 const accountStatusLabel = value => ({ active: '利用中', disabled: '無効' }[value] ?? value);
 function visibilityGuidance(formElement, help) {
@@ -180,6 +182,7 @@ function form(parent, fields, submitText, submit) {
     const label = el('label', title);
     const input = type === 'select' ? el('select', null, { name })
       : type === 'textarea' ? el('textarea', null, { name, ...attrs }) : el('input', null, { name, type, ...attrs });
+    input.setAttribute('aria-label', title);
     if (choices) for (const [key, title] of choices) input.append(el('option', title, { value: key }));
     if (!optional) input.required = true;
     if (value !== undefined) input.value = value;
@@ -333,6 +336,26 @@ async function tagManagement() {
   }
   search.addEventListener('input',()=>{for(const row of list.children) row.hidden=!row.dataset.search.includes(search.value.trim().toLowerCase());});
 }
+async function moderationManagement() {
+  const { rules } = await api('admin.moderation.list');
+  const panel = section('禁止語の管理'); panel.id = 'moderation-management';
+  panel.append(el('p','全権管理者のみ変更できます。解除する場合は状態を「無効」に変更してください。',{class:'muted'}));
+  const fields = (rule = {}) => [
+    field('term','禁止語','text',{value:rule.term ?? '',maxlength:'80'}),
+    field('category','分類','select',{value:rule.category ?? 'custom',choices:[['abuse','罵倒・脅迫'],['discrimination','差別'],['sexual','性的表現'],['custom','その他']]}),
+    field('match_mode','検出方法','select',{value:rule.match_mode ?? 'substring',choices:[['substring','含まれていれば検出（日本語など）'],['word','英単語一致（半角英数字）']]}),
+    field('is_active','状態','select',{value:rule.is_active === false ? 'false' : 'true',choices:[['true','有効'],['false','無効']]}),
+  ];
+  const add=el('details'); add.append(el('summary','禁止語を追加'));
+  form(add,fields(),'禁止語を追加',async data=>{await api('admin.moderation.create',data);await dashboard();notice('禁止語を追加しました。');}); panel.append(add);
+  const search=el('input',null,{type:'search',placeholder:'禁止語で検索','aria-label':'禁止語を検索'});panel.append(search);
+  const list=el('div',null,{class:'tag-admin-list'});panel.append(list);
+  for(const rule of rules) {
+    const row=el('details'); row.dataset.search=rule.term.toLowerCase();row.append(el('summary',`${rule.term} · ${rule.is_active?'有効':'無効'}`));
+    form(row,fields(rule),'禁止語を更新',async data=>{await api('admin.moderation.update',{...data,rule_id:rule.id});await dashboard();notice('禁止語を更新しました。');});list.append(row);
+  }
+  search.addEventListener('input',()=>{for(const row of list.children)row.hidden=!row.dataset.search.includes(search.value.trim().toLowerCase());});
+}
 function submissionCard(game, accountPath) {
   const card = el('article', null, { class: 'row submission-summary' });
   const art = el('div', null); thumbnailOrFallback(art, game); card.append(art);
@@ -367,7 +390,7 @@ function submissionEditor(game) {
   const editable = ['uploading', 'draft', 'pending', 'rejected', 'approved'].includes(game.status);
   if (editable) {
     const picker = gameTagPicker(game);
-    let previewUrl;
+    let previewUrl, ai;
     const saveForm = form(grid, [
       field('title', 'ゲーム名', 'text', { value: game.title, maxlength: '120' }),
       field('engine', 'エンジン', 'select', { value: game.engine, choices: [['godot','Godot'],['scratch','Scratch / TurboWarp'],['other','その他']] }),
@@ -386,6 +409,7 @@ function submissionEditor(game) {
       let archive;
       if (selectedFiles.length) { archive = await packageWebFiles(selectedFiles); await checkWebGameZip(archive); }
       delete data.thumbnail; delete data.package;
+      Object.assign(data, ai.values());
       data.tag_ids = picker.values();
       Object.assign(data, groupData(saveForm));
       data.published_at = data.published_at ? new Date(data.published_at).toISOString() : '';
@@ -426,6 +450,7 @@ function submissionEditor(game) {
     });
     label.append(input); thumbnail.append(label);
     const basics = section('基本情報', saveForm); basics.append(...labels.slice(0, 6), picker.element);
+    ai = aiDisclosure(saveForm, game); basics.append(ai.element);
     const visibility = section('公開設定', saveForm); visibility.append(...labels.slice(6));
     const help = el('p', '', { class: 'muted' }); visibility.append(help); visibilityGuidance(saveForm, help);
     visibility.append(groupFields({ el, form: saveForm, groups: availableGroups, game }));
@@ -587,6 +612,7 @@ async function dashboard() {
     if (game.status === 'uploading') row.append(el('p', 'ZIP未保管。投稿者がWeb書き出しZIPを再送するまで審査・公開できません。', { class: 'muted' }));
     if (game.description) row.append(el('p', game.description, { class: 'muted' }));
     if (game.credits) row.append(el('h4','素材の権利表記・提供元'),el('p',game.credits,{class:'game-credits'}));
+    row.append(el('p',aiSummary(game),{class:'muted'}));
     if (game.review_reason) row.append(el('p', `審査メモ: ${game.review_reason}`, { class: 'muted' }));
     if (game.status === 'approved' && !game.package_ready) button(row, '配信用ファイルを準備', () => repairPublication(game.id));
     if (game.visibility!=='draft'&&['pending', 'approved', 'rejected'].includes(game.status)) button(row, 'ZIPを安全にダウンロード', () => downloadSubmission(game.id));
@@ -614,6 +640,7 @@ async function dashboard() {
   if (submissions.length === 100) button(reviewPages, '次の100件', async () => { submissionOffset += 100; await dashboard(); });
   button(reviewPages, '投稿一覧を更新', dashboard); reviews.append(reviewPages);
   await tagManagement();
+  await moderationManagement();
   const audit = section('管理操作の監査ログ', root, 'admin-audit');
   button(audit, '最新の100件', async () => { auditBefore = undefined; await showAudit(audit); notice('監査ログを表示しました。'); });
 }
@@ -788,7 +815,7 @@ async function upload() {
   ]) turboSteps.append(el('li', step));
   turboGuide.append(turboSteps, el('p', 'ZIP形式で書き出した場合は、HTMLと関連ファイルが入ったZIPをそのまま選べます。.sb3やWindows用の実行ファイルではなく、ブラウザー用のHTMLまたはZIPを投稿してください。', { class: 'muted' }));
   s.append(turboGuide);
-  let pendingSubmissionId, selectedFiles = [], thumbnailUrl;
+  let pendingSubmissionId, selectedFiles = [], thumbnailUrl, ai;
   const picker = gameTagPicker();
   const submissionForm = form(s, [field('title', 'ゲーム名', 'text', { maxlength: '120' }),
     field('engine', 'エンジン', 'select', { choices: [['godot','Godot'],['scratch','Scratch / TurboWarp'],['other','その他']] }),
@@ -803,6 +830,7 @@ async function upload() {
   ], 'ゲームを投稿', async data => {
     const thumbnail = submissionForm.elements.thumbnail?.files?.[0];
     delete data.package; delete data.thumbnail;
+    Object.assign(data, ai.values());
     data.tag_ids = picker.values();
     Object.assign(data, groupData(submissionForm));
     data.published_at = data.published_at ? new Date(data.published_at).toISOString() : '';
@@ -815,6 +843,8 @@ async function upload() {
     uploadComplete(completed);
   });
   submissionForm.classList.add('stacked-form');
+  ai = aiDisclosure(submissionForm);
+  submissionForm.elements.credits.closest('label').after(ai.element);
   submissionForm.querySelector('button[type=submit]').before(picker.element);
   submissionForm.append(el('p', '', { class: 'message upload-status', role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' }));
   const visibilityHelp = el('p', '', { class: 'muted' });

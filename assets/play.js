@@ -2,6 +2,7 @@ import { gameReport } from './reports.js?v=20261009b';
 import { gameSocial } from './game-social.js?v=20261010a';
 import { requireTerms } from './terms.js?v=20261008a';
 import { config } from './config.js';
+import { aiSummary } from './ai-disclosure.js?v=20261010b';
 import { userSessionKey, adminSessionKey } from './navigation.js?v=20261009b';
 import { tagChips } from './tags.js?v=20261004a';
 import { unpackPrivateZip, mountPrivatePreview } from './private-preview.js?v=20261007d';
@@ -32,6 +33,8 @@ function showGame(game) {
   document.getElementById('descriptionCard').hidden = !game.description;
   document.getElementById('gameCredits').textContent = game.credits || '';
   document.getElementById('creditsCard').hidden = !game.credits;
+  document.getElementById('gameAI').textContent = aiSummary(game);
+  document.getElementById('aiCard').hidden = game.ai_used == null;
   document.getElementById('engineLabel').textContent = game.engine || '';
   document.getElementById('engineLabel').hidden = !game.engine;
   document.getElementById('controlsText').textContent = game.controls || 'ゲーム内の案内をご確認ください。';
