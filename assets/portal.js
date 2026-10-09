@@ -1,13 +1,14 @@
-import { currentTerms, consentCheckbox, rememberAcceptance } from './terms.js?v=20261008a';
+import { currentTerms, consentCheckbox, rememberAcceptance } from './terms.js?v=20261010d';
 import { config } from './config.js';
+import { organizeAdmin, collectionTools } from './admin-workspace.js?v=20261010d';
 import { aiDisclosure, aiSummary } from './ai-disclosure.js?v=20261010b';
 import { avatars, avatarGlyph } from './avatars.js?v=20261010b';
-import { groupFields, groupData, groupManagement, scopedDashboard } from './groups.js?v=20261010c';
+import { groupFields, groupData, groupManagement, scopedDashboard } from './groups.js?v=20261010d';
 import { gameSocial } from './game-social.js?v=20261010a';
 import { loadTags, tagPicker, tagChips, tagCategories } from './tags.js?v=20261004d';
 let availableTags = [];
 let availableGroups = [];
-const groupTools = () => ({ el, section, field, form, button, api, notice, username, password, role, logoutButton, reviewSubmission, downloadSubmission, previewReview, repairPublication, gameTagPicker, tagChips, statusBadge });
+const groupTools = () => ({ el, section, field, form, button, api, notice, username, password, role, logoutButton, reviewSubmission, downloadSubmission, previewReview, repairPublication, gameTagPicker, tagChips, statusBadge, collectionTools });
 const managementGroupField = (game = {}) => field('management_group_id', '管理グループ', 'select', { optional: true, value: game.management_group_id ?? (availableGroups.length === 1 ? availableGroups[0].id : ''), choices: [['','グループを指定しない'], ...availableGroups.map(group => [group.id,group.name])] });
 function gameTagPicker(game = {}) {
   const merged = new Map(availableTags.map(tag => [tag.id, tag]));
@@ -529,7 +530,7 @@ async function showSubmissionThumbnail(parent, submissionId, mode) {
 async function dashboard() {
   availableTags = await loadTags();
   const principal = (await api('admin.me')).admin;
-  if (principal.role === 'admin') { root.replaceChildren(); await scopedDashboard(root, groupTools(), principal); return; }
+  if (principal.role === 'admin') { root.replaceChildren(); await scopedDashboard(root, groupTools(), principal); organizeAdmin(root); return; }
   availableGroups = (await api('admin.groups')).groups ?? [];
   const [{ admin }, { users }, { submissions }] = await Promise.all([api('admin.me'), api('admin.users', { offset }), api('admin.submissions', { offset: submissionOffset })]);
   root.replaceChildren();
@@ -584,6 +585,7 @@ async function dashboard() {
   if (!users.length) list.append(el('p', 'ユーザーがいません。'));
   for (const user of users) {
     const row = el('div', null, { class: 'row' });
+    row.dataset.filterState=user.kind==='admin'?'admin':user.banned?'banned':user.status;
     row.append(el('h3', user.username), el('p', `${roleLabel(user.role)} · ${user.banned ? 'BAN中' : accountStatusLabel(user.status)}`, { class: 'muted' }));
     if(user.kind==='admin')row.append(el('span','管理アカウント',{class:'visibility-badge'}));
     if(user.kind!=='admin'||admin.role==='super_admin')button(row, '管理', async () => { selected = user.id; await dashboard(); notice('対象ユーザーを選択しました。'); document.querySelector('#selected-user')?.scrollIntoView(); });
@@ -601,6 +603,7 @@ async function dashboard() {
   if (!submissions.length) reviews.append(el('p', '投稿はありません。'));
   for (const game of submissions) {
     const row = el('div', null, { class: 'row' });
+    row.dataset.filterState=game.status;
     row.append(statusBadge(game), el('h3', game.title));
     row.append(tagChips(game.tags));
     const editTags = el('details', null, { class: 'tag-review-editor' });
@@ -651,6 +654,7 @@ async function dashboard() {
   await moderationManagement();
   const audit = section('管理操作の監査ログ', root, 'admin-audit');
   button(audit, '最新の100件', async () => { auditBefore = undefined; await showAudit(audit); notice('監査ログを表示しました。'); });
+  organizeAdmin(root);
 }
 async function manage(user, allowTrusted = false) {
   const s = section(`${user.username} の管理`); s.id = 'selected-user';
@@ -886,6 +890,9 @@ async function upload() {
   dropZone.append(packageInput, selection);
   submissionForm.querySelector('button[type=submit]').before(dropZone);
   submissionForm.querySelector('button[type=submit]').before(consentCheckbox('../terms/', 'rights_confirmed', 'この作品を投稿・公開するために必要な権利を有している、または必要な許諾を得ており、利用規約および禁止事項に適合していることを確認しました。'));
+  const saveBar=el('div',null,{class:'editor-save'});
+  saveBar.append(submissionForm.querySelector('button[type=submit]'),submissionForm.querySelector('.upload-status'));
+  submissionForm.append(saveBar);
   const { submissions } = await api('user.submissions');
   const history = section('投稿履歴');
   submissionList(history, submissions, { userId: user.id, statusLabel, visibilityLabel,

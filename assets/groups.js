@@ -40,6 +40,7 @@ export async function groupManagement(parent, tools, admin) {
       if (group.description) card.append(el('p',group.description,{class:'muted'}));
       if (global || group.active) button(card, '所属・設定を開く', () => open(group.id)); list.append(card);
     }
+    tools.collectionTools(list,{label:'グループ'});
     if (updateParticipation) await updateParticipation();
   }
   async function open(groupId) {
@@ -113,6 +114,7 @@ export async function scopedDashboard(root, tools, admin) {
   const top = section(`グループ管理 — ${admin.username}`, root); logoutButton(top);
   const groups = await groupManagement(root, tools, admin);
   const sectionGames = section('担当グループの作品', root);
+  sectionGames.id='reviews';
   let offset = 0;
   const list = el('div', null, { class: 'group-games' }); const pages = el('div', null, { class: 'actions' }); sectionGames.append(list, pages);
   async function load() {
@@ -120,6 +122,7 @@ export async function scopedDashboard(root, tools, admin) {
     if (!submissions.length) list.append(el('p', '管理する作品はありません。所属ユーザーが管理グループを設定した作品が表示されます。下書きは表示されません。', { class: 'muted' }));
     for (const game of submissions) {
       const row = el('article', null, { class: 'row' });
+      row.dataset.filterState=game.status;
       row.append(statusBadge(game), el('h3', game.title), el('p', `投稿者: ${game.username}`, { class: 'muted' }), tagChips(game.tags));
       if (game.description) row.append(el('p', game.description));
       if (game.credits) row.append(el('h4','素材の権利表記・提供元'),el('p',game.credits,{class:'game-credits'}));
@@ -150,6 +153,7 @@ export async function scopedDashboard(root, tools, admin) {
     if(offset>0)button(pages,'前の100件',async()=>{offset-=100;await load();});
     if(submissions.length===100)button(pages,'次の100件',async()=>{offset+=100;await load();});
     button(pages,'作品一覧を更新',load);
+    tools.collectionTools(sectionGames,{label:'投稿',rows:'.group-games > .row',states:[['pending','審査待ち'],['approved','承認済み'],['rejected','却下'],['uploading','ファイル未保存']]});
   }
   await load();
 }

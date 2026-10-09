@@ -15,4 +15,10 @@
 .portal .admin-reports { grid-column: 1 / -1; }
 
 .report-panel form[hidden] { display: none; }
+.report-panel:not([open]) { padding: 0; border: 0; background: transparent; margin: 16px 0; }
+.report-panel > summary { display: inline-flex; align-items: center; min-height: 32px; padding: 4px 10px; gap: 6px; font-size: .8rem; color: var(--muted); cursor: pointer; border-radius: 8px; }
+.report-panel > summary::before { content: '⚑'; font-size: .9rem; }
+.report-panel > summary:hover, .report-panel > summary:focus-visible { color: var(--text); background: var(--panel-2); outline: 2px solid var(--line); }
+.report-panel button { justify-self: start; font-size: .85rem; padding: 6px 12px; min-height: 36px; }
+@media (max-width: 700px) { .report-panel > summary, .report-panel button { min-height: 44px; } }
 @media (min-width: 901px) { .terms-page .support-toc { max-height: calc(100dvh - 150px); overflow-y: auto; } }

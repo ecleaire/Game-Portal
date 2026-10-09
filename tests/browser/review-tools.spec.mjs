@@ -17,6 +17,11 @@ test('super admin edits a pending submission and safely previews it without expo
  await page.goto('admin/');await page.evaluate(token=>sessionStorage.setItem('game-portal.admin.session.v1',token),admin.token);await page.reload();
  const row=page.locator('#reviews > .row').filter({has:page.getByRole('heading',{name:game.title,exact:true})});
  const privateRow=page.locator('#reviews > .row').filter({has:page.getByRole('heading',{name:draft.title,exact:true})});
+ await expect(page.getByRole('navigation',{name:'管理メニュー',exact:true}).getByRole('link',{name:'グループ',exact:true})).toHaveAttribute('href','#group-management');
+ const search=page.getByRole('searchbox',{name:'投稿を検索',exact:true});await search.fill('missing title');await expect(row).toBeHidden();await search.fill('Review tools');await expect(row).toBeVisible();
+ const filter=page.getByRole('combobox',{name:'投稿の絞り込み',exact:true});await filter.selectOption('rejected');await expect(row).toBeHidden();await filter.selectOption('pending');await expect(row).toBeVisible();await search.fill('');await filter.selectOption('');
+ await page.getByRole('searchbox',{name:'ユーザーを検索',exact:true}).fill('browser_review_author');await expect(page.locator('#users > .row:not([hidden])')).toHaveCount(1);
+ await page.getByRole('searchbox',{name:'ユーザーを検索',exact:true}).fill('');
  await expect(privateRow.getByRole('button',{name:'隔離してプレビュー'})).toHaveCount(0);await expect(privateRow.locator('.admin-game-editor')).toHaveCount(0);
  await row.getByRole('button',{name:'隔離してプレビュー',exact:true}).click();
  const frame=row.locator('iframe');await expect(frame).toHaveAttribute('sandbox','allow-scripts');await expect(page.frameLocator('.review-preview iframe').locator('p')).toHaveText('Review game');

@@ -71,6 +71,12 @@ test('login checkbox records consent, does not expose identities, and admin logi
 });
 test('reports collect only reason and details, identify the game and appear in moderation',async({page,request})=>{
  await page.goto('game.html?id=scratch-demo');await page.locator('[name=terms_accepted]').check();await page.getByRole('button',{name:'同意してゲームをプレイ',exact:true}).click();
+ await expect(page.locator('#gameReport summary')).toHaveCSS('font-size','12.8px');
+ expect((await page.locator('#gameReport summary').boundingBox()).height).toBeLessThanOrEqual(36);
+ await page.locator('#gameReport').screenshot({path:'test-results/compact-report-desktop.png'});
+ await page.setViewportSize({width:390,height:900});await expect(page.locator('#gameReport summary')).toHaveCSS('min-height','44px');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.setViewportSize({width:1440,height:900});
  await page.locator('#gameReport summary').click();await expect(page.locator('#gameReport')).toContainText('対象ゲーム：Scratch Demo');
  await expect(page.locator('#gameReport input')).toHaveCount(0);await expect(page.locator('#gameReport')).toContainText('個人情報は入力しないでください。');
  await page.getByRole('combobox',{name:'報告理由',exact:true}).selectOption('rights');await page.getByLabel('詳細（1000文字以内）',{exact:true}).fill('Browser consent report');

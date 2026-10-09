@@ -23,6 +23,13 @@ test('likes, private lists, ordering, URL sharing and private following work thr
  expect((await api(request,'social.game',{slug:games[0].public_slug})).like_count).toBe(0);
  await page.evaluate(token=>sessionStorage.setItem('game-portal.user.session.v1',token),author.token);
  await page.goto(`account/?game=${games[0].id}`);
+ await page.setViewportSize({width:390,height:900});
+ await expect(page.locator('.editor-save')).toHaveCSS('position','sticky');
+ await expect(page.getByLabel('ゲーム名',{exact:true})).toHaveCSS('font-size','16px');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.getByRole('button',{name:'変更を保存',exact:true}).scrollIntoViewIfNeeded();
+ await page.screenshot({path:'test-results/mobile-edit-save.png',fullPage:false,animations:'disabled'});
+ await page.setViewportSize({width:1440,height:900});
  const credits='音楽: Test Author\nhttps://example.com/music\n<script>not executable</script>';
  await page.getByLabel('素材の権利表記・提供元（任意）',{exact:true}).fill(credits);
  await page.getByRole('checkbox',{name:'ゲーム制作や使用素材にAIを利用している',exact:true}).check();
