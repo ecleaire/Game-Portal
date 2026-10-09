@@ -1,7 +1,8 @@
 import { gameReport } from './reports.js?v=20261009b';
 import { gameSocial } from './game-social.js?v=20261010a';
-import { requireTerms } from './terms.js?v=20261008a';
+import { requireTerms } from './terms.js?v=20261010d';
 import { config } from './config.js';
+import { brand } from './brand.js?v=20261010d';
 import { aiSummary } from './ai-disclosure.js?v=20261010b';
 import { userSessionKey, adminSessionKey } from './navigation.js?v=20261009b';
 import { tagChips } from './tags.js?v=20261004a';
@@ -26,7 +27,7 @@ function showError(message) {
 function showGame(game) {
   document.querySelector('#gameTags')?.remove();
   const tags=tagChips(game.tags,Infinity,'./');tags.id='gameTags';document.getElementById('gameTitle').after(tags);
-  document.title = `${game.title} | GAME PORTAL`;
+  document.title = `${game.title} | ${brand.name}`;
   document.getElementById('gameTitle').textContent = game.title;
   frame.title = `${game.title} のゲーム画面`;
   document.getElementById('gameDescription').textContent = game.description || '';
@@ -59,7 +60,8 @@ async function fetchGame(mode, slug) {
   // so only a missing public listing triggers the authenticated shared-game fallback.
   const archive = publicPost(`${mode}-package`, slug, controller.signal)
     .then(response => response.arrayBuffer())
-    .then(buffer => ({ buffer }), error => ({ error }));
+    .then(buffer => unpackPrivateZip(buffer))
+    .then(files => ({ files }), error => ({ error }));
   try {
     const response = await publicPost(`${mode}-game`, slug, controller.signal);
     const { game } = await response.json();
@@ -98,7 +100,7 @@ async function load() {
       archive = await result.archive;
       if (archive.error) throw archive.error;
     } finally { result.controller.abort(); }
-    const files = await unpackPrivateZip(archive.buffer);
+    const files = archive.files;
     frame.setAttribute('sandbox', 'allow-scripts');
     frame.setAttribute('referrerpolicy', 'no-referrer');
     await mountPrivatePreview(frame, files);

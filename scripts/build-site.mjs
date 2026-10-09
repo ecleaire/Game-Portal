@@ -1,5 +1,7 @@
-import { cp, mkdir, readdir, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
+import { createHash } from 'node:crypto';
+import { brand } from '../assets/brand.js';
 
 // Allowlist the publishable tree. Backend code, tests and env files never enter Pages.
 const root = resolve(import.meta.dirname, '..');
@@ -12,6 +14,20 @@ for (const entry of ['index.html', 'game.html', 'games.json', 'assets', 'games',
     recursive: true,
     filter: source => !/(^|[\\/])\.[^\\/]+/.test(source.slice(root.length)) && !source.endsWith('config.local.js'),
   });
+}
+if (![brand.name,brand.eyebrow].every(value=>typeof value==='string'&&value.trim()&&value.length<=80&&!/[\r\n]/.test(value))) throw new Error('Invalid public brand configuration');
+const escapeHtml = value => value.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
+const renamed=brand.name!=='GAME PORTAL'||brand.eyebrow!=='MY GAME LIBRARY';
+const brandRevision=createHash('sha256').update(JSON.stringify(brand)).digest('hex').slice(0,12);
+const freshBrandAssets=text=>renamed?text.replace(/\?v=([\da-z]+)/g,`?v=$1-${brandRevision}`):text;
+// Brand static pages at build time, including titles, footer and accessibility text.
+// Game exports and internal identifiers are never renamed.
+for (const page of ['index.html','game.html',...['login','account','admin','upload','faq','terms','privacy','library','profile','rights'].map(route=>`${route}/index.html`)]) {
+  const path=join(out,page);const html=await readFile(path,'utf8');
+  await writeFile(path,freshBrandAssets(html.replaceAll('GAME PORTAL',escapeHtml(brand.name)).replaceAll('MY GAME LIBRARY',escapeHtml(brand.eyebrow))));
+}
+if(renamed)for(const name of await readdir(join(out,'assets')))if(name.endsWith('.js')) {
+  const path=join(out,'assets',name);await writeFile(path,freshBrandAssets(await readFile(path,'utf8')));
 }
 const supabaseUrl = process.env.SUPABASE_URL ?? '';
 const anonKey = process.env.SUPABASE_ANON_KEY ?? '';

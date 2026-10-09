@@ -1,7 +1,8 @@
 import { social, currentSession, node, gameLink, errorText } from './library-api.js?v=20261010b';
-import { requireTerms } from './terms.js?v=20261008a';
+import { requireTerms } from './terms.js?v=20261010d';
 import { logoutSessions } from './navigation.js?v=20261009b';
 import { avatarGlyph } from './avatars.js?v=20261010b';
+import { brand } from './brand.js?v=20261010d';
 const root = document.getElementById('profile');
 const message = document.getElementById('message');
 const slug = new URLSearchParams(location.search).get('game');
@@ -19,7 +20,7 @@ async function load() {
       header.append(node('span', avatarGlyph(result.creator.avatar_key), { class:'profile-avatar', 'aria-hidden':'true' }), node('h2', result.creator.name));
       if (result.creator.bio) header.append(node('p',result.creator.bio,{class:'profile-bio'}));
       root.append(header, node('h3', '投稿したゲーム'), node('div', '', { id:'creatorGames', class:'library-list-grid' }));
-      document.title = `${result.creator.name} | GAME PORTAL`;
+      document.title = `${result.creator.name} | ${brand.name}`;
     }
     document.getElementById('profileMore')?.remove();
     const grid = document.getElementById('creatorGames');

@@ -1,4 +1,4 @@
-import { requireTerms } from './terms.js?v=20261008a';
+import { requireTerms } from './terms.js?v=20261010d';
 import { config } from './config.js';
 import { loadTags, tagFilter, tagChips } from './tags.js?v=20261007a';
 import { matchesGameSearch } from './game-search.js?v=20261007b';

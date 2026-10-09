@@ -1,4 +1,5 @@
 import { config } from './config.js';
+import { brand } from './brand.js?v=20261010d';
 export const acceptanceKey = 'game-portal.terms.acceptance.v1';
 export const consentText = '利用規約に同意します。18歳未満の場合は、保護者の同意を得ています。';
 let memoryAcceptance;
@@ -42,7 +43,7 @@ export function requireTerms(container, { buttonText = '同意してゲームを
       try {
         const policy = await currentTerms();
         if (accepted(policy.version)) { box.remove(); resolve(policy); return; }
-        status.textContent = 'GAME PORTALを利用するには利用規約への同意が必要です。';
+        status.textContent = `${brand.name}を利用するには利用規約への同意が必要です。`;
         const form = document.createElement('form'); form.append(consentCheckbox(href));
         const version = document.createElement('p'); version.className = 'muted'; version.textContent = `規約バージョン：${policy.version} ／ 適用日：${policy.effective_at}`;
         const button = document.createElement('button'); button.type = 'submit'; button.textContent = buttonText;

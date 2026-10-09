@@ -348,7 +348,7 @@ test('published ZIP game opens through the isolated public player', async ({ con
 for (const mode of ['public', 'shared']) test(`${mode} game downloads its ZIP before metadata completes`, async ({ context, page }) => {
   const slug = 'd'.repeat(36);
   const archive = await packageWebFiles([
-    new File(['<html><body>Parallel game works</body></html>'], 'index.html'),
+    new File(['<html><body>Parallel game works<!--'+'padding'.repeat(6000)+'--></body></html>'], 'index.html'),
   ]);
   const bytes = Buffer.from(await archive.arrayBuffer());
   await context.route('**/assets/config.js', route => route.fulfill({ contentType: 'text/javascript',
@@ -359,6 +359,7 @@ for (const mode of ['public', 'shared']) test(`${mode} game downloads its ZIP be
     await context.route('**/functions/v1/portal/public-package', route => route.fulfill({ status: 404, json: {} }));
   }
   let releaseMetadata;
+  await context.addInitScript(()=>{const Original=DecompressionStream;window.DecompressionStream=class extends Original{constructor(format){super(format);window.__zipInflations=(window.__zipInflations??0)+1;}};});
   const metadataGate = new Promise(resolve => { releaseMetadata = resolve; });
   let packageRequests = 0;
   await context.route(`**/functions/v1/portal/${mode}-game`, async route => {
@@ -374,6 +375,7 @@ for (const mode of ['public', 'shared']) test(`${mode} game downloads its ZIP be
   try {
     // A serial implementation cannot issue this request while metadata is held.
     await expect.poll(() => packageRequests).toBe(1);
+    await expect.poll(()=>page.evaluate(()=>window.__zipInflations??0)).toBeGreaterThan(0);
     await expect(page.locator('#gameFrame')).not.toHaveAttribute('srcdoc', /Parallel game works/);
   } finally { releaseMetadata(); }
   await expect(page.frameLocator('#gameFrame').locator('body')).toHaveText('Parallel game works');

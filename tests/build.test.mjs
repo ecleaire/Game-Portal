@@ -33,6 +33,18 @@ test('Pages artifact preserves games and excludes backend, local config and secr
     assert.notEqual(build().status, 0, 'stale output must fail closed');
     // This is a newly created, OS temporary fixture owned by this test.
     await rm(join(temp, 'dist'), { recursive: true });
+    await writeFile(join(temp,'assets/brand.js'),`export const brand = ${JSON.stringify({name:'New & <Portal>',eyebrow:'PLAY TOGETHER'})};`);
+    assert.equal(build().status,0);
+    for(const page of ['index.html','game.html','admin/index.html','terms/index.html','profile/index.html']) {
+      const html=await readFile(join(temp,'dist',page),'utf8');
+      assert.ok(html.includes('New &amp; &lt;Portal&gt;'));
+      assert.ok(!html.includes('GAME PORTAL'));
+    }
+    assert.ok((await readFile(join(temp,'dist/index.html'),'utf8')).includes('PLAY TOGETHER'));
+    assert.match(await readFile(join(temp,'dist/index.html'),'utf8'),/app\.js\?v=20261010d-[a-f0-9]{12}/);
+    assert.match(await readFile(join(temp,'dist/assets/terms.js'),'utf8'),/brand\.js\?v=20261010d-[a-f0-9]{12}/);
+    assert.ok((await readFile(join(temp,'dist/assets/navigation.js'),'utf8')).includes('game-portal.user.session.v1'));
+    await rm(join(temp,'dist'),{recursive:true});
     env.SUPABASE_ANON_KEY = `test.${Buffer.from(JSON.stringify({ role: 'service_role' })).toString('base64url')}.test`;
     assert.notEqual(build().status, 0, 'service role key must not publish');
   } finally { await rm(temp, { recursive: true, force: true }); }

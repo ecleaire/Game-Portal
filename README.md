@@ -48,3 +48,4 @@ Godotでは**Web**プリセットから「プロジェクトをエクスポー�
 入力制御・AI利用申告・アイコンの設定と反映手順: [docs/CONTENT_MODERATION.md](docs/CONTENT_MODERATION.md)
 
 作品情報の管理編集と隔離プレビュー: [docs/REVIEW_TOOLS.md](docs/REVIEW_TOOLS.md)。自己紹介の保存・閲覧権限: [docs/CREATOR_PROFILES.md](docs/CREATOR_PROFILES.md)。
+管理・モバイルUIと名称設定: [docs/UI_AND_BRANDING.md](docs/UI_AND_BRANDING.md)
