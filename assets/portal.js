@@ -1,21 +1,23 @@
 import { currentTerms, consentCheckbox, rememberAcceptance } from './terms.js?v=20261010d';
 import { config } from './config.js';
+import { protectEdits, confirmLeaving } from './edit-guard.js?v=20261010f';
+import { releaseHistory } from './release-history.js?v=20261010f';
 import { organizeAdmin, collectionTools } from './admin-workspace.js?v=20261010e';
 import { aiDisclosure, aiSummary } from './ai-disclosure.js?v=20261010b';
 import { avatars, avatarGlyph } from './avatars.js?v=20261010b';
-import { groupFields, groupData, groupManagement, scopedDashboard } from './groups.js?v=20261010e';
+import { groupFields, groupData, groupManagement, scopedDashboard } from './groups.js?v=20261010f';
 import { gameSocial } from './game-social.js?v=20261010a';
 import { loadTags, tagPicker, tagChips, tagCategories } from './tags.js?v=20261004d';
 let availableTags = [];
 let availableGroups = [];
-const groupTools = () => ({ el, section, field, form, button, api, notice, username, password, role, logoutButton, reviewSubmission, downloadSubmission, previewReview, repairPublication, gameTagPicker, tagChips, statusBadge, collectionTools });
+const groupTools = () => ({ el, section, field, form, button, api, notice, username, password, role, logoutButton, reviewSubmission, downloadSubmission, previewReview, repairPublication, gameTagPicker, tagChips, statusBadge, collectionTools, protectEdits });
 const managementGroupField = (game = {}) => field('management_group_id', '管理グループ', 'select', { optional: true, value: game.management_group_id ?? (availableGroups.length === 1 ? availableGroups[0].id : ''), choices: [['','グループを指定しない'], ...availableGroups.map(group => [group.id,group.name])] });
 function gameTagPicker(game = {}) {
   const merged = new Map(availableTags.map(tag => [tag.id, tag]));
   for (const tag of game.tags ?? []) if (!merged.has(tag.id)) merged.set(tag.id, tag);
   return tagPicker([...merged.values()], game.tags ?? []);
 }
-import { checkWebGameZip, unpackPrivateZip, mountPrivatePreview } from './private-preview.js?v=20261010c';
+import { checkWebGameZip, unpackPrivateZip, mountPrivatePreview } from './private-preview.js?v=20261010f';
 import { packageWebFiles } from './zip-upload.js?v=20261003a';
 import { sendUpload, uploadWithRecovery } from './upload-request.js?v=20261004d';
 import { submissionList } from './submission-list.js?v=20261003a';
@@ -245,6 +247,7 @@ function login() {
   }
 }
 async function logout() {
+  if (!confirmLeaving()) return;
   try { await logoutSessions(); }
   finally { clearSession(); syncLoginLink(); login(); notice('ログアウトしました。'); }
 }
@@ -254,7 +257,7 @@ function logoutButton(parent) {
 async function account() {
   availableTags = await loadTags();
   availableGroups = (await api('user.groups')).groups ?? [];
-  const [{ user }, { submissions }] = await Promise.all([api('user.me'), api('user.submissions')]);
+  const [{ user }, { submissions, notifications = [] }] = await Promise.all([api('user.me'), api('user.submissions')]);
   root.replaceChildren();
   const gameId = new URLSearchParams(location.search).get('game');
   if (gameId) {
@@ -275,6 +278,18 @@ async function account() {
   overview.append(details); s.append(overview);
   logoutButton(s);
   s.append(el('a', 'いいね・リスト・フォローを開く →', { href: '../library/', class: 'editor-back' }));
+  const inbox = section('審査結果のお知らせ');
+  const unread = notifications.filter(item => !item.read_at).length;
+  inbox.append(el('p', unread ? `未読 ${unread}件` : '未読のお知らせはありません。', { class: 'muted' }));
+  const notificationList = el('div', null, { class: 'notification-list' }); inbox.append(notificationList);
+  for (const item of notifications) {
+    const row = el('article', null, { class: `row${item.read_at ? '' : ' is-unread'}` });
+    row.append(el('h3', `${item.title} · ${statusLabel(item.status)}`), el('time', new Date(item.created_at).toLocaleString('ja-JP'), { datetime: item.created_at }),
+      el('p', item.reason || (item.status === 'approved' ? '審査を通過しました。公開範囲と公開日時に従って公開されます。' : '作品の設定をご確認ください。')),
+      el('a', '作品を確認する →', { href: `./?game=${encodeURIComponent(item.game_id)}` }));
+    if (!item.read_at) button(row, '既読にする', async () => { await api('user.submissions', { read_notification_id: item.id }); await account(); });
+    notificationList.append(row);
+  }
   if (availableGroups.length) { const memberships = section('所属グループ'); for (const group of availableGroups) memberships.append(el('span', group.name, {class:'visibility-badge'})); memberships.append(el('p','所属の変更は管理者が行います。',{class:'muted'})); }
   const gamesSection = section('投稿したゲーム', root, 'account-games');
   const gameActions = el('div', null, { class: 'actions' });
@@ -286,6 +301,32 @@ async function account() {
   const shared=await api('user.shared.games');
   if(!shared.games?.length)sharedSection.append(el('p','共有されたゲームはありません。',{class:'muted'}));
   for(const game of shared.games ?? []){const card=el('article',null,{class:'row'});card.append(el('h3',game.title),tagChips(game.tags,3),el('a','プレイする →',{href:`../game.html?slug=${encodeURIComponent(game.public_slug)}`}));sharedSection.append(card);}
+  if (availableGroups.length) {
+    const catalog = section('グループ内の作品');
+    const select = el('select', null, { 'aria-label': '作品を見るグループ' });
+    for (const group of availableGroups) select.append(el('option', group.name, { value: group.id }));
+    const search = el('input', null, { type: 'search', placeholder: '作品名で検索', 'aria-label': 'グループ作品を検索' });
+    const description = el('p', '', { class: 'muted' });
+    const list = el('div', null, { class: 'group-catalog' }); catalog.append(select, description, search, list);
+    let games = [], generation = 0;
+    const render = () => {
+      const filtered = games.filter(game => game.title.toLocaleLowerCase().includes(search.value.trim().toLocaleLowerCase()));
+      list.replaceChildren();
+      if (!filtered.length) list.append(el('p', '表示できる作品はありません。', { class: 'muted' }));
+      for (const game of filtered) {
+        const card = el('article', null, { class: 'row' });
+        card.append(el('h3', game.title), tagChips(game.tags, 3), el('p', game.description || '', { class: 'muted' }),
+          el('a', '作品を開く →', { href: `../game.html?slug=${encodeURIComponent(game.public_slug)}` })); list.append(card);
+      }
+    };
+    const refresh = async () => {
+      const current = ++generation; games = []; list.textContent = '作品を読み込んでいます…';
+      description.textContent = availableGroups.find(group => group.id === select.value)?.description || '';
+      try { const result = await api('user.shared.games', { group_id: select.value }); if (current !== generation) return; games = result.games ?? []; render(); }
+      catch { if (current === generation) list.textContent = '作品を取得できませんでした。グループを選び直して再試行してください。'; }
+    };
+    select.addEventListener('change', refresh); search.addEventListener('input', render); await refresh();
+  }
   const profile = section('プロフィール');
   profile.append(el('p','自己紹介は、あなたの作品を閲覧できる人に作者プロフィールで表示されます。URLは記入できません。',{class:'muted'}));
   profile.append(el('p', '表示名やユーザー名には、本名・メールアドレス・電話番号など個人を特定できる情報を入力しないでください。', { class: 'muted' }));
@@ -384,6 +425,7 @@ function submissionEditor(game) {
   if (game.status === 'approved' && game.visibility !== 'draft' && game.published_at && !game.is_published)
     details.append(el('p', `公開予定: ${new Date(game.published_at).toLocaleString('ja-JP')}`, { class: 'muted' }));
   hero.append(art, details); editor.append(hero);
+  editor.append(releaseHistory(game.releases));
   const quick = el('div', null, { class: 'editor-actions' });
   if(game.visibility==='shared')quick.append(el('a','共有するゲームページ ↗',{href:`../game.html?slug=${encodeURIComponent(game.public_slug)}`,class:'editor-back'}));
   if (game.is_published) quick.append(el('a', '公開ページを開く・共有する ↗', { href: `../game.html?slug=${encodeURIComponent(game.public_slug)}`, class: 'editor-back' }));
@@ -402,6 +444,7 @@ function submissionEditor(game) {
       field('version', 'バージョン', 'text', { value: game.version, maxlength: '80' }),
       field('controls', '操作説明（任意）', 'textarea', { value: game.controls, maxlength: '2000', rows: '3', optional: true }),
       field('credits', '素材の権利表記・提供元（任意）', 'textarea', { value: game.credits, maxlength:'8000', rows:'5', optional:true, placeholder:'素材名 / 作者・提供元 / URL / ライセンス・必要な権利表記など' }),
+      field('release_notes', 'このバージョンの更新内容（任意）', 'textarea', { value: game.release_notes ?? '', maxlength:'2000', rows:'3', optional:true }),
       field('visibility', '公開範囲', 'select', { value: game.visibility, choices: availableVisibility() }),
       managementGroupField(game),
       shareField(game.shared_user_ids),
@@ -453,9 +496,9 @@ function submissionEditor(game) {
       preview.replaceChildren(el('img', null, { src: previewUrl, alt: '新しいサムネイルのプレビュー', class: 'thumbnail-preview' }));
     });
     label.append(input); thumbnail.append(label);
-    const basics = section('基本情報', saveForm); basics.append(...labels.slice(0, 6), picker.element);
+    const basics = section('基本情報', saveForm); basics.append(...labels.slice(0, 7), picker.element);
     ai = aiDisclosure(saveForm, game); basics.append(ai.element);
-    const visibility = section('公開設定', saveForm); visibility.append(...labels.slice(6));
+    const visibility = section('公開設定', saveForm); visibility.append(...labels.slice(7));
     const help = el('p', '', { class: 'muted' }); visibility.append(help); visibilityGuidance(saveForm, help);
     visibility.append(groupFields({ el, form: saveForm, groups: availableGroups, game }));
     const files = section(game.status === 'uploading' ? 'ゲームファイルを再送' : 'ゲームファイルを変更', saveForm);
@@ -466,6 +509,7 @@ function submissionEditor(game) {
     const footer = el('div', null, { class: 'editor-save' });
     footer.append(submit, el('p', '', { class: 'message upload-status', role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' }));
     saveForm.append(footer);
+    protectEdits(saveForm);
   } else {
     const basics = section('基本情報', grid);
     basics.append(el('p', game.description || '説明はありません。', { class: 'muted' }));
@@ -837,6 +881,7 @@ async function upload() {
     field('version', 'バージョン', 'text', { value: '1.0.0', maxlength: '80' }),
     field('controls', '操作説明（任意）', 'text', { maxlength: '2000', optional: true }),
     field('credits', '素材の権利表記・提供元（任意）', 'textarea', { maxlength:'8000', rows:'5', optional:true, placeholder:'素材名 / 作者・提供元 / URL / ライセンス・必要な権利表記など' }),
+    field('release_notes', 'このバージョンの更新内容（任意）', 'textarea', { maxlength:'2000', rows:'3', optional:true }),
     field('visibility', '公開範囲', 'select', { value: 'draft', choices: availableVisibility() }),
     managementGroupField(),
     shareField(),
@@ -895,6 +940,7 @@ async function upload() {
   const saveBar=el('div',null,{class:'editor-save'});
   saveBar.append(submissionForm.querySelector('button[type=submit]'),submissionForm.querySelector('.upload-status'));
   submissionForm.append(saveBar);
+  protectEdits(submissionForm);
   const { submissions } = await api('user.submissions');
   const history = section('投稿履歴');
   submissionList(history, submissions, { userId: user.id, statusLabel, visibilityLabel,
@@ -925,6 +971,7 @@ function adminSubmissionEditor(parent,game) {
     field('version','バージョン','text',{value:game.version,maxlength:'80'}),
     field('controls','操作説明（任意）','textarea',{value:game.controls,optional:true,maxlength:'2000',rows:'3'}),
     field('credits','素材の権利表記・提供元（任意）','textarea',{value:game.credits,optional:true,maxlength:'8000',rows:'4'}),
+    field('release_notes','このバージョンの更新内容（任意）','textarea',{value:game.release_notes ?? '',optional:true,maxlength:'2000',rows:'3'}),
     field('visibility','公開範囲','select',{value:game.visibility,choices:[['draft','下書き（本人のみ）'],['group','グループ内で共有'],['shared','指定ユーザーに共有'],['unlisted','限定公開'],['public','公開']]}),
     shareField(game.shared_user_ids),
     field('published_at','公開日時（空欄で即時公開）','datetime-local',{optional:true,value:game.published_at?localDateTime(game.published_at):''}),
@@ -937,6 +984,7 @@ function adminSubmissionEditor(parent,game) {
   const help=el('p','',{class:'muted'});editForm.elements.visibility.closest('label').append(help);visibilityGuidance(editForm,help);
   editForm.elements.visibility.closest('label').after(groupFields({el,form:editForm,groups:availableGroups,game}));
   editForm.querySelector('button[type=submit]').before(ai.element,picker.element,el('p','下書きの内容は審査・編集できません。管理グループは変更されません。',{class:'muted'}),el('p','',{class:'message upload-status',role:'status','aria-live':'polite'}));
+  protectEdits(editForm);
 }
 async function repairPublication(submissionId) {
   const response = await fetch(`${config.supabaseUrl.replace(/\/$/, '')}/functions/v1/portal/publish-package`, {

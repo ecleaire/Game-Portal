@@ -69,7 +69,7 @@ async function inflate(raw, expected) {
   return result;
 }
 
-export async function unpackPrivateZip(buffer) {
+export async function unpackPrivateZip(buffer, onProgress = () => {}) {
   const data = new Uint8Array(buffer);
   if (data.length > MAX_ZIP || data.length < 22) throw new Error('invalid_preview');
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
@@ -104,12 +104,14 @@ export async function unpackPrivateZip(buffer) {
   if (!layout) throw new Error('invalid_preview');
   // Validate the entire directory and size budget before starting any work.
   // Bound concurrent inflation so large exports do not open hundreds of streams.
-  const contents = new Array(entries.length); let cursor = 0;
+  const contents = new Array(entries.length); let cursor = 0, completed = 0;
+  onProgress(0,entries.length);
   await Promise.all(Array.from({ length: Math.min(4, entries.length) }, async () => {
     while (cursor < entries.length) {
       const index = cursor++, entry = entries[index];
       const raw = data.subarray(entry.start, entry.start + entry.packed);
       contents[index] = entry.method === 0 ? raw : await inflate(raw, entry.size);
+      onProgress(++completed,entries.length);
     }
   }));
   const normalized = new Map(entries.map((entry, index) => [entry.name.slice(layout.root.length), contents[index]]));

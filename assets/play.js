@@ -3,10 +3,12 @@ import { gameSocial } from './game-social.js?v=20261010a';
 import { requireTerms } from './terms.js?v=20261010d';
 import { config } from './config.js';
 import { brand } from './brand.js?v=20261010d';
+import { releaseHistory } from './release-history.js?v=20261010f';
+import { downloadArchive } from './game-download.js?v=20261010f';
 import { aiSummary } from './ai-disclosure.js?v=20261010b';
 import { userSessionKey, adminSessionKey } from './navigation.js?v=20261009b';
 import { tagChips } from './tags.js?v=20261004a';
-import { unpackPrivateZip, mountPrivatePreview } from './private-preview.js?v=20261007d';
+import { unpackPrivateZip, mountPrivatePreview } from './private-preview.js?v=20261010f';
 
 const params = new URLSearchParams(location.search);
 const frame = document.getElementById('gameFrame');
@@ -17,7 +19,16 @@ const reloadButton = document.getElementById('reloadButton');
 const fullscreenButton = document.getElementById('fullscreenButton');
 const shareButton = document.getElementById('shareButton');
 let loadingGame = false;
+let progressTimer, startedAt = 0, progressText = '', lastPaint = 0;
+function paintProgress() {
+  loading.textContent = `${progressText} · ${Math.floor((Date.now() - startedAt) / 1000)}秒`;
+}
+function progress(text, force = true) {
+  progressText = text;
+  if (force || Date.now() - lastPaint > 200) { paintProgress(); lastPaint = Date.now(); }
+}
 function showError(message) {
+  clearInterval(progressTimer);
   loading.textContent = message; loading.hidden = false; loading.classList.add('is-error');
   frame.style.visibility = 'hidden'; shell.setAttribute('aria-busy', 'false');
   status.textContent = '読込に失敗'; reloadButton.disabled = false; loadingGame = false;
@@ -25,6 +36,9 @@ function showError(message) {
     document.getElementById('gameTitle').textContent = 'ゲームを開けませんでした';
 }
 function showGame(game) {
+  document.querySelector('#releaseHistory')?.remove();
+  const history = releaseHistory(game.releases); history.id = 'releaseHistory';
+  document.querySelector('.game-meta').append(history);
   document.querySelector('#gameTags')?.remove();
   const tags=tagChips(game.tags,Infinity,'./');tags.id='gameTags';document.getElementById('gameTitle').after(tags);
   document.title = `${game.title} | ${brand.name}`;
@@ -59,8 +73,16 @@ async function fetchGame(mode, slug) {
   // Observe early transfer failures immediately, but keep metadata errors authoritative
   // so only a missing public listing triggers the authenticated shared-game fallback.
   const archive = publicPost(`${mode}-package`, slug, controller.signal)
-    .then(response => response.arrayBuffer())
-    .then(buffer => unpackPrivateZip(buffer))
+    .then(response => downloadArchive(response, (received,total) => {
+      if (controller.signal.aborted) return;
+      const size = `${(received / 1048576).toFixed(1)} MB`;
+      progress(total ? `ゲームファイルを読み込み中 ${Math.min(100,Math.floor(received / total * 100))}%（${size}）`
+        : `ゲームファイルを読み込み中 ${size}`, false);
+    }))
+    .then(buffer => unpackPrivateZip(buffer, (done,total) => {
+      if (!controller.signal.aborted) progress(`ゲームファイルを展開中 ${done} / ${total}`, false);
+    }))
+    .then(files => { if (!controller.signal.aborted) progress('ゲーム画面を準備中'); return files; })
     .then(files => ({ files }), error => ({ error }));
   try {
     const response = await publicPost(`${mode}-game`, slug, controller.signal);
@@ -73,6 +95,7 @@ async function fetchGame(mode, slug) {
   }
 }
 function gameReady() {
+    clearInterval(progressTimer);
     loading.hidden = true; frame.style.visibility = 'visible'; shell.setAttribute('aria-busy', 'false');
     status.textContent = 'ゲームを表示しました'; reloadButton.disabled = false; fullscreenButton.disabled = false; loadingGame = false;
 }
@@ -83,6 +106,9 @@ function setFrame(attribute, source) {
 async function load() {
   if (loadingGame) return;
   loadingGame = true; reloadButton.disabled = true; fullscreenButton.disabled = true;
+  startedAt = Date.now(); progressText = 'ゲーム情報とファイルを取得中';
+  clearInterval(progressTimer); progressTimer = setInterval(paintProgress,1000);
+  loading.setAttribute('aria-live','off');
   loading.textContent = 'ゲームを読み込んでいます…'; loading.hidden = false; loading.classList.remove('is-error');
   frame.style.visibility = 'hidden'; status.textContent = '読込中'; shell.setAttribute('aria-busy', 'true');
   const slug = params.get('slug');
@@ -103,6 +129,7 @@ async function load() {
     const files = archive.files;
     frame.setAttribute('sandbox', 'allow-scripts');
     frame.setAttribute('referrerpolicy', 'no-referrer');
+    progress('ゲーム画面を起動中');
     await mountPrivatePreview(frame, files);
     gameReady();
   } else {

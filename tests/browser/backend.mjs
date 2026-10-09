@@ -13,6 +13,7 @@ for (const name of (await readdir(dir)).sort()) await db.exec(await readFile(new
 await db.query('select public.portal_bootstrap($1,$2)', ['browser_owner', 'browser-test-admin-only']);
 // Independent fixture identity keeps review tests inside the real login limit.
 await db.query("insert into portal_private.admin_users(username,password_hash,role) values($1,portal_private.password_hash($2),'super_admin')", ['browser_review_owner','browser-review-admin-only']);
+await db.query("insert into portal_private.admin_users(username,password_hash,role) values($1,portal_private.password_hash($2),'super_admin')", ['browser_release_owner','browser-release-admin-only']);
 const imageObjects = new Map();
 const driveObjects = new Map();
 const handler = createHandler({
@@ -20,6 +21,7 @@ const handler = createHandler({
   pepper: 'browser-test-only-pepper-not-for-production', allowedOrigins: 'http://127.0.0.1:4173',
   googleDriveOAuthJson: JSON.stringify({client_id:'test-only',client_secret:'test-only',refresh_token:'test-only'}),
   googlePendingFolderId: 'test-pending',
+  googleApprovedFolderId: 'test-approved', googleRejectedFolderId: 'test-rejected',
   fetcher: async (_url, options) => {
     if (_url === 'https://oauth2.googleapis.com/token') return Response.json({access_token:'test-only',expires_in:3600});
     if (_url.startsWith('https://www.googleapis.com/upload/drive/')) {

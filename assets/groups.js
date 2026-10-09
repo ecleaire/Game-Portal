@@ -18,7 +18,10 @@ export function groupFields({ el, form, groups, game = {} }) {
   return area;
 }
 export function groupData(form) {
-  return { group_ids: [...form.querySelectorAll('.group-audience input:checked:not(:disabled)')].map(input => input.value) };
+  // run() disables every control during saving. The selected audience must not
+  // disappear just because those checked inputs are temporarily locked.
+  return { group_ids: form.elements.visibility.value === 'group'
+    ? [...form.querySelectorAll('.group-audience input:checked')].map(input => input.value) : [] };
 }
 
 export async function groupManagement(parent, tools, admin) {
@@ -144,10 +147,12 @@ export async function scopedDashboard(root, tools, admin) {
         const editForm=form(edit,[field('title','ゲーム名','text',{value:game.title,maxlength:'120'}),field('engine','エンジン','select',{value:game.engine,choices:[['godot','Godot'],['scratch','Scratch / TurboWarp'],['other','その他']]}),
           field('description','説明','textarea',{value:game.description,optional:true,maxlength:'4000'}),field('version','バージョン','text',{value:game.version,maxlength:'80'}),field('controls','操作説明','textarea',{value:game.controls,optional:true,maxlength:'2000'}),
           field('credits','素材の権利表記・提供元（任意）','textarea',{value:game.credits,optional:true,maxlength:'8000',rows:'5'}),
+          field('release_notes','このバージョンの更新内容（任意）','textarea',{value:game.release_notes ?? '',optional:true,maxlength:'2000',rows:'3'}),
           field('visibility','公開範囲','select',{value:game.visibility==='group'?'group':'draft',choices:[['group','グループ内で共有'],['draft','下書きに戻す（本人だけ）']]}),field('published_at','公開日時（空欄で即時）','datetime-local',{optional:true,value:game.published_at?new Date(new Date(game.published_at)-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16):''})],
           '作品の変更を保存',async data=>{Object.assign(data,ai.values());data.group_ids=game.visibility==='group'?game.group_ids:[game.management_group_id];data.tag_ids=picker.values();data.published_at=data.published_at?new Date(data.published_at).toISOString():'';await api('admin.submission.save',{...data,submission_id:game.id});await load();notice('作品の変更を保存しました。');});
         const ai=aiDisclosure(editForm,game);
         editForm.querySelector('button[type=submit]').before(picker.element,ai.element);
+        tools.protectEdits(editForm);
       }
       list.append(row);
     }
