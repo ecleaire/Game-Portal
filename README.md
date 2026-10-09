@@ -23,6 +23,7 @@ https://ecleaire.github.io/Game-Portal/
 - [Supabase・初期管理者・ローカル開発・公開手順](docs/SETUP.md)
 - [認証/セッション設計とセキュリティ上の制約](docs/SECURITY.md)
 - [API仕様](docs/API.md)
+- [審査通知・グループ作品一覧・編集保護・更新履歴・読み込み表示](docs/REVIEW_AND_RELEASES.md)
 - [ゲームタグの設定・管理・検索・権限制御](docs/TAGS.md)
 - [グループ共有・担当管理権限・プレイ専用アカウント](docs/GROUPS.md)
 - [いいね・個人リスト・URL共有・非公開フォロー](docs/LIBRARY.md)
