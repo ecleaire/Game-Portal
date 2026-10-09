@@ -1,7 +1,7 @@
 import { currentTerms, consentCheckbox, rememberAcceptance } from './terms.js?v=20261008a';
 import { config } from './config.js';
-import { groupFields, groupData, groupManagement, scopedDashboard } from './groups.js?v=20261009a';
-import { gameSocial } from './game-social.js?v=20261009c';
+import { groupFields, groupData, groupManagement, scopedDashboard } from './groups.js?v=20261010a';
+import { gameSocial } from './game-social.js?v=20261010a';
 import { loadTags, tagPicker, tagChips, tagCategories } from './tags.js?v=20261004d';
 let availableTags = [];
 let availableGroups = [];
@@ -374,6 +374,7 @@ function submissionEditor(game) {
       field('description', '説明（任意）', 'textarea', { value: game.description, maxlength: '4000', rows: '5', optional: true }),
       field('version', 'バージョン', 'text', { value: game.version, maxlength: '80' }),
       field('controls', '操作説明（任意）', 'textarea', { value: game.controls, maxlength: '2000', rows: '3', optional: true }),
+      field('credits', '素材の権利表記・提供元（任意）', 'textarea', { value: game.credits, maxlength:'8000', rows:'5', optional:true, placeholder:'素材名 / 作者・提供元 / URL / ライセンス・必要な権利表記など' }),
       field('visibility', '公開範囲', 'select', { value: game.visibility, choices: availableVisibility() }),
       managementGroupField(game),
       shareField(game.shared_user_ids),
@@ -424,8 +425,8 @@ function submissionEditor(game) {
       preview.replaceChildren(el('img', null, { src: previewUrl, alt: '新しいサムネイルのプレビュー', class: 'thumbnail-preview' }));
     });
     label.append(input); thumbnail.append(label);
-    const basics = section('基本情報', saveForm); basics.append(...labels.slice(0, 5), picker.element);
-    const visibility = section('公開設定', saveForm); visibility.append(...labels.slice(5));
+    const basics = section('基本情報', saveForm); basics.append(...labels.slice(0, 6), picker.element);
+    const visibility = section('公開設定', saveForm); visibility.append(...labels.slice(6));
     const help = el('p', '', { class: 'muted' }); visibility.append(help); visibilityGuidance(saveForm, help);
     visibility.append(groupFields({ el, form: saveForm, groups: availableGroups, game }));
     const files = section(game.status === 'uploading' ? 'ゲームファイルを再送' : 'ゲームファイルを変更', saveForm);
@@ -585,6 +586,7 @@ async function dashboard() {
     if (game.is_published) row.append(el('a', '公開ページ', { href: `../game.html?slug=${encodeURIComponent(game.public_slug)}` }));
     if (game.status === 'uploading') row.append(el('p', 'ZIP未保管。投稿者がWeb書き出しZIPを再送するまで審査・公開できません。', { class: 'muted' }));
     if (game.description) row.append(el('p', game.description, { class: 'muted' }));
+    if (game.credits) row.append(el('h4','素材の権利表記・提供元'),el('p',game.credits,{class:'game-credits'}));
     if (game.review_reason) row.append(el('p', `審査メモ: ${game.review_reason}`, { class: 'muted' }));
     if (game.status === 'approved' && !game.package_ready) button(row, '配信用ファイルを準備', () => repairPublication(game.id));
     if (game.visibility!=='draft'&&['pending', 'approved', 'rejected'].includes(game.status)) button(row, 'ZIPを安全にダウンロード', () => downloadSubmission(game.id));
@@ -793,6 +795,7 @@ async function upload() {
     field('description', '説明（任意）', 'text', { maxlength: '4000', optional: true }),
     field('version', 'バージョン', 'text', { value: '1.0.0', maxlength: '80' }),
     field('controls', '操作説明（任意）', 'text', { maxlength: '2000', optional: true }),
+    field('credits', '素材の権利表記・提供元（任意）', 'textarea', { maxlength:'8000', rows:'5', optional:true, placeholder:'素材名 / 作者・提供元 / URL / ライセンス・必要な権利表記など' }),
     field('visibility', '公開範囲', 'select', { value: 'draft', choices: availableVisibility() }),
     managementGroupField(),
     shareField(),

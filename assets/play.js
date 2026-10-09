@@ -1,5 +1,5 @@
 import { gameReport } from './reports.js?v=20261009b';
-import { gameSocial } from './game-social.js?v=20261009c';
+import { gameSocial } from './game-social.js?v=20261010a';
 import { requireTerms } from './terms.js?v=20261008a';
 import { config } from './config.js';
 import { userSessionKey, adminSessionKey } from './navigation.js?v=20261009b';
@@ -30,6 +30,8 @@ function showGame(game) {
   frame.title = `${game.title} のゲーム画面`;
   document.getElementById('gameDescription').textContent = game.description || '';
   document.getElementById('descriptionCard').hidden = !game.description;
+  document.getElementById('gameCredits').textContent = game.credits || '';
+  document.getElementById('creditsCard').hidden = !game.credits;
   document.getElementById('engineLabel').textContent = game.engine || '';
   document.getElementById('engineLabel').hidden = !game.engine;
   document.getElementById('controlsText').textContent = game.controls || 'ゲーム内の案内をご確認ください。';

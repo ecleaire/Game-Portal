@@ -20,7 +20,8 @@ export function gameSocial(slug, before, root = './') {
     const like = node('button', `${state.liked ? '♥' : '♡'} いいね ${state.like_count}`, { type: 'button', 'aria-pressed': String(state.liked) });
     actions.append(like);
     if (!currentSession()) {
-      like.disabled = true; actions.append(node('a', 'ログインして保存・フォロー', { href: `${root}login/` })); return;
+      like.onclick = () => { status.replaceChildren(node('span', 'いいねするにはログインしてください。 '), node('a', 'ログインする →', { href: `${root}login/` })); };
+      actions.append(node('a', 'ログインして保存・フォロー', { href: `${root}login/` })); return;
     }
     like.onclick = () => guarded(like, async () => { state = await social('social.like', { slug, liked: String(!state.liked) }); render(); });
     const save = node('button', '＋ リストに保存', { type: 'button' });
