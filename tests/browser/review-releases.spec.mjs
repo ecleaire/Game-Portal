@@ -39,6 +39,9 @@ test('review inbox, member catalog, edit protection, release history and downloa
  // A successful save must not produce a spurious leave confirmation.
  let dialogs=0;const count=()=>dialogs++;page.on('dialog',count);
  await page.getByRole('link',{name:'← 投稿一覧に戻る'}).click();await expect(page.getByRole('heading',{name:'アカウント',exact:true})).toBeVisible();page.off('dialog',count);expect(dialogs).toBe(0);
+ await page.goto(`account/?game=${game.id}`);await page.getByLabel('ゲーム名',{exact:true}).fill('Unsaved title');
+ page.once('dialog',dialog=>{expect(dialog.type()).toBe('confirm');dialog.accept();});
+ await page.getByRole('link',{name:'← 投稿一覧に戻る'}).click();await expect(page.getByRole('heading',{name:'アカウント',exact:true})).toBeVisible();
  let releaseDownload;
  const gate=new Promise(resolve=>{releaseDownload=resolve;});
  await page.route('**/portal/shared-package',async route=>{await gate;await route.continue();});
