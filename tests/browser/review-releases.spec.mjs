@@ -11,6 +11,7 @@ test('review inbox, member catalog, edit protection, release history and downloa
  const admin=await api(request,'admin.login',{username:'browser_release_owner',password:'browser-release-admin-only'});
  await api(request,'admin.create',{username:'browser_release_author',password:'browser-release-user-only',role:'uploader'},admin.token);
  const author=await api(request,'user.login',{username:'browser_release_author',password:'browser-release-user-only',terms_accepted:true,terms_version:'2026-10-08'});
+ await api(request,'user.profile',{display_name:'W'.repeat(40),avatar_key:'gamepad'},author.token);
  const group=(await api(request,'admin.group.create',{name:'Release community',description:'Shared works'},admin.token)).group;
  await api(request,'admin.group.member',{group_id:group.id,user_id:author.user.id,operation:'add'},admin.token);
  const {submission:game}=await api(request,'user.submission.create',{title:'Release stages game',engine:'other',version:'1',visibility:'group',management_group_id:group.id,group_ids:[group.id],release_notes:'Initial release',rights_confirmed:'yes',terms_version:'2026-10-08'},author.token);
