@@ -1,3 +1,4 @@
+import { projectFixture } from './project-fixture.mjs';
 import { test, expect } from '@playwright/test';
 import { packageWebFiles } from '../../assets/zip-upload.js';
 import { writeFile } from 'node:fs/promises';
@@ -497,6 +498,7 @@ for (const retry of [false, true]) test(`HTML ${retry ? 'resend' : 'upload'} rec
     saved = true;
     await route.fulfill({ status: 503, headers, json: { error: 'unavailable' } });
   });
+  await context.route('**/functions/v1/portal/project-upload', route => route.fulfill({headers,json:{submission:{...submission,project_file:{name:'source.zip',size:100,revision:'test'}}}}));
   await page.goto(retry ? 'account/?game=upload-result' : 'upload/');
   if (!retry) {
     await page.getByLabel('ゲーム名', { exact: true }).fill(submission.title);
@@ -504,6 +506,7 @@ for (const retry of [false, true]) test(`HTML ${retry ? 'resend' : 'upload'} rec
   }
   const fileInput = page.getByLabel(retry ? 'ゲームファイルを再選択' : 'ゲームファイルを選択');
   expect(await fileInput.getAttribute('accept')).toBeNull();
+  if (!retry) await page.getByLabel('プロジェクトファイルを選択',{exact:true}).setInputFiles(await projectFixture());
   await fileInput.setInputFiles({ name: 'my-game.html', mimeType: 'text/html', buffer: Buffer.from('<!doctype html><html><body>Game</body></html>') });
   const submitText = retry ? '変更を保存' : 'ゲームを投稿';
   if (!retry) await page.locator('[name=rights_confirmed]').check();
@@ -735,6 +738,7 @@ test('owners can add and replace a submitted thumbnail without changing the game
  await expect(user.locator('#message')).toHaveText('変更を保存しました。');await expect.poll(()=>user.locator('.game-edit-form img').evaluate(img=>img.naturalWidth)).toBeGreaterThan(0);await expect(user.getByRole('button',{name:'変更を保存',exact:true})).toBeVisible();
  await user.getByLabel('変更するサムネイル',{exact:true}).setInputFiles({name:'second.png',mimeType:'image/png',buffer:image});await user.getByRole('button',{name:'変更を保存',exact:true}).click();
  await expect(user.locator('#message')).toHaveText('変更を保存しました。');await expect(user.getByRole('heading',{name:'Thumbnail edited',exact:true})).toBeVisible();
+ await user.getByLabel('プロジェクトファイルを選択',{exact:true}).setInputFiles(await projectFixture());
  await user.getByRole('combobox',{name:'公開範囲',exact:true}).selectOption('unlisted');await user.getByLabel('ゲームファイルを再選択',{exact:true}).setInputFiles({name:'first.html',mimeType:'text/html',buffer:Buffer.from('<!doctype html><html><body>first</body></html>')});
  await user.getByRole('button',{name:'変更を保存',exact:true}).click();await expect(user.locator('#message')).toContainText('ゲームファイルも保存しました');
  await user.getByLabel('ゲームファイルを再選択',{exact:true}).setInputFiles({name:'new.html',mimeType:'text/html',buffer:Buffer.from('<!doctype html><html><body>updated</body></html>')});
@@ -761,6 +765,7 @@ test('account sharing, administrator management and permanent deletion work thro
  const author=await context.newPage();await author.goto('./');await author.evaluate(token=>{sessionStorage.removeItem('game-portal.admin.session.v1');sessionStorage.setItem('game-portal.user.session.v1',token);},accounts.author.token);await author.goto('upload/');
  await author.getByLabel('ゲーム名',{exact:true}).fill('Shared browser game');await author.getByRole('combobox',{name:'エンジン',exact:true}).selectOption('other');
  await author.getByRole('combobox',{name:'公開範囲',exact:true}).selectOption('shared');await author.getByLabel('共有相手のアカウントID（改行またはカンマ区切り・最大50人）',{exact:true}).fill(accounts.friendId);
+ await author.getByLabel('プロジェクトファイルを選択',{exact:true}).setInputFiles(await projectFixture());
  await author.getByLabel('ゲームファイルを選択',{exact:true}).setInputFiles({name:'shared.html',mimeType:'text/html',buffer:Buffer.from('<!doctype html><html><body>Shared browser play</body></html>')});
  await author.locator('[name=rights_confirmed]').check();await author.getByRole('button',{name:'ゲームを投稿',exact:true}).click();await expect(author.getByRole('heading',{name:'投稿が完了しました',exact:true})).toBeVisible();
  await author.getByRole('link',{name:'投稿したゲームを管理・プレイ →',exact:true}).click();await expect(author.getByRole('combobox',{name:'公開範囲',exact:true})).toHaveValue('shared');

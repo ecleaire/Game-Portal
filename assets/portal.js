@@ -2,15 +2,16 @@ import { currentTerms, consentCheckbox, rememberAcceptance } from './terms.js?v=
 import { config } from './config.js';
 import { protectEdits, confirmLeaving } from './edit-guard.js?v=20261010f';
 import { releaseHistory } from './release-history.js?v=20261010f';
+import { checkProjectFile } from './project-files.js?v=20261014a';
 import { organizeAdmin, collectionTools } from './admin-workspace.js?v=20261010e';
 import { aiDisclosure, aiSummary } from './ai-disclosure.js?v=20261010b';
 import { avatars, avatarGlyph } from './avatars.js?v=20261010b';
-import { groupFields, groupData, groupManagement, scopedDashboard } from './groups.js?v=20261010f';
+import { groupFields, groupData, groupManagement, scopedDashboard } from './groups.js?v=20261014a';
 import { gameSocial } from './game-social.js?v=20261010a';
 import { loadTags, tagPicker, tagChips, tagCategories } from './tags.js?v=20261004d';
 let availableTags = [];
 let availableGroups = [];
-const groupTools = () => ({ el, section, field, form, button, api, notice, username, password, role, logoutButton, reviewSubmission, downloadSubmission, previewReview, repairPublication, gameTagPicker, tagChips, statusBadge, collectionTools, protectEdits });
+const groupTools = () => ({ el, section, field, form, button, api, notice, username, password, role, logoutButton, reviewSubmission, downloadSubmission, previewReview, repairPublication, gameTagPicker, tagChips, statusBadge, collectionTools, protectEdits, projectSummary });
 const managementGroupField = (game = {}) => field('management_group_id', '管理グループ', 'select', { optional: true, value: game.management_group_id ?? (availableGroups.length === 1 ? availableGroups[0].id : ''), choices: [['','グループを指定しない'], ...availableGroups.map(group => [group.id,group.name])] });
 function gameTagPicker(game = {}) {
   const merged = new Map(availableTags.map(tag => [tag.id, tag]));
@@ -77,6 +78,8 @@ const errors = {
   drive_reconnect_required: 'Google Driveの所有者認証が失効しています。管理者が認証をやり直してください。',
   invalid_preview: 'ZIP内のHTMLまたはゲームファイルを確認してください。',
   invalid_upload: 'ZIP形式・ファイル構成またはサイズを確認してください（最大50MB）。',
+  project_required: 'プロジェクトファイルを提出してください。Godotは制作フォルダーのZIP、Scratchは.sb3を選択してください。',
+  invalid_project: 'プロジェクトファイルは50MB以下のZIPまたは.sb3を選んでください。GodotのZIPにはproject.godot、Scratchにはproject.jsonまたは.sb3が必要です。',
   web_export_required: 'ブラウザーで遊べるHTMLが見つかりません。Godotの「Web」書き出しで生成したHTML・.js・.wasm・.pckをまとめてください。「PCK/ZIP」書き出しだけではプレイできません。',
   invalid_thumbnail: 'サムネイルはPNG・JPEG・WebPの5MB以下を選んでください。',
   thumbnail_conflict: 'サムネイルや投稿状態が別の操作で変更されました。画面を更新して再試行してください。',
@@ -426,6 +429,7 @@ function submissionEditor(game) {
     details.append(el('p', `公開予定: ${new Date(game.published_at).toLocaleString('ja-JP')}`, { class: 'muted' }));
   hero.append(art, details); editor.append(hero);
   editor.append(releaseHistory(game.releases));
+  projectSummary(editor, game);
   const quick = el('div', null, { class: 'editor-actions' });
   if(game.visibility==='shared')quick.append(el('a','共有するゲームページ ↗',{href:`../game.html?slug=${encodeURIComponent(game.public_slug)}`,class:'editor-back'}));
   if (game.is_published) quick.append(el('a', '公開ページを開く・共有する ↗', { href: `../game.html?slug=${encodeURIComponent(game.public_slug)}`, class: 'editor-back' }));
@@ -452,10 +456,12 @@ function submissionEditor(game) {
     ], '変更を保存', async data => {
       const image = saveForm.elements.thumbnail.files?.[0];
       const selectedFiles = [...saveForm.elements.package.files];
+      const project = saveForm.elements.project.files?.[0];
+      if (project) await checkProjectFile(project, data.engine);
       if (image && (!['image/png','image/jpeg','image/webp'].includes(image.type) || !image.size || image.size > 5242880)) throw new Error('invalid_thumbnail');
       let archive;
       if (selectedFiles.length) { archive = await packageWebFiles(selectedFiles); await checkWebGameZip(archive); }
-      delete data.thumbnail; delete data.package;
+      delete data.thumbnail; delete data.package; delete data.project;
       Object.assign(data, ai.values());
       data.tag_ids = picker.values();
       Object.assign(data, groupData(saveForm));
@@ -463,6 +469,7 @@ function submissionEditor(game) {
       notice('変更を保存中…');
       await api('user.submission.save', { ...data, submission_id: game.id });
       try {
+        if (project) { await uploadProject(game.id, project); saveForm.elements.project.value = ''; }
         if (image) {
           notice('サムネイルを保存中…');
           const body = new FormData(); body.set('submission_id', game.id); body.set('thumbnail', image);
@@ -506,6 +513,7 @@ function submissionEditor(game) {
     files.append(el('p', 'ファイルを差し替えると再審査になります。下書きと信頼済み投稿者は審査を省略します。', { class: 'muted' }));
     const packageLabel = el('label', 'ゲームファイル（任意）');
     packageLabel.append(el('input', null, { type: 'file', name: 'package', multiple: '', 'aria-label': 'ゲームファイルを再選択' })); files.append(packageLabel);
+    projectInput(saveForm, false, game);
     const footer = el('div', null, { class: 'editor-save' });
     footer.append(submit, el('p', '', { class: 'message upload-status', role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' }));
     saveForm.append(footer);
@@ -661,6 +669,7 @@ async function dashboard() {
     });
     tagForm.querySelector('button[type=submit]').before(picker.element); if(game.visibility!=='draft')row.append(editTags);
     row.append(el('p', `投稿者: ${game.username} · ${game.engine.toUpperCase()} · バージョン ${game.version}`, { class: 'muted' }));
+    if (game.visibility !== 'draft') projectSummary(row, game);
     if (game.is_published) row.append(el('a', '公開ページ', { href: `../game.html?slug=${encodeURIComponent(game.public_slug)}` }));
     if (game.status === 'uploading') row.append(el('p', 'ZIP未保管。投稿者がWeb書き出しZIPを再送するまで審査・公開できません。', { class: 'muted' }));
     if (game.description) row.append(el('p', game.description, { class: 'muted' }));
@@ -777,6 +786,60 @@ async function uploadPackage(submissionId, file, refresh = upload, thumbnail = n
       : '非公開で保管しました。審査待ちです。');
     return submission;
 }
+function projectInput(parent, required = false, game = {}) {
+  const area = section('プロジェクトファイル', parent);
+  area.classList.add('project-files');
+  area.append(el('p', '制作データを提出します。プレイ用のゲームファイルとは別のファイルです。', { class: 'muted' }));
+  const guide = el('details', null); guide.append(el('summary', 'プロジェクトファイルの準備方法'));
+  guide.append(el('p', 'Godot：project.godotが入った制作フォルダーをZIPに圧縮してください。.godotキャッシュ、.git、書き出したゲーム、秘密情報は含めないでください。'));
+  guide.append(el('p', 'Scratch / TurboWarp：エディターの「ファイル」→「コンピューターに保存」で.sb3を保存してください。プレイ用HTMLとは別に選択します。'));
+  guide.append(el('p', 'その他：編集・制作に必要なファイルをZIPにまとめてください。最大50MB。提出したデータは公開ゲームページには配信されません。'));
+  area.append(guide);
+  const label = el('label', required ? 'プロジェクトファイルを選択（必須）' : 'プロジェクトファイルを追加・変更（任意）');
+  const input = el('input', null, { type: 'file', name: 'project', 'aria-label': 'プロジェクトファイルを選択' });
+  input.required = required;
+  label.append(input); area.append(label);
+  if (game.project_file) area.append(el('p', `提出済み：${game.project_file.name}（${(game.project_file.size / 1048576).toFixed(1)}MB）`, { class: 'muted' }));
+  else if (game.project_required) area.append(el('p', 'この新規投稿を完了するには、プロジェクトファイルの提出が必要です。', { class: 'muted' }));
+  area.append(el('p', '投稿者本人と審査権限のある管理者だけがダウンロードできます。差し替えは再審査になります（下書き・信頼済み投稿者を除く）。', { class: 'muted' }));
+  return input;
+}
+function projectSummary(parent, game) {
+  const area = el('div', null, { class: 'project-summary' });
+  if (game.project_file) {
+    area.append(el('p', `プロジェクト：${game.project_file.name} · ${(game.project_file.size / 1048576).toFixed(1)}MB`, { class: 'muted' }));
+    button(area, 'プロジェクトファイルをダウンロード', async () => {
+      const response = await fetch(`${config.supabaseUrl}/functions/v1/portal/project-download`, { method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(config.anonKey ? { apikey: config.anonKey } : {}), 'X-Portal-Session': session.token },
+        body: JSON.stringify({ submission_id: game.id }), signal: AbortSignal.timeout(60000) });
+      if (!response.ok) { const result = await response.json(); throw new Error(result.error ?? 'unavailable'); }
+      const url = URL.createObjectURL(await response.blob()), link = el('a', null, { href: url, download: game.project_file.name });
+      document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 30000);
+      notice('プロジェクトファイルをダウンロードしました。');
+    });
+  } else area.append(el('p', game.project_required ? 'プロジェクトファイル未提出' : 'プロジェクトファイル未提出（旧投稿・追加可能）', { class: 'muted' }));
+  parent.append(area);
+}
+async function uploadProject(submissionId, file) {
+  const revision = crypto.randomUUID(), body = new FormData();
+  body.set('submission_id', submissionId); body.set('revision', revision); body.set('project', file);
+  const started = Date.now(); let progress = 0;
+  const update = () => notice(`プロジェクトファイルを${progress === 100 ? 'サーバーで保存中' : `送信中…${progress ?? ''}%`}（${Math.floor((Date.now() - started) / 1000)}秒経過）`);
+  update(); const timer = setInterval(update, 1000);
+  try {
+    try { return (await sendUpload(`${config.supabaseUrl}/functions/v1/portal/project-upload`, { body,
+      headers: { ...(config.anonKey ? { apikey: config.anonKey } : {}), 'X-Portal-Session': session.token },
+      onProgress: value => { progress = value; update(); } })).submission; }
+    catch (error) {
+      if (['upload_timeout','upload_network','upload_response','drive_unavailable','unavailable'].includes(error.message)) {
+        notice('プロジェクトファイルの保存結果を確認中…');
+        try { const { submissions } = await api('user.submissions'); const saved = submissions.find(g => g.id === submissionId);
+          if (saved?.project_file?.revision === revision) return saved; } catch { /* Preserve the initial error. */ }
+      }
+      throw error;
+    }
+  } finally { clearInterval(timer); }
+}
 async function manageAdmin(user,admin) {
   const s=section(`${user.username} の管理`);s.id='selected-user';
   s.append(el('p',`アカウントID: ${user.id}`,{class:'account-id muted'}));
@@ -888,7 +951,10 @@ async function upload() {
     field('published_at', '公開日時（空欄で即時公開）', 'datetime-local', { optional: true }),
   ], 'ゲームを投稿', async data => {
     const thumbnail = submissionForm.elements.thumbnail?.files?.[0];
-    delete data.package; delete data.thumbnail;
+    const project = submissionForm.elements.project.files?.[0];
+    if (!project) throw new Error('project_required');
+    await checkProjectFile(project, data.engine);
+    delete data.package; delete data.thumbnail; delete data.project;
     Object.assign(data, ai.values());
     data.tag_ids = picker.values();
     Object.assign(data, groupData(submissionForm));
@@ -897,6 +963,7 @@ async function upload() {
     await checkWebGameZip(file);
     const policy = await currentTerms(); data.terms_version = policy.version;
     if (!pendingSubmissionId) { const { submission } = await api('user.submission.create', data); pendingSubmissionId = submission.id; }
+    await uploadProject(pendingSubmissionId, project);
     const completed = await uploadPackage(pendingSubmissionId, file, null, thumbnail);
     pendingSubmissionId = null;
     uploadComplete(completed);
@@ -936,6 +1003,7 @@ async function upload() {
   dropZone.addEventListener('drop', event => { event.preventDefault(); dropZone.classList.remove('is-dragging'); setFiles(event.dataTransfer.files); });
   dropZone.append(packageInput, selection);
   submissionForm.querySelector('button[type=submit]').before(dropZone);
+  const projectArea = el('div', null); projectInput(projectArea, true); dropZone.after(projectArea);
   submissionForm.querySelector('button[type=submit]').before(consentCheckbox('../terms/', 'rights_confirmed', 'この作品を投稿・公開するために必要な権利を有している、または必要な許諾を得ており、利用規約および禁止事項に適合していることを確認しました。'));
   const saveBar=el('div',null,{class:'editor-save'});
   saveBar.append(submissionForm.querySelector('button[type=submit]'),submissionForm.querySelector('.upload-status'));

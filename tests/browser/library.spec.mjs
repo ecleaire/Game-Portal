@@ -1,3 +1,4 @@
+import { attachProject } from './project-fixture.mjs';
 import { test, expect } from '@playwright/test';
 import { packageWebFiles } from '../../assets/zip-upload.js';
 const backend='http://127.0.0.1:54321/functions/v1/portal';
@@ -13,6 +14,7 @@ test('likes, private lists, ordering, URL sharing and private following work thr
  const games=[];
  for(const title of ['Library first','Library second']){
   const {submission}=await api(request,'user.submission.create',{title,engine:'other',version:'1',visibility:'public',terms_accepted:true,terms_version:'2026-10-08',rights_confirmed:'yes'},author.token);
+  await attachProject(request,backend,submission.id,author.token);
   const uploaded=await request.post(`${backend}/upload`,{headers:{'X-Portal-Session':author.token},multipart:{submission_id:submission.id,package:{name:'library.zip',mimeType:'application/zip',buffer:Buffer.from(await zip.arrayBuffer())}}});
   expect(uploaded.ok(),await uploaded.text()).toBe(true);games.push(submission);
  }

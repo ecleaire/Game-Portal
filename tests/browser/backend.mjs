@@ -14,6 +14,7 @@ await db.query('select public.portal_bootstrap($1,$2)', ['browser_owner', 'brows
 // Independent fixture identity keeps review tests inside the real login limit.
 await db.query("insert into portal_private.admin_users(username,password_hash,role) values($1,portal_private.password_hash($2),'super_admin')", ['browser_review_owner','browser-review-admin-only']);
 await db.query("insert into portal_private.admin_users(username,password_hash,role) values($1,portal_private.password_hash($2),'super_admin')", ['browser_release_owner','browser-release-admin-only']);
+await db.query("insert into portal_private.admin_users(username,password_hash,role) values($1,portal_private.password_hash($2),'super_admin')", ['browser_project_owner','browser-project-admin-only']);
 const imageObjects = new Map();
 const driveObjects = new Map();
 const handler = createHandler({
@@ -55,6 +56,12 @@ const handler = createHandler({
     }
     const p = JSON.parse(options.body);
     try {
+      if (_url.endsWith('/rpc/portal_project_file')) {
+        const {rows}=await db.query('select public.portal_project_file($1,$2::jsonb,$3) result',[p.p_action,JSON.stringify(p.p_body),p.p_token_hash]);return Response.json(rows[0].result);
+      }
+      if (_url.endsWith('/rpc/portal_submission_cleanup')) {
+        const {rows}=await db.query('select public.portal_submission_cleanup($1,$2) result',[p.p_id,p.p_complete??false]);return Response.json(rows[0].result);
+      }
       if(_url.endsWith('/rpc/portal_public_game')) {
         const {rows}=await db.query('select public.portal_public_game($1) as result',[p.p_slug]);return Response.json(rows[0].result);
       }

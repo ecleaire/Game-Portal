@@ -1,3 +1,4 @@
+import { attachProject } from './project-fixture.mjs';
 import { test, expect } from '@playwright/test';
 import { packageWebFiles } from '../../assets/zip-upload.js';
 const endpoint='http://127.0.0.1:54321/functions/v1/portal';
@@ -11,6 +12,7 @@ test('super admin edits a pending submission and safely previews it without expo
  const make=async(title,visibility)=>{
   const {submission}=await api(request,'user.submission.create',{title,engine:'other',version:'1',visibility,rights_confirmed:'yes',terms_accepted:true,terms_version:'2026-10-08'},author.token);
   const zip=await packageWebFiles([new File(['<!doctype html><html><body><p>Review game</p><script>document.body.dataset.isolated=String(parent!==window);try{parent.document.body.dataset.compromised="yes"}catch{};</script></body></html>'],'index.html')]);
+  await attachProject(request,endpoint,submission.id,author.token);
   const response=await request.post(`${endpoint}/upload`,{headers:{'X-Portal-Session':author.token},multipart:{submission_id:submission.id,package:{name:'review.zip',mimeType:'application/zip',buffer:Buffer.from(await zip.arrayBuffer())}}});expect(response.ok(),await response.text()).toBe(true);return submission;
  };
  const game=await make('Review tools game','public');const draft=await make('Private review draft','draft');

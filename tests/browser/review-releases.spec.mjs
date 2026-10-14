@@ -1,3 +1,4 @@
+import { attachProject } from './project-fixture.mjs';
 import { test, expect } from '@playwright/test';
 import { packageWebFiles } from '../../assets/zip-upload.js';
 const endpoint='http://127.0.0.1:54321/functions/v1/portal';
@@ -16,6 +17,7 @@ test('review inbox, member catalog, edit protection, release history and downloa
  await api(request,'admin.group.member',{group_id:group.id,user_id:author.user.id,operation:'add'},admin.token);
  const {submission:game}=await api(request,'user.submission.create',{title:'Release stages game',engine:'other',version:'1',visibility:'group',management_group_id:group.id,group_ids:[group.id],release_notes:'Initial release',rights_confirmed:'yes',terms_version:'2026-10-08'},author.token);
  const zip=await packageWebFiles([new File(['<!doctype html><html><body>Release stages</body></html>'],'index.html')]);
+ await attachProject(request,endpoint,game.id,author.token);
  const uploaded=await request.post(`${endpoint}/upload`,{headers:{'X-Portal-Session':author.token},multipart:{submission_id:game.id,package:{name:'stages.zip',mimeType:'application/zip',buffer:Buffer.from(await zip.arrayBuffer())}}});expect(uploaded.ok(),await uploaded.text()).toBe(true);
  const reviewed=await request.post(`${endpoint}/review`,{headers:{'X-Portal-Session':admin.token},data:{submission_id:game.id,decision:'approved',reason:'Ready to share'}});expect(reviewed.ok(),await reviewed.text()).toBe(true);
  await page.goto('account/');await page.evaluate(token=>sessionStorage.setItem('game-portal.user.session.v1',token),author.token);await page.reload();

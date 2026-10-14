@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { projectFixture } from './project-fixture.mjs';
 const endpoint='http://127.0.0.1:54321/functions/v1/portal';
 async function api(request,action,data={},token){const response=await request.post(endpoint,{data:{action,data},headers:token?{'X-Portal-Session':token}:{}});const result=await response.json();expect(response.ok(),JSON.stringify(result)).toBe(true);return result;}
 test('moderation feedback preserves input, super admin manages rules, AI disclosure and icons save',async({page,context,request})=>{
@@ -17,6 +18,7 @@ test('moderation feedback preserves input, super admin manages rules, AI disclos
  await page.getByLabel('ゲームファイルを選択',{exact:true}).setInputFiles({name:'sample.html',mimeType:'text/html',buffer:Buffer.from('<!doctype html><html><body>AI test game</body></html>')});
  await page.getByRole('checkbox',{name:'ゲーム制作や使用素材にAIを利用している',exact:true}).check();
  await page.getByRole('checkbox',{name:/この作品を投稿・公開/}).check();
+ await page.getByLabel('プロジェクトファイルを選択',{exact:true}).setInputFiles(await projectFixture());
  await page.getByRole('button',{name:'ゲームを投稿',exact:true}).click();await expect(page.locator('.upload-status')).toContainText('1つ以上選択');
  await page.getByRole('checkbox',{name:'画像',exact:true}).check();await page.getByRole('checkbox',{name:'プログラム',exact:true}).check();
  await page.getByLabel('素材の権利表記・提供元（任意）',{exact:true}).fill('https://example.com/credits');

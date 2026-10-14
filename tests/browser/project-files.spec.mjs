@@ -1,0 +1,40 @@
+import { test, expect } from '@playwright/test';
+import { projectFixture } from './project-fixture.mjs';
+const endpoint='http://127.0.0.1:54321/functions/v1/portal';
+async function api(request,action,data={},token) {
+ const response=await request.post(endpoint,{data:{action,data},headers:token?{'X-Portal-Session':token}:{}});
+ const result=await response.json();expect(response.ok(),JSON.stringify(result)).toBe(true);return result;
+}
+test('required source and playable file submit in one form, owners replace and reviewers download privately',async({page,context,request})=>{
+ await context.route('**/assets/config.js',route=>route.fulfill({contentType:'text/javascript',body:'export const config={supabaseUrl:"http://127.0.0.1:54321",anonKey:""};'}));
+ await context.addInitScript(()=>localStorage.setItem('game-portal.terms.acceptance.v1',JSON.stringify({version:'2026-10-08',acceptedAt:new Date().toISOString()})));
+ const admin=await api(request,'admin.login',{username:'browser_project_owner',password:'browser-project-admin-only'});
+ await api(request,'admin.create',{username:'browser_project_author',password:'browser-project-user-only',role:'uploader'},admin.token);
+ const author=await api(request,'user.login',{username:'browser_project_author',password:'browser-project-user-only',terms_accepted:true,terms_version:'2026-10-08'});
+ await page.goto('upload/');await page.evaluate(token=>sessionStorage.setItem('game-portal.user.session.v1',token),author.token);await page.reload();
+ await page.getByLabel('ゲーム名',{exact:true}).fill('Project browser game');
+ await page.getByRole('combobox',{name:'エンジン',exact:true}).selectOption('other');
+ await page.getByRole('combobox',{name:'公開範囲',exact:true}).selectOption('public');
+ const project=page.getByLabel('プロジェクトファイルを選択',{exact:true});await expect(project).toHaveAttribute('required','');
+ await page.getByLabel('ゲームファイルを選択',{exact:true}).setInputFiles({name:'game.html',mimeType:'text/html',buffer:Buffer.from('<!doctype html><html><body>Playable browser project</body></html>')});
+ await page.locator('[name=rights_confirmed]').check();
+ await page.getByRole('button',{name:'ゲームを投稿',exact:true}).click();expect(await project.evaluate(el=>el.validity.valueMissing)).toBe(true);
+ await project.setInputFiles(await projectFixture());
+ await page.getByRole('button',{name:'ゲームを投稿',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'投稿が完了しました',exact:true})).toBeVisible();
+ const {submissions}=await api(request,'user.submissions',{},author.token),game=submissions.find(g=>g.title==='Project browser game');
+ expect(game.project_file.name).toBe('source.zip');expect(game.status).toBe('pending');
+ await page.getByRole('link',{name:'投稿したゲームを管理・プレイ →',exact:true}).click();
+ await expect(page.getByText('提出済み：source.zip',{exact:false})).toBeVisible();
+ const downloaded=page.waitForEvent('download');await page.getByRole('button',{name:'プロジェクトファイルをダウンロード',exact:true}).click();expect((await downloaded).suggestedFilename()).toBe('source.zip');
+ const review=await request.post(`${endpoint}/review`,{headers:{'X-Portal-Session':admin.token},data:{submission_id:game.id,decision:'approved'}});expect(review.ok(),await review.text()).toBe(true);
+ await page.reload();await page.getByLabel('プロジェクトファイルを選択',{exact:true}).setInputFiles({...await projectFixture(),name:'changed-project.zip'});
+ await page.getByRole('button',{name:'変更を保存',exact:true}).click();await expect(page.locator('#message')).toContainText('変更を保存しました。');
+ const changed=(await api(request,'user.submissions',{},author.token)).submissions.find(g=>g.id===game.id);expect(changed.status).toBe('pending');expect(changed.project_file.name).toBe('changed-project.zip');
+ await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.screenshot({path:'test-results/project-files-mobile.png',fullPage:true});
+ await page.goto('admin/');await page.evaluate(token=>{sessionStorage.removeItem('game-portal.user.session.v1');sessionStorage.setItem('game-portal.admin.session.v1',token);},admin.token);await page.reload();
+ const row=page.locator('#reviews > .row').filter({has:page.getByRole('heading',{name:game.title,exact:true})});await expect(row).toContainText('changed-project.zip');
+ const reviewedDownload=page.waitForEvent('download');await row.getByRole('button',{name:'プロジェクトファイルをダウンロード',exact:true}).click();expect((await reviewedDownload).suggestedFilename()).toBe('changed-project.zip');
+ const deleted=await api(request,'admin.submission.delete',{submission_id:game.id,title:game.title,confirmation:'delete'},admin.token);expect(deleted.cleanup_pending).toBe(false);
+});

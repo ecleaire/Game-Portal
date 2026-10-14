@@ -78,3 +78,4 @@
 .notification-list,.group-catalog{min-width:0;max-height:32rem;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable;display:grid;grid-template-columns:minmax(0,1fr);gap:1rem}
 .notification-list .is-unread{border-inline-start:3px solid var(--accent,#71e3d0)}
 .notification-list time,.release-history time{font-size:.8rem;color:var(--muted,#a4b1c5)}
+.project-summary, .project-files { min-width: 0; overflow-wrap: anywhere; }
