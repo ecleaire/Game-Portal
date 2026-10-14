@@ -50,3 +50,5 @@ Godotでは**Web**プリセットから「プロジェクトをエクスポー�
 
 作品情報の管理編集と隔離プレビュー: [docs/REVIEW_TOOLS.md](docs/REVIEW_TOOLS.md)。自己紹介の保存・閲覧権限: [docs/CREATOR_PROFILES.md](docs/CREATOR_PROFILES.md)。
 管理・モバイルUIと名称設定: [docs/UI_AND_BRANDING.md](docs/UI_AND_BRANDING.md)
+
+制作プロジェクトの必須提出・非公開保管・権限・反映手順: [プロジェクトファイル](docs/PROJECT_FILES.md)

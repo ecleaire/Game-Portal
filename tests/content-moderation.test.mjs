@@ -1,3 +1,4 @@
+import { attachProjectFixture } from './project-fixture.mjs';
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
@@ -7,7 +8,9 @@ import { token, readBody } from '../supabase/functions/portal/security.mjs';
 import { avatars, avatarGlyph } from '../assets/avatars.js';
 let db,owner,user,other,admin,game;
 const password='fuck-password-test-only'; // Passwords are deliberately never moderated.
-async function api(action,body={},hash=owner,fresh=null){return (await db.query('select public.portal_api($1,$2::jsonb,$3,$4) result',[action,JSON.stringify(body),hash,fresh])).rows[0].result;}
+async function api(action,body={},hash=owner,fresh=null){
+ if(action==='user.submission.complete') await attachProjectFixture(db,body.submission_id,hash);
+return (await db.query('select public.portal_api($1,$2::jsonb,$3,$4) result',[action,JSON.stringify(body),hash,fresh])).rows[0].result;}
 async function login(username,administrator=false){const hash=token();const result=await api(administrator?'admin.login':'user.login',{username,password,terms_accepted:true,terms_version:'2026-10-08'},null,hash);assert.ok(!result.error,JSON.stringify(result));return hash;}
 before(async()=>{
  db=new PGlite({extensions:{pgcrypto}});await db.exec('create role anon;create role authenticated;create role service_role;');

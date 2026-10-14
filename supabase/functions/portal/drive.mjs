@@ -1,6 +1,7 @@
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const DRIVE_UPLOAD_URL = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,name,size';
 import { webArchiveLayout } from '../../../assets/private-preview.js';
+import { validateProjectArchive } from '../../../assets/project-files.js';
 
 // Reflect only stable reason codes, never Google's response or credential values.
 export function driveError(error) {
@@ -95,9 +96,19 @@ export async function storePrivateZip({ serviceAccountJson, oauthJson = '', pend
   if (!pendingFolderId || !file || file.size < 1 || file.size > 52428800 || !/\.zip$/i.test(file.name)) throw new Error('invalid_upload');
   const bytes = suppliedBytes ?? new Uint8Array(await file.arrayBuffer());
   validateZip(bytes);
+  return storePrivateArchive({ serviceAccountJson, oauthJson, pendingFolderId, archiveName: `${submissionId}.zip`, file, bytes, fetcher });
+}
+export async function storePrivateProject({ serviceAccountJson, oauthJson = '', pendingFolderId, submissionId, revision, file, bytes, engine, fetcher = fetch }) {
+  validateProjectArchive(bytes, file.name, engine);
+  if (!pendingFolderId) throw new Error('drive_unavailable');
+  const extension = /\.sb3$/i.test(file.name) ? 'sb3' : 'zip';
+  return storePrivateArchive({ serviceAccountJson, oauthJson, pendingFolderId,
+    archiveName: `${submissionId}-project-${revision}.${extension}`, file, bytes, fetcher });
+}
+async function storePrivateArchive({ serviceAccountJson, oauthJson, pendingFolderId, archiveName, file, bytes, fetcher }) {
   const access = await accessToken(serviceAccountJson, fetcher, oauthJson);
   const boundary = `portal-${crypto.randomUUID()}`;
-  const metadata = JSON.stringify({ name: `${submissionId}.zip`, parents: [pendingFolderId], mimeType: 'application/zip' });
+  const metadata = JSON.stringify({ name: archiveName, parents: [pendingFolderId], mimeType: 'application/zip' });
   const prefix = new TextEncoder().encode(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n--${boundary}\r\nContent-Type: application/zip\r\n\r\n`);
   const suffix = new TextEncoder().encode(`\r\n--${boundary}--`);
   const body = new Uint8Array(prefix.length + bytes.length + suffix.length);

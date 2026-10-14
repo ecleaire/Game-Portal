@@ -1,5 +1,5 @@
 import { digest, token, readBody, statusFor } from './security.mjs';
-import { checkPrivateFolders, deletePrivateZip, driveError, downloadPrivateZip, movePrivateZip, storePrivateZip, validateZip } from './drive.mjs';
+import { checkPrivateFolders, deletePrivateZip, driveError, downloadPrivateZip, movePrivateZip, storePrivateZip, storePrivateProject, validateZip } from './drive.mjs';
 
 // Dependency injection keeps the actual HTTP boundary testable without deployed secrets.
 export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleServiceAccountJson = '', googleDriveOAuthJson = '', googlePendingFolderId = '', googleApprovedFolderId = '', googleRejectedFolderId = '', fetcher = fetch }) {
@@ -65,6 +65,55 @@ export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleS
       return key;
     };
     const publicPath = requestUrl.pathname;
+    if (['/project-upload','/project-download'].some(path => publicPath.endsWith(path))) {
+      const supplied = request.headers.get('x-portal-session');
+      if (!/^[a-f0-9]{64}$/.test(supplied ?? '')) return reply({ error: 'unauthorized' }, 401);
+      if (!(googleServiceAccountJson || googleDriveOAuthJson) || !googlePendingFolderId) return reply({ error: 'drive_unavailable' }, 503);
+      const projectRpc = async (action, body) => publicRpc('portal_project_file', {
+        p_action: action, p_body: body, p_token_hash: await digest(supplied, pepper) });
+      let storedId, completing = false;
+      try {
+        if (publicPath.endsWith('/project-download')) {
+          const input = await privateJson();
+          if (typeof input.submission_id !== 'string') return reply({ error: 'invalid_request' }, 400);
+          const checked = await projectRpc('download', { submission_id: input.submission_id });
+          if (checked.error) return reply({ error: checked.error }, statusFor(checked.error));
+          const response = await downloadPrivateZip({ serviceAccountJson: googleServiceAccountJson, oauthJson: googleDriveOAuthJson, fileId: checked.file_id, fetcher });
+          const safeName = String(checked.name).replace(/[^A-Za-z0-9._-]/g, '_');
+          return new Response(response.body, { headers: { ...headers, 'Content-Type': 'application/octet-stream',
+            'Content-Disposition': `attachment; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(checked.name)}`,
+            'Access-Control-Expose-Headers': 'Content-Disposition' } });
+        }
+        const maximum = 52428800 + 16384;
+        if (!request.headers.get('content-type')?.startsWith('multipart/form-data') || Number(request.headers.get('content-length') ?? 0) > maximum) return reply({ error: 'invalid_project' }, 400);
+        const reader = request.body?.getReader(); if (!reader) return reply({ error: 'invalid_project' }, 400);
+        const chunks = []; let size = 0;
+        for (;;) { const { done, value } = await reader.read(); if (done) break; size += value.length;
+          if (size > maximum) { await reader.cancel(); return reply({ error: 'invalid_project' }, 400); } chunks.push(value); }
+        const form = await new Response(new Blob(chunks), { headers: { 'Content-Type': request.headers.get('content-type') } }).formData();
+        const submissionId = form.get('submission_id'), revision = form.get('revision'), file = form.get('project');
+        if (typeof submissionId !== 'string' || !/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(revision ?? '') ||
+          !(file instanceof File) || !file.size || file.size > 52428800 || file.name.length > 180 || /[\\/\x00-\x1f\x7f]/.test(file.name)) return reply({ error: 'invalid_project' }, 400);
+        const prepared = await projectRpc('prepare', { submission_id: submissionId });
+        if (prepared.error) return reply({ error: prepared.error }, statusFor(prepared.error));
+        const stored = await storePrivateProject({ serviceAccountJson: googleServiceAccountJson, oauthJson: googleDriveOAuthJson,
+          pendingFolderId: googlePendingFolderId, submissionId, revision, file, engine: prepared.engine,
+          bytes: new Uint8Array(await file.arrayBuffer()), fetcher });
+        storedId = stored.id; completing = true;
+        const completed = await projectRpc('complete', { submission_id: submissionId, revision, file_id: stored.id,
+          name: file.name, size: String(file.size), previous_revision: prepared.previous_revision });
+        if (completed.error) {
+          await deletePrivateZip({ serviceAccountJson: googleServiceAccountJson, oauthJson: googleDriveOAuthJson, fileId: storedId, fetcher }).catch(() => {});
+          storedId = null; return reply({ error: completed.error }, statusFor(completed.error));
+        }
+        return reply(completed);
+      } catch (error) {
+        // A lost completion response is ambiguous; never delete a possibly committed file.
+        if (storedId && !completing) await deletePrivateZip({ serviceAccountJson: googleServiceAccountJson, oauthJson: googleDriveOAuthJson, fileId: storedId, fetcher }).catch(() => {});
+        const code = error?.message === 'invalid_project' ? 'invalid_project' : driveError(error);
+        return reply({ error: code }, code === 'invalid_project' ? 400 : 503);
+      }
+    }
     if (publicPath.endsWith('/policy')) {
       try {
         const checked = await rpc('policy.current', {}, null);

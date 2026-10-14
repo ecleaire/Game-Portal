@@ -1,3 +1,4 @@
+import { attachProjectFixture } from './project-fixture.mjs';
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
@@ -7,6 +8,8 @@ import { token } from '../supabase/functions/portal/security.mjs';
 let db,owner,author,other,game,group;
 const password='disposable-release-test';
 async function api(action,body={},hash=owner,fresh=null) {
+ if(action==='user.submission.complete') await attachProjectFixture(db,body.submission_id,hash);
+
  return (await db.query('select public.portal_api($1,$2::jsonb,$3,$4) result',[action,JSON.stringify(body),hash,fresh])).rows[0].result;
 }
 async function login(name,admin=false) {

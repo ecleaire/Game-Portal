@@ -1,3 +1,4 @@
+import { attachProjectFixture } from './project-fixture.mjs';
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
@@ -11,6 +12,8 @@ const original = 'test-only-user-password';
 const alternative = 'test-only-alternative';
 const adminPassword = 'test-only-admin-password';
 async function api(action, body = {}, hash = null, fresh = null) {
+ if(action==='user.submission.complete') await attachProjectFixture(db,body.submission_id,hash);
+
   if (['user.login','portal.login','user.submission.create'].includes(action)) {
     const policy = (await db.query("select version from portal_private.policy_versions where is_current")).rows[0];
     body = { terms_accepted: true, terms_version: policy.version, rights_confirmed: 'yes', ...body };
@@ -229,6 +232,7 @@ test('private game submission metadata hides Drive identifiers from users', asyn
   const session = await login('submitter', 'submitter-password');
   const made = await api('user.submission.create', { title: 'Private ZIP', engine: 'godot', description: 'test', version: '1.0', controls: '' }, session.hash);
   assert.equal(made.submission.status, 'uploading');
+  await attachProjectFixture(db,made.submission.id,session.hash);
   assert.equal((await api('user.submission.prepare', { submission_id: made.submission.id }, session.hash)).submission_id, made.submission.id);
   const completed = await api('user.submission.complete', { submission_id: made.submission.id, drive_file_id: 'private-drive-file-id', package_name: 'game.zip', package_size: '100' }, session.hash);
   assert.equal(completed.submission.status, 'pending');
@@ -476,7 +480,7 @@ test('admin deletion removes accounts, every game and credentials but durably re
  assert.equal((await api('admin.submission.delete',{submission_id:id,title:games[0].title,confirmation:'delete'},owner.hash)).error,'forbidden');
  assert.equal((await api('admin.account.delete',{user_id:owner.user.id,username:'delete_account'},adminToken)).error,'invalid_request');
  const deleted=await api('admin.submission.delete',{submission_id:id,title:games[0].title,confirmation:'delete'},adminToken);assert.equal(deleted.deleted,true);
- const queue=(await db.query('select public.portal_submission_cleanup($1) as files',[id])).rows[0].files;assert.equal(queue.extra_assets.length,4);
+ const queue=(await db.query('select public.portal_submission_cleanup($1) as files',[id])).rows[0].files;assert.equal(queue.extra_assets.length,5);
  const all=await api('admin.account.delete',{user_id:owner.user.id,username:'delete_account',confirmation:'delete'},adminToken);assert.equal(all.deleted,true);assert.equal(all.cleanup_ids.length,2);
  for(const table of ['users','user_passwords','sessions','game_submissions']){
   const col=table==='users'?'id':'user_id';assert.equal((await db.query('select count(*)::integer n from portal_private.'+table+' where '+col+'=$1',[owner.user.id])).rows[0].n,0);

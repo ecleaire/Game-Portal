@@ -1,3 +1,4 @@
+import { attachProjectFixture } from './project-fixture.mjs';
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
@@ -7,7 +8,9 @@ import { token, digest, readBody } from '../supabase/functions/portal/security.m
 import { createHandler } from '../supabase/functions/portal/handler.mjs';
 let db, owner, alice, bob, creator, game, secret, list;
 const password='library-disposable-only';
-async function api(action,body={},hash=owner,fresh=null){return (await db.query('select public.portal_api($1,$2::jsonb,$3,$4) result',[action,JSON.stringify(body),hash,fresh])).rows[0].result;}
+async function api(action,body={},hash=owner,fresh=null){
+ if(action==='user.submission.complete') await attachProjectFixture(db,body.submission_id,hash);
+return (await db.query('select public.portal_api($1,$2::jsonb,$3,$4) result',[action,JSON.stringify(body),hash,fresh])).rows[0].result;}
 async function login(name,admin=false){const hash=token();const result=await api(admin?'admin.login':'user.login',{username:name,password,terms_accepted:true,terms_version:'2026-10-08'},null,hash);assert.ok(!result.error,JSON.stringify(result));return hash;}
 async function makeGame(title,visibility){const s=(await api('user.submission.create',{title,engine:'other',version:'1',visibility,rights_confirmed:'yes',terms_accepted:true,terms_version:'2026-10-08'},creator)).submission;assert.ok(s);await api('user.submission.complete',{submission_id:s.id,drive_file_id:`test-${s.id}`,package_name:'test.zip',package_size:'123',package_storage_key:`${s.id}.zip`},creator);return s;}
 before(async()=>{

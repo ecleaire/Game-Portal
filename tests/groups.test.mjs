@@ -1,3 +1,4 @@
+import { attachProjectFixture } from './project-fixture.mjs';
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
@@ -8,6 +9,8 @@ import { createHandler } from '../supabase/functions/portal/handler.mjs';
 let db, owner, manager, visitor, alice, player, outsider, groupA, groupB, game;
 const password = 'disposable-group-test';
 async function api(action, body = {}, hash = owner, fresh = null) {
+ if(action==='user.submission.complete') await attachProjectFixture(db,body.submission_id,hash);
+
   if (['user.login','user.submission.create'].includes(action)) body = { terms_accepted:true, terms_version:'2026-10-08', rights_confirmed:'yes', ...body };
   return (await db.query('select public.portal_api($1,$2::jsonb,$3,$4) as result', [action,JSON.stringify(body),hash,fresh])).rows[0].result;
 }
