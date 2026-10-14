@@ -75,8 +75,42 @@ async function render() {
   }
 }
 function editGame(game) {
-  editing = game; $('#editEnvironment').value = game.developmentEnvironment; $('#editSettingsPath').textContent = game.path + '.gameportal.json'; $('#editTitle').value = game.title; $('#editTags').value = game.tags.join(', '); $('#editImage').value = ''; $('#clearImage').checked = false; $('#edit').showModal();
+  editing = game; $('#editEnvironment').value = game.developmentEnvironment; $('#editSettingsPath').textContent = game.path + '.gameportal.json'; $('#editTitle').value = game.title; $('#editTags').value = game.tags.join(', '); $('#editImage').value = ''; $('#clearImage').checked = false; renderTagChoices(); $('#edit').showModal();
 }
+let tagControls = [];
+function updateTagChoices() {
+  const picked = new Set(library.tagsFrom($('#editTags').value));
+  $('#tagCount').textContent = `選択中 ${picked.size} / 12（自由入力もできます）`;
+  for (const [button, name] of tagControls) {
+    const active = picked.has(name); button.setAttribute('aria-pressed', String(active));
+    button.classList.toggle('active', active); button.disabled = !active && picked.size >= 12;
+  }
+}
+function renderTagChoices() {
+  const box = $('#tagCategories'); box.replaceChildren(); tagControls = [];
+  const presets = [...tagPresets], known = new Set(presets.map(t => t.name));
+  for (const name of new Set([...games.flatMap(g => g.tags), ...library.tagsFrom($('#editTags').value)])) {
+    if (!known.has(name)) presets.push({ name, category: 'マイタグ' });
+  }
+  const selected = new Set(library.tagsFrom($('#editTags').value));
+  for (const category of new Set(presets.map(t => t.category))) {
+    const details = document.createElement('details'), summary = document.createElement('summary'); summary.textContent = category;
+    const choices = presets.filter(t => t.category === category); details.open = choices.some(t => selected.has(t.name)) || (!selected.size && category === 'ジャンル');
+    const chips = document.createElement('div'); chips.className = 'tags';
+    for (const { name } of choices) {
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'tag'; button.textContent = name;
+      button.onclick = () => {
+        const picked = new Set(library.tagsFrom($('#editTags').value));
+        if (picked.has(name)) picked.delete(name); else if (picked.size < 12) picked.add(name);
+        $('#editTags').value = [...picked].join(', '); updateTagChoices();
+      };
+      tagControls.push([button, name]); chips.append(button);
+    }
+    details.append(summary, chips); box.append(details);
+  }
+  updateTagChoices();
+}
+$('#editTags').addEventListener('input', updateTagChoices);
 async function thumbnail(file) {
   if (file.size > 10 * 1024 * 1024 || !['image/png','image/jpeg','image/webp'].includes(file.type)) throw new Error('画像はPNG・JPEG・WebPの10MB以内で選択してください。');
   const bitmap = await createImageBitmap(file);

@@ -30,6 +30,7 @@ const wrap = (name, code, exports) => `const ${name}=(()=>{${code.replace(/^expo
 // changes only the standalone bundle, never the public portal's preview policy.
 const offlinePreview = (await source('assets/private-preview.js')).replaceAll("script-src 'unsafe-inline' data: blob: 'wasm-unsafe-eval'", "script-src 'unsafe-inline' 'unsafe-eval' data: blob: 'wasm-unsafe-eval'");
 const script = [
+  'const tagPresets=' + JSON.stringify(JSON.parse(await source('offline-html/tag-presets.json')).tags) + ';',
   wrap('preview', offlinePreview, 'unpackPrivateZip,webArchiveLayout,privatePreviewDocument'),
   wrap('library', await source('offline-html/library.js'), 'safePath,getFile,writeFile,loadMetadata,saveMetadata,loadGameSettings,saveGameSettings,tagsFrom,gameId,scan,readTree,postGame,validatePyxapp,embeddedPyxel'),
   wrap('player', await source('offline-html/player.js'), 'startPlayer'),

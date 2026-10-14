@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { safePath, tagsFrom, gameId, validatePyxapp, embeddedPyxel, loadMetadata, saveMetadata, loadGameSettings, saveGameSettings, scan, readTree } from '../offline-html/library.js';
@@ -68,4 +69,11 @@ test('legacy metadata remains available until a game is edited into its own sett
   const [game] = await scan(root, old); assert.equal(game.title, 'Old title'); assert.equal(game.thumbnail, true);
   await saveGameSettings(root, game, { title: 'New title', tags: game.tags, developmentEnvironment: 'Scratch', thumbnail: null });
   assert.equal((await scan(root, old))[0].title, 'New title'); assert.equal(old.games['old.html'].title, 'Old title');
+});
+
+test('offline tag suggestions retain the public portal categories without network dependencies', async () => {
+  const presets = JSON.parse(await readFile(new URL('../offline-html/tag-presets.json', import.meta.url)));
+  assert.equal(presets.tags.length, 77);
+  assert.deepEqual([...new Set(presets.tags.map(t => t.category))], ['ジャンル','プレイ形式','画面・視点','操作','ゲームの特徴','雰囲気・デザイン','開発環境','対応環境']);
+  for (const tag of presets.tags) { assert.equal(typeof tag.name,'string'); assert.ok(tag.name.length <= 32); }
 });

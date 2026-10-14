@@ -48,6 +48,10 @@ try {
   const card = title => page.locator('.card').filter({has:page.getByRole('heading',{name:title,exact:true})});
   await post(gameFile); await expect(card('Sample')).toBeVisible();
   await card('Sample').getByRole('button',{name:'編集'}).click();
+  await expect(page.locator('#tagCategories summary')).toHaveText(['ジャンル','プレイ形式','画面・視点','操作','ゲームの特徴','雰囲気・デザイン','開発環境','対応環境']);
+  const actionTag = page.locator('#tagChoices').getByRole('button',{name:'アクション',exact:true});
+  await actionTag.click(); await expect(page.locator('#editTags')).toHaveValue('アクション'); await expect(actionTag).toHaveAttribute('aria-pressed','true');
+  await actionTag.click(); await expect(page.locator('#editTags')).toHaveValue('');
   await page.locator('#editEnvironment').fill('Godot 4.5'); await page.locator('#editTitle').fill('My portable game'); await page.locator('#editTags').fill('アクション, お気に入り');
   const cover = await page.evaluate(()=>{const c=document.createElement('canvas');c.width=64;c.height=36;const ctx=c.getContext('2d');ctx.fillStyle='#67ddc4';ctx.fillRect(0,0,64,36);return c.toDataURL().split(',')[1];});
   await page.locator('#editImage').setInputFiles({name:'cover.png',mimeType:'image/png',buffer:Buffer.from(cover,'base64')});
@@ -65,6 +69,7 @@ try {
   assert.match(initialSettings.data.thumbnail, /^data:image\/webp;base64,/);
   await card('My portable game').getByRole('button',{name:'編集'}).click();
   await expect(page.locator('#editEnvironment')).toHaveValue('Godot 4.5');
+  await expect(page.locator('#tagChoices').getByRole('button',{name:'お気に入り',exact:true})).toHaveAttribute('aria-pressed','true');
   await page.locator('#editEnvironment').fill('Godot 4.6');
   await page.getByRole('button',{name:'保存',exact:true}).click();
   await expect(page.locator('#edit')).not.toBeVisible();
