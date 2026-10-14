@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>GAME PORTAL — ゲームランチャー</title><link rel="stylesheet" href="style.css"><script src="renderer.js" defer></script></head>
+<body><header><span class="brand">GAME<span>PORTAL</span></span><button class="secondary" id="settings">設定</button></header>
+<main><div class="toolbar"><div><p class="eyebrow">MY GAMES</p><h1 id="library-title">ゲーム <span id="count">0</span></h1></div><button class="secondary" id="refresh">再読み込み</button></div>
+<p class="hint" id="folderSummary">設定からゲームの保管フォルダーを指定してください。</p>
+<label class="search-label" for="search">ゲームを検索</label><input id="search" type="search" placeholder="ゲーム名で検索" autocomplete="off">
+<p id="status" role="status" aria-live="polite"></p><div id="games" class="grid"></div><p id="empty" class="empty"></p>
+</main><dialog id="settingsDialog" aria-labelledby="settingsTitle"><h2 id="settingsTitle">設定</h2><p class="search-label">ゲームの保管フォルダー</p><p id="folder" class="folder-path">未設定</p><button id="chooseFolder">フォルダーを指定</button><p class="hint">指定フォルダー内のHTML・ZIP・EXEを一覧表示します。ゲームを追加したら「再読み込み」を押してください。</p><button class="secondary" id="closeSettings">閉じる</button></dialog>
+<footer>GAME PORTAL運営</footer></body></html>
