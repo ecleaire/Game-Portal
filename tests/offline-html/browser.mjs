@@ -14,6 +14,7 @@ await new Promise(resolve => server.listen(0,'127.0.0.1',resolve));
 const origin = 'http://127.0.0.1:' + server.address().port;
 const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined, headless:true });
 const context = await browser.newContext({ viewport:{width:1200,height:850} });
+let peer;
 const page = await context.newPage(); const errors = [], requests = [];
 page.on('pageerror', e => errors.push(e.message));
 page.on('console', message => { if(message.type()==='error') console.log('Console:',message.text().slice(0,600)); });
@@ -32,7 +33,7 @@ try {
     console.log('file:// startup NOT RUN: managed browser administrator policy blocks file URLs.');
   } finally { await filePage.close(); }
   await page.goto(origin); await expect(page.getByRole('heading',{name:/ゲーム/})).toBeVisible();
-  const peer = await context.newPage(); await peer.goto(origin); await expect(peer.getByRole('heading',{name:/ゲーム/})).toBeVisible(); peer.on('pageerror',error=>errors.push(error.message));
+  peer = await context.newPage(); await peer.goto(origin); await expect(peer.getByRole('heading',{name:/ゲーム/})).toBeVisible(); peer.on('pageerror',error=>errors.push(error.message));
   await page.evaluate(async () => {
     const opfs = await navigator.storage.getDirectory();
     window.testRoot = await opfs.getDirectoryHandle('games',{create:true});
@@ -104,6 +105,7 @@ try {
   // A second tab must not overwrite saves from an active session.
   await peer.evaluate(async()=>{const opfs=await navigator.storage.getDirectory();const dir=await opfs.getDirectoryHandle('games');window.showDirectoryPicker=async()=>dir;});
   await peer.getByRole('button',{name:'設定',exact:true}).click();await peer.getByRole('button',{name:'フォルダーを指定',exact:true}).click();
+  await expect(peer.locator('#folderName')).toHaveText('games');
   await expect(peer.locator('#postButton')).toBeDisabled();
   const peerCard=peer.locator('.card').filter({has:peer.getByRole('heading',{name:'My portable game',exact:true})});
   await expect(peerCard.getByRole('button',{name:'My portable gameを編集',exact:true})).toBeDisabled();
@@ -183,6 +185,8 @@ try {
   const child=page.frames().find(f=>f!==page.mainFrame());
   if(child)console.error('Frame diagnosis:',await child.evaluate(()=>({body:document.body?.innerHTML.slice(0,1500),links:[...document.querySelectorAll('link')].map(x=>x.href),runtime:!!window.pyxelContext,resources:performance.getEntriesByType('resource').slice(-10).map(x=>x.name)})).catch(()=>null));
   console.error('Browser status:',await page.locator('#status').textContent().catch(()=>''),'Player:',await page.locator('#playerStatus').textContent().catch(()=>''));console.error('Browser errors:',errors);
-  if(process.env.GITHUB_ACTIONS)console.log('::error title=Offline HTML::'+String(e.stack||e).replaceAll('%','%25').replaceAll('\n','%0A').replaceAll('\r','%0D'));
+  const peerState=peer&&!peer.isClosed()?await peer.evaluate(()=>({status:document.querySelector('#status')?.textContent,folder:document.querySelector('#folderName')?.textContent,cards:[...document.querySelectorAll('.card h2')].map(n=>n.textContent),settings:document.querySelector('#settings')?.open})).catch(()=>null):null;
+  console.error('Peer state:',peerState);
+  if(process.env.GITHUB_ACTIONS)console.log('::error title=Offline HTML::'+(String(e.stack||e)+'\nPeer state: '+JSON.stringify(peerState)).replaceAll('%','%25').replaceAll('\n','%0A').replaceAll('\r','%0D'));
   throw e;
 } finally { await browser.close(); await new Promise(resolve=>server.close(resolve)); await rm(temp,{recursive:true,force:true,maxRetries:10}); }
