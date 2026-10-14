@@ -689,9 +689,9 @@ test('tag filters combine with engine and text search, and cards cap visible tag
  await context.route('**/functions/v1/portal/catalog',route=>route.fulfill({json:{games:[{slug:'a'.repeat(36),title:'Tag game',engine:'godot',description:'test',tags},{slug:'b'.repeat(36),title:'Other tagged',engine:'scratch',description:'test',tags:[tags[0]]}]}}));
  await context.route('**/functions/v1/portal/tags',route=>route.fulfill({json:{tags}}));
  await page.goto('?tag=action');await expect(page.locator('.game-card')).toHaveCount(2);await expect(page.locator('.game-card').first().locator('.tag-overflow')).toHaveText('+2');
- await page.locator('.game-card').first().getByRole('link',{name:'3D',exact:true}).scrollIntoViewIfNeeded();
- const cardTag=await page.locator('.game-card').first().getByRole('link',{name:'3D',exact:true}).boundingBox();
- await page.mouse.click(cardTag.x+cardTag.width/2,cardTag.y+cardTag.height/2);
+ // The catalog/tag requests may re-render cards independently. Let the locator
+ // reacquire the live link instead of scrolling a detached node or stale coordinates.
+ await page.locator('.game-card').first().getByRole('link',{name:'3D',exact:true}).click();
  await expect(page).toHaveURL(/\?tag=3d#games$/);await expect(page.locator('.game-card')).toHaveCount(1);
  await page.goto('?tag=action');await expect(page.locator('.game-card')).toHaveCount(2);
  await expect(page.locator('#searchOptions')).not.toHaveAttribute('open','');
