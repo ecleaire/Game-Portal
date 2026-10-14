@@ -110,8 +110,7 @@ try {
   await peer.evaluate(()=>{
     const same=FileSystemHandle.prototype.isSameEntry;
     FileSystemHandle.prototype.isSameEntry=async function(...args){await window.recordPeerTrace('isSameEntry start');const result=await same.apply(this,args);await window.recordPeerTrace('isSameEntry done '+result);return result;};
-    const all=IDBObjectStore.prototype.getAll;
-    IDBObjectStore.prototype.getAll=function(...args){window.recordPeerTrace('getAll '+this.name);const request=all.apply(this,args);request.addEventListener('success',()=>window.recordPeerTrace('getAll done '+request.result.length));return request;};
+    for(const method of ['getAllKeys','get']){const original=IDBObjectStore.prototype[method];IDBObjectStore.prototype[method]=function(...args){window.recordPeerTrace(method+' '+this.name);const request=original.apply(this,args);request.addEventListener('success',()=>window.recordPeerTrace(method+' done'));return request;};}
     const locks=navigator.locks.request.bind(navigator.locks);
     navigator.locks.request=(name,...args)=>{window.recordPeerTrace('lock request '+name);const cb=args.pop();return locks(name,...args,async lock=>{await window.recordPeerTrace('lock entered '+name);return cb(lock);});};
   });

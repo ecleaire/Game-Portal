@@ -25,8 +25,12 @@ export async function cacheHandle(value) {
 }
 export async function localLibraryId(handle) {
   const find = async () => {
-    const all = await access('libraries', 'readonly', store => store.getAll());
-    for (const item of all) if (await handle.isSameEntry(item.handle)) return item.id;
+    // Deserialize handles individually: bulk handle cloning can fail across renderers.
+    const keys = await access('libraries', 'readonly', store => store.getAllKeys());
+    for (const key of keys) {
+      const item = await access('libraries', 'readonly', store => store.get(key));
+      if (item && await handle.isSameEntry(item.handle)) return item.id;
+    }
     const id = crypto.randomUUID(); await access('libraries', 'readwrite', store => store.put({ id, handle }, id)); return id;
   };
   return navigator.locks.request('game-portal-library-registry', find);
