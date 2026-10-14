@@ -1,0 +1,313 @@
+{
+  "source": "https://ecleaire.github.io/Game-Portal/#games",
+  "tags": [
+    {
+      "name": "アクション",
+      "category": "ジャンル"
+    },
+    {
+      "name": "アドベンチャー",
+      "category": "ジャンル"
+    },
+    {
+      "name": "RPG",
+      "category": "ジャンル"
+    },
+    {
+      "name": "シューティング",
+      "category": "ジャンル"
+    },
+    {
+      "name": "FPS",
+      "category": "ジャンル"
+    },
+    {
+      "name": "TPS",
+      "category": "ジャンル"
+    },
+    {
+      "name": "レース",
+      "category": "ジャンル"
+    },
+    {
+      "name": "パズル",
+      "category": "ジャンル"
+    },
+    {
+      "name": "リズム",
+      "category": "ジャンル"
+    },
+    {
+      "name": "スポーツ",
+      "category": "ジャンル"
+    },
+    {
+      "name": "シミュレーション",
+      "category": "ジャンル"
+    },
+    {
+      "name": "ストラテジー",
+      "category": "ジャンル"
+    },
+    {
+      "name": "ホラー",
+      "category": "ジャンル"
+    },
+    {
+      "name": "脱出ゲーム",
+      "category": "ジャンル"
+    },
+    {
+      "name": "プラットフォーマー",
+      "category": "ジャンル"
+    },
+    {
+      "name": "ミニゲーム",
+      "category": "ジャンル"
+    },
+    {
+      "name": "サンドボックス",
+      "category": "ジャンル"
+    },
+    {
+      "name": "教育",
+      "category": "ジャンル"
+    },
+    {
+      "name": "その他",
+      "category": "ジャンル"
+    },
+    {
+      "name": "1人用",
+      "category": "プレイ形式"
+    },
+    {
+      "name": "2人用",
+      "category": "プレイ形式"
+    },
+    {
+      "name": "複数人",
+      "category": "プレイ形式"
+    },
+    {
+      "name": "対戦",
+      "category": "プレイ形式"
+    },
+    {
+      "name": "協力",
+      "category": "プレイ形式"
+    },
+    {
+      "name": "PvP",
+      "category": "プレイ形式"
+    },
+    {
+      "name": "PvE",
+      "category": "プレイ形式"
+    },
+    {
+      "name": "ターン制",
+      "category": "プレイ形式"
+    },
+    {
+      "name": "リアルタイム",
+      "category": "プレイ形式"
+    },
+    {
+      "name": "2D",
+      "category": "画面・視点"
+    },
+    {
+      "name": "2.5D",
+      "category": "画面・視点"
+    },
+    {
+      "name": "3D",
+      "category": "画面・視点"
+    },
+    {
+      "name": "一人称",
+      "category": "画面・視点"
+    },
+    {
+      "name": "三人称",
+      "category": "画面・視点"
+    },
+    {
+      "name": "見下ろし",
+      "category": "画面・視点"
+    },
+    {
+      "name": "横スクロール",
+      "category": "画面・視点"
+    },
+    {
+      "name": "縦スクロール",
+      "category": "画面・視点"
+    },
+    {
+      "name": "キーボード",
+      "category": "操作"
+    },
+    {
+      "name": "マウス",
+      "category": "操作"
+    },
+    {
+      "name": "ゲームパッド",
+      "category": "操作"
+    },
+    {
+      "name": "タッチ操作",
+      "category": "操作"
+    },
+    {
+      "name": "スコアアタック",
+      "category": "ゲームの特徴"
+    },
+    {
+      "name": "タイムアタック",
+      "category": "ゲームの特徴"
+    },
+    {
+      "name": "ステージ制",
+      "category": "ゲームの特徴"
+    },
+    {
+      "name": "エンドレス",
+      "category": "ゲームの特徴"
+    },
+    {
+      "name": "探索",
+      "category": "ゲームの特徴"
+    },
+    {
+      "name": "収集",
+      "category": "ゲームの特徴"
+    },
+    {
+      "name": "育成",
+      "category": "ゲームの特徴"
+    },
+    {
+      "name": "クラフト",
+      "category": "ゲームの特徴"
+    },
+    {
+      "name": "建築",
+      "category": "ゲームの特徴"
+    },
+    {
+      "name": "謎解き",
+      "category": "ゲームの特徴"
+    },
+    {
+      "name": "ボス戦",
+      "category": "ゲームの特徴"
+    },
+    {
+      "name": "ランダム生成",
+      "category": "ゲームの特徴"
+    },
+    {
+      "name": "物理演算",
+      "category": "ゲームの特徴"
+    },
+    {
+      "name": "高難易度",
+      "category": "ゲームの特徴"
+    },
+    {
+      "name": "カジュアル",
+      "category": "ゲームの特徴"
+    },
+    {
+      "name": "短時間プレイ",
+      "category": "ゲームの特徴"
+    },
+    {
+      "name": "かわいい",
+      "category": "雰囲気・デザイン"
+    },
+    {
+      "name": "かっこいい",
+      "category": "雰囲気・デザイン"
+    },
+    {
+      "name": "シンプル",
+      "category": "雰囲気・デザイン"
+    },
+    {
+      "name": "コメディ",
+      "category": "雰囲気・デザイン"
+    },
+    {
+      "name": "ダーク",
+      "category": "雰囲気・デザイン"
+    },
+    {
+      "name": "ファンタジー",
+      "category": "雰囲気・デザイン"
+    },
+    {
+      "name": "SF",
+      "category": "雰囲気・デザイン"
+    },
+    {
+      "name": "和風",
+      "category": "雰囲気・デザイン"
+    },
+    {
+      "name": "近未来",
+      "category": "雰囲気・デザイン"
+    },
+    {
+      "name": "レトロ",
+      "category": "雰囲気・デザイン"
+    },
+    {
+      "name": "ピクセルアート",
+      "category": "雰囲気・デザイン"
+    },
+    {
+      "name": "Godot",
+      "category": "開発環境"
+    },
+    {
+      "name": "Scratch",
+      "category": "開発環境"
+    },
+    {
+      "name": "TurboWarp",
+      "category": "開発環境"
+    },
+    {
+      "name": "Unity",
+      "category": "開発環境"
+    },
+    {
+      "name": "その他",
+      "category": "開発環境"
+    },
+    {
+      "name": "PC向け",
+      "category": "対応環境"
+    },
+    {
+      "name": "スマホ対応",
+      "category": "対応環境"
+    },
+    {
+      "name": "タブレット対応",
+      "category": "対応環境"
+    },
+    {
+      "name": "フルスクリーン対応",
+      "category": "対応環境"
+    },
+    {
+      "name": "オフライン対応",
+      "category": "対応環境"
+    }
+  ]
+}

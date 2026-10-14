@@ -1,5 +1,7 @@
 # Codex: Start Here
 
+オフラインHTMLランチャーの継続作業は、[現在の引き継ぎ](OFFLINE_HTML_HANDOFF.md) と [利用・運用手順](OFFLINE_HTML.md) を先に確認してください。以降は既存オンライン版の仕様です。現在のユーザー依頼の対象に合わせて作業してください。
+
 Read `CODEX_TASK.md` first. It is the authoritative handoff specification for the Supabase + Google Drive + account/admin/upload work.
 
 ## Immediate task
