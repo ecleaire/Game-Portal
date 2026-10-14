@@ -35,6 +35,34 @@ export async function saveMetadata(root, data) {
 export function tagsFrom(text) {
   return [...new Set(String(text).split(/[,、\n]/).map(s => s.trim()).filter(Boolean))].slice(0, 12).map(s => s.slice(0, 32));
 }
+export async function loadGameSettings(root, path) {
+  safePath(path);
+  try {
+    const file = await getFile(root, path + '.gameportal.json');
+    if (file.size > 2 * 1024 * 1024) throw new Error('ゲーム設定のサイズが大きすぎます。');
+    const text = await file.text(), data = JSON.parse(text);
+    if (data.schema !== 1 || typeof data.id !== 'string' || !/^[a-f0-9]{32}$/.test(data.id) ||
+      typeof data.title !== 'string' || !data.title.trim() || data.title.length > 120 ||
+      !Array.isArray(data.tags) || data.tags.length > 12 || data.tags.some(t => typeof t !== 'string' || t.length > 32) ||
+      typeof data.developmentEnvironment !== 'string' || data.developmentEnvironment.length > 120 ||
+      (data.thumbnail !== null && (typeof data.thumbnail !== 'string' || !/^data:image\/webp;base64,[A-Za-z0-9+/]+={0,2}$/.test(data.thumbnail)))) {
+      throw new Error('ゲーム設定の形式を確認してください：' + path + '.gameportal.json');
+    }
+    return { data, text };
+  } catch (error) { if (error.name === 'NotFoundError') return { data: null, text: null }; throw error; }
+}
+export async function saveGameSettings(root, game, values) {
+  const current = await loadGameSettings(root, game.path);
+  if (current.text !== game.settingsText) throw new Error('このゲームの設定が更新されています。「再読み込み」してから編集してください。');
+  const next = { ...current.data, schema: 1, id: game.id, title: values.title.trim(),
+    tags: tagsFrom(values.tags.join(',')), developmentEnvironment: values.developmentEnvironment.trim(),
+    thumbnail: values.thumbnail, updatedAt: new Date().toISOString() };
+  if (!next.title || next.title.length > 120 || next.developmentEnvironment.length > 120 ||
+    (next.thumbnail !== null && (typeof next.thumbnail !== 'string' || !/^data:image\/webp;base64,[A-Za-z0-9+/]+={0,2}$/.test(next.thumbnail)))) throw new Error('ゲーム設定の入力内容を確認してください。');
+  const text = JSON.stringify(next, null, 2) + '\n';
+  if (new TextEncoder().encode(text).length > 2 * 1024 * 1024) throw new Error('ゲーム設定のサイズが大きすぎます。');
+  await writeFile(root, game.path + '.gameportal.json', text);
+}
 export function validatePyxapp(buffer) {
   const bytes = new Uint8Array(buffer), view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   if (bytes.length < 22 || bytes.length > 50 * 1024 * 1024) throw new Error('PYXAPPは50MB以内にしてください。');
@@ -68,9 +96,12 @@ export async function gameId(path) {
 export async function scan(root, metadata) {
   const games = []; let visited = 0;
   async function add(path, title, kind, handle, folder, entry) {
-    const saved = Object.hasOwn(metadata.games, path) ? metadata.games[path] : {};
-    games.push({ id: await gameId(path), path, kind, handle, folder, entry, title: typeof saved?.title === 'string' && saved.title.trim() ? saved.title.slice(0, 120) : title,
-      tags: Array.isArray(saved?.tags) ? tagsFrom(saved.tags.filter(t => typeof t === 'string').join(',')) : [], thumbnail: saved?.thumbnail === true });
+    const settings = await loadGameSettings(root, path);
+    const saved = settings.data || (Object.hasOwn(metadata.games, path) ? metadata.games[path] : {});
+    games.push({ id: settings.data?.id || await gameId(path), settingsText: settings.text, path, kind, handle, folder, entry, title: typeof saved?.title === 'string' && saved.title.trim() ? saved.title.slice(0, 120) : title,
+      tags: Array.isArray(saved?.tags) ? tagsFrom(saved.tags.filter(t => typeof t === 'string').join(',')) : [],
+      developmentEnvironment: settings.data?.developmentEnvironment || (kind === 'pyxapp' ? 'Pyxel' : ''),
+      thumbnail: settings.data ? saved.thumbnail : saved?.thumbnail === true });
   }
   async function walk(folder, prefix = '', depth = 0) {
     const entries = []; for await (const entry of folder.values()) { if (++visited > 10000) throw new Error('ファイルが多すぎます。ゲーム専用のフォルダーを選択してください。'); if (!entry.name.startsWith('.')) entries.push(entry); }
@@ -93,7 +124,7 @@ export async function readTree(folder) {
       const path = prefix + entry.name; safePath(path);
       if (entry.kind === 'directory') await walk(entry, path + '/');
       else {
-        if (/\.(zip|pyxapp|exe)$/i.test(path) || /^GAME-PORTAL\.html$/i.test(entry.name)) continue;
+        if (/\.(zip|pyxapp|exe)$/i.test(path) || /\.gameportal\.json$/i.test(path) || /^GAME-PORTAL\.html$/i.test(entry.name)) continue;
         const file = await entry.getFile(); bytes += file.size;
         if (files.size >= MAX_FILES || bytes > MAX_BYTES) throw new Error('ゲームは500ファイル・展開後200MB以内にしてください。');
         files.set(path, new Uint8Array(await file.arrayBuffer()));
@@ -120,7 +151,8 @@ export async function postGame(root, files, packageTools) {
     const layout = single ? null : packageTools.webArchiveLayout(paths);
     const entry = single ? paths[0] : layout.root + layout.entry;
     const relative = name + '/' + entry;
-    const data = await loadMetadata(root); data.games[relative] = { title, tags: [], thumbnail: false };
-    await saveMetadata(root, data); return relative;
+    await saveGameSettings(root, { path: relative, id: await gameId(relative), settingsText: null },
+      { title, tags: [], thumbnail: null, developmentEnvironment: /\.pyxapp$/i.test(entry) ? 'Pyxel' : '' });
+    return relative;
   } catch (e) { await root.removeEntry(name, { recursive: true }).catch(() => {}); throw e; }
 }

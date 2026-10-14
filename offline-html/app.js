@@ -50,13 +50,14 @@ async function render() {
     const option = document.createElement('option'); option.value = tag; $('#knownTags').append(option);
   }
   const keyword = $('#search').value.trim().toLocaleLowerCase();
-  const matches = games.filter(g => (g.title + ' ' + g.tags.join(' ')).toLocaleLowerCase().includes(keyword) && [...selectedTags].every(t => g.tags.includes(t)));
+  const matches = games.filter(g => (g.title + ' ' + g.developmentEnvironment + ' ' + g.tags.join(' ')).toLocaleLowerCase().includes(keyword) && [...selectedTags].every(t => g.tags.includes(t)));
   $('#count').textContent = String(matches.length); $('#games').replaceChildren(); $('#empty').hidden = matches.length > 0;
   $('#empty').textContent = !root ? '「設定」から保管フォルダーを指定してください。' : games.length ? '条件に合うゲームがありません。' : 'ゲームがありません。「投稿」からHTML・ZIP・PYXAPPを追加できます。';
   for (const game of matches) {
     const article = document.createElement('article'); article.className = 'card';
     const cover = document.createElement('div'); cover.className = 'cover'; cover.textContent = '▶\uFE0E';
-    if (game.thumbnail) try {
+    if (typeof game.thumbnail === 'string') { const img = document.createElement('img'); img.src = game.thumbnail; img.alt = ''; cover.replaceChildren(img); }
+    else if (game.thumbnail) try {
       const file = await library.getFile(folder, `.gameportal/thumbnails/${game.id}.webp`);
       if (revision !== renderRevision) return;
       if (file.size <= 2 * 1024 * 1024) { const url = URL.createObjectURL(file); imageURLs.push(url); const img = document.createElement('img'); img.src = url; img.alt = ''; cover.replaceChildren(img); }
@@ -64,7 +65,7 @@ async function render() {
     if (revision !== renderRevision) return;
     const body = document.createElement('div'); body.className = 'cardbody';
     const title = document.createElement('h2'); title.textContent = game.title;
-    const type = document.createElement('p'); type.className = 'type'; type.textContent = game.kind === 'pyxapp' ? 'Pyxel' : 'Webゲーム';
+    const type = document.createElement('p'); type.className = 'type'; type.textContent = game.developmentEnvironment || (game.kind === 'pyxapp' ? 'Pyxel' : 'Webゲーム');
     const tags = document.createElement('div'); tags.className = 'tags';
     for (const tag of game.tags) { const span = document.createElement('span'); span.className = 'tag'; span.textContent = tag; tags.append(span); }
     const buttons = document.createElement('div'); buttons.className = 'buttons';
@@ -74,7 +75,7 @@ async function render() {
   }
 }
 function editGame(game) {
-  editing = game; $('#editTitle').value = game.title; $('#editTags').value = game.tags.join(', '); $('#editImage').value = ''; $('#clearImage').checked = false; $('#edit').showModal();
+  editing = game; $('#editEnvironment').value = game.developmentEnvironment; $('#editSettingsPath').textContent = game.path + '.gameportal.json'; $('#editTitle').value = game.title; $('#editTags').value = game.tags.join(', '); $('#editImage').value = ''; $('#clearImage').checked = false; $('#edit').showModal();
 }
 async function thumbnail(file) {
   if (file.size > 10 * 1024 * 1024 || !['image/png','image/jpeg','image/webp'].includes(file.type)) throw new Error('画像はPNG・JPEG・WebPの10MB以内で選択してください。');
@@ -135,13 +136,12 @@ for (const id of ['postFiles', 'postDirectory']) $( '#' + id).onchange = event =
   await library.postGame(root, event.target.files, preview); event.target.value = ''; $('#post').close(); await refresh();
 });
 $('#editForm').onsubmit = event => { event.preventDefault(); if (!event.target.reportValidity()) return; action(async () => {
-  const current = await library.loadMetadata(root);
-  if (current.revision !== metadata.revision) throw new Error('管理情報が更新されています。「再読み込み」してください。');
-  let hasImage = editing.thumbnail && !$('#clearImage').checked;
+  let image = $('#clearImage').checked ? null : editing.thumbnail;
   const file = $('#editImage').files[0];
-  if (file) { await library.writeFile(root, `.gameportal/thumbnails/${editing.id}.webp`, await thumbnail(file)); hasImage = true; }
-  current.games[editing.path] = { title: $('#editTitle').value.trim(), tags: library.tagsFrom($('#editTags').value), thumbnail: hasImage };
-  await library.saveMetadata(root, current); $('#edit').close(); await refresh();
+  const asDataURL = blob => new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(reader.error); reader.readAsDataURL(blob); });
+  if (file) image = await asDataURL(await thumbnail(file));
+  else if (image === true) image = await asDataURL(await library.getFile(root, `.gameportal/thumbnails/${editing.id}.webp`));
+  await library.saveGameSettings(root, editing, { title: $('#editTitle').value, tags: library.tagsFrom($('#editTags').value), developmentEnvironment: $('#editEnvironment').value, thumbnail: image || null }); $('#edit').close(); await refresh();
 }); };
 $('#closePlayer').onclick = async () => { await flushSave(); if (stopGame) stopGame(); stopGame = null; $('#player').close(); };
 $('#player').addEventListener('cancel', event => { event.preventDefault(); $('#closePlayer').click(); });

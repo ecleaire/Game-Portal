@@ -48,11 +48,33 @@ try {
   const card = title => page.locator('.card').filter({has:page.getByRole('heading',{name:title,exact:true})});
   await post(gameFile); await expect(card('Sample')).toBeVisible();
   await card('Sample').getByRole('button',{name:'編集'}).click();
-  await page.locator('#editTitle').fill('My portable game'); await page.locator('#editTags').fill('アクション, お気に入り');
+  await page.locator('#editEnvironment').fill('Godot 4.5'); await page.locator('#editTitle').fill('My portable game'); await page.locator('#editTags').fill('アクション, お気に入り');
   const cover = await page.evaluate(()=>{const c=document.createElement('canvas');c.width=64;c.height=36;const ctx=c.getContext('2d');ctx.fillStyle='#67ddc4';ctx.fillRect(0,0,64,36);return c.toDataURL().split(',')[1];});
   await page.locator('#editImage').setInputFiles({name:'cover.png',mimeType:'image/png',buffer:Buffer.from(cover,'base64')});
   await page.getByRole('button',{name:'保存',exact:true}).click(); await expect(card('My portable game')).toBeVisible();
   await expect(card('My portable game').locator('img')).toHaveCount(1);
+  const readSettings = () => page.evaluate(async () => {
+    for await (const dir of window.testRoot.values()) if (dir.kind === 'directory' && dir.name.startsWith('game-')) {
+      for await (const entry of dir.values()) if (entry.name === 'Sample.html.gameportal.json') return { path: dir.name + '/' + entry.name, data: JSON.parse(await (await entry.getFile()).text()) };
+    }
+  });
+  const initialSettings = await readSettings();
+  assert.equal(initialSettings.data.title, 'My portable game');
+  assert.equal(initialSettings.data.developmentEnvironment, 'Godot 4.5');
+  assert.deepEqual(initialSettings.data.tags, ['アクション', 'お気に入り']);
+  assert.match(initialSettings.data.thumbnail, /^data:image\/webp;base64,/);
+  await card('My portable game').getByRole('button',{name:'編集'}).click();
+  await expect(page.locator('#editEnvironment')).toHaveValue('Godot 4.5');
+  await page.locator('#editEnvironment').fill('Godot 4.6');
+  await page.getByRole('button',{name:'保存',exact:true}).click();
+  await expect(page.locator('#edit')).not.toBeVisible();
+  const updatedSettings = await readSettings();
+  assert.equal(updatedSettings.path, initialSettings.path);
+  assert.equal(updatedSettings.data.developmentEnvironment, 'Godot 4.6');
+  assert.equal(updatedSettings.data.thumbnail, initialSettings.data.thumbnail);
+  assert.equal(updatedSettings.data.id, initialSettings.data.id);
+  await page.locator('#search').fill('Godot 4.6'); await expect(page.locator('.card')).toHaveCount(1); await page.locator('#search').fill('');
+
   await page.evaluate(()=>{const s=document.querySelector('#search');for(const value of ['','My','missing']){s.value=value;s.dispatchEvent(new Event('input'));}});
   await page.evaluate(()=>new Promise(resolve=>setTimeout(resolve,100)));await expect(page.locator('.card')).toHaveCount(0);await page.locator('#search').fill('');
   await page.locator('#search').fill('missing'); await expect(page.locator('.card')).toHaveCount(0); await page.locator('#search').fill('お気に入り'); await expect(page.locator('.card')).toHaveCount(1); await page.locator('#search').fill('');
@@ -65,6 +87,7 @@ try {
   await page.getByRole('button',{name:'終了',exact:true}).click();
   const zip = await packageWebFiles([new File(['<h1>ZIP offline</h1><script>fetch("data.json").then(r=>r.json()).then(d=>document.body.dataset.loaded=d.value)</script>'],'index.html'),new File(['{"value":"local"}'],'data.json')]);
   const zipName=join(temp,'Package.zip'); await writeFile(zipName,Buffer.from(await zip.arrayBuffer())); await post(zipName);
+  assert.deepEqual(await readSettings(), updatedSettings);
   await card('Package').getByRole('button',{name:'プレイ'}).click(); await expect(frame.getByRole('heading',{name:'ZIP offline'})).toBeVisible(); await expect(frame.locator('body')).toHaveAttribute('data-loaded','local'); await page.getByRole('button',{name:'終了',exact:true}).click();
   // Move all bytes (not browser handles or cached state) into a fresh folder.
   await page.evaluate(async () => {
@@ -73,7 +96,7 @@ try {
     await copy(window.testRoot,target); window.testRoot=target; window.showDirectoryPicker=async()=>target;
   });
   await page.getByRole('button',{name:'設定',exact:true}).click(); await page.getByRole('button',{name:'フォルダーを指定',exact:true}).click();
-  await expect(page.locator('#folderName')).toHaveText('copied-library'); await expect(card('My portable game').locator('img')).toHaveCount(1);
+  await expect(page.locator('#folderName')).toHaveText('copied-library'); await expect(card('My portable game').locator('.type')).toHaveText('Godot 4.6'); await expect(card('My portable game').locator('img')).toHaveCount(1);
   await card('My portable game').getByRole('button',{name:'プレイ'}).click(); await expect(frame.locator('body')).toHaveAttribute('data-previous','saved'); await page.getByRole('button',{name:'終了',exact:true}).click();
   const source='import pyxel\nfrom js import document\npyxel.init(32,32,title="Offline Pyxel")\ndocument.body.dataset.pyxel="running"\ndef update():\n    pass\ndef draw():\n    pyxel.cls(3)\npyxel.run(update,draw)\n';
   const app = await packageWebFiles([new File(['main.py'],'test/.pyxapp_startup_script'),new File([source],'test/main.py')]);
@@ -83,6 +106,31 @@ try {
   await frame.locator('#canvas').click(); await expect(frame.locator('body')).toHaveAttribute('data-pyxel','running',{timeout:30000});
   await expect.poll(()=>frame.locator('body').evaluate(()=>window.pyxelContext.pyodide.runPython('import pyxel; pyxel.frame_count'))).toBeGreaterThan(0);
   await page.getByRole('button',{name:'終了',exact:true}).click();
+  // Existing installations keep their title/tags/cover when first saved to a sidecar.
+  await page.evaluate(async image => {
+    async function write(dir, name, bytes) { const writer = await (await dir.getFileHandle(name,{create:true})).createWritable(); await writer.write(bytes); await writer.close(); }
+    await write(window.testRoot,'Legacy.html','<h1>Legacy</h1>');
+    const admin = await window.testRoot.getDirectoryHandle('.gameportal',{create:true});
+    const thumbs = await admin.getDirectoryHandle('thumbnails',{create:true});
+    const digest = await crypto.subtle.digest('SHA-256',new TextEncoder().encode('Legacy.html'));
+    const id = [...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('').slice(0,32);
+    await write(thumbs,id+'.webp',Uint8Array.from(atob(image.split(',')[1]),c=>c.charCodeAt(0)));
+    await write(admin,'library.json',JSON.stringify({schema:1,revision:'legacy',games:{'Legacy.html':{title:'Legacy saved name',tags:['legacy'],thumbnail:true}}}));
+  },initialSettings.data.thumbnail);
+  await page.getByRole('button',{name:'再読み込み',exact:true}).click();
+  await expect(card('Legacy saved name').locator('img')).toHaveCount(1);
+  await card('Legacy saved name').getByRole('button',{name:'編集'}).click();
+  await page.locator('#editEnvironment').fill('Scratch');
+  await page.getByRole('button',{name:'保存',exact:true}).click();
+  await expect(page.locator('#edit')).not.toBeVisible();
+  const legacy = await page.evaluate(async()=>JSON.parse(await(await(await window.testRoot.getFileHandle('Legacy.html.gameportal.json')).getFile()).text()));
+  assert.equal(legacy.title,'Legacy saved name'); assert.deepEqual(legacy.tags,['legacy']); assert.equal(legacy.thumbnail,initialSettings.data.thumbnail);
+  await card('Legacy saved name').getByRole('button',{name:'編集'}).click();
+  await page.evaluate(async()=>{const handle=await window.testRoot.getFileHandle('Legacy.html.gameportal.json');const data=JSON.parse(await(await handle.getFile()).text());data.title='Updated elsewhere';const w=await handle.createWritable();await w.write(JSON.stringify(data));await w.close();});
+  await page.locator('#editTitle').fill('Stale overwrite'); await page.getByRole('button',{name:'保存',exact:true}).click();
+  await expect(page.locator('#status')).toContainText('更新されています');
+  await page.getByRole('button',{name:'キャンセル',exact:true}).click();
+  await page.getByRole('button',{name:'再読み込み',exact:true}).click(); await expect(card('Updated elsewhere')).toBeVisible();
   assert.equal(requests.length,before,'No HTTP requests may start after loading the single HTML');
   assert.deepEqual(errors,[]);
   await page.screenshot({path:join(temp,'offline-html.png'),fullPage:true});

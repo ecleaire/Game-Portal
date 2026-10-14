@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { safePath, tagsFrom, gameId, validatePyxapp, embeddedPyxel, loadMetadata, saveMetadata } from '../offline-html/library.js';
+import { safePath, tagsFrom, gameId, validatePyxapp, embeddedPyxel, loadMetadata, saveMetadata, loadGameSettings, saveGameSettings, scan, readTree } from '../offline-html/library.js';
 import { packageWebFiles } from '../assets/zip-upload.js';
 
 test('portable paths reject traversal, alternate streams and Windows aliases', () => {
@@ -31,4 +31,41 @@ test('metadata version and stale revision errors preserve existing files', async
   await assert.rejects(saveMetadata(root,{schema:1,revision:'old',games:{}}),/更新/);assert.equal(writes,0);
   text=JSON.stringify({schema:2,revision:'new',games:{}});await assert.rejects(loadMetadata(root));assert.equal(writes,0);
   text='{invalid';await assert.rejects(loadMetadata(root));assert.equal(writes,0);
+});
+
+function memoryFolder() {
+  const files = new Map();
+  const root = { name: 'games', kind: 'directory', getDirectoryHandle: async () => root,
+    getFileHandle: async (name, options) => {
+      if (!files.has(name) && !options?.create) throw new DOMException('Missing', 'NotFoundError');
+      return { name, kind: 'file', getFile: async () => new File([files.get(name)], name), createWritable: async () => {
+        let pending; return { write: async value => { pending = value; }, close: async () => files.set(name, pending), abort: async () => {} };
+      }};
+    }, async *values() { for (const name of files.keys()) yield await root.getFileHandle(name); }
+  };
+  return { root, files };
+}
+test('per-game files preserve settings, thumbnails and identity without changing other games', async () => {
+  const { root, files } = memoryFolder(); files.set('one.html', '<h1>one</h1>'); files.set('two.html', '<h1>two</h1>');
+  const metadata = { games: {} }, games = await scan(root, metadata);
+  const image = 'data:image/webp;base64,YWJjZA==';
+  await saveGameSettings(root, games[0], { title: 'Edited', tags: ['日本語'], developmentEnvironment: 'Godot 4.5', thumbnail: image });
+  assert.equal(files.has('two.html.gameportal.json'), false);
+  const [first] = (await scan(root, metadata)).filter(g => g.title === 'Edited');
+  assert.equal(first.thumbnail, image); assert.equal(first.developmentEnvironment, 'Godot 4.5'); assert.equal(first.id, games[0].id);
+  assert.equal((await readTree(root)).has('one.html.gameportal.json'), false);
+  await assert.rejects(saveGameSettings(root, games[0], { title: 'Stale', tags: [], developmentEnvironment: '', thumbnail: null }), /更新/);
+  const settings = await loadGameSettings(root, 'one.html');
+  files.set('one.html.gameportal.json', JSON.stringify({ ...settings.data, title: 'Hand edited' }));
+  await assert.rejects(saveGameSettings(root, first, { title: 'Stale', tags: [], developmentEnvironment: '', thumbnail: null }), /更新/);
+  assert.equal((await loadGameSettings(root, 'one.html')).data.title, 'Hand edited');
+  files.set('one.html.gameportal.json', JSON.stringify({ ...settings.data, schema: 2 }));
+  await assert.rejects(loadGameSettings(root, 'one.html'), /形式/);
+});
+test('legacy metadata remains available until a game is edited into its own settings file', async () => {
+  const { root, files } = memoryFolder(); files.set('old.html', 'game');
+  const old = { games: { 'old.html': { title: 'Old title', tags: ['old'], thumbnail: true } } };
+  const [game] = await scan(root, old); assert.equal(game.title, 'Old title'); assert.equal(game.thumbnail, true);
+  await saveGameSettings(root, game, { title: 'New title', tags: game.tags, developmentEnvironment: 'Scratch', thumbnail: null });
+  assert.equal((await scan(root, old))[0].title, 'New title'); assert.equal(old.games['old.html'].title, 'Old title');
 });
