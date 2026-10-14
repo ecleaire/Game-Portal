@@ -105,15 +105,6 @@ try {
   assert.equal(exportedData.gameId,initialSettings.data.id);
   // A second tab must not overwrite saves from an active session.
   peer.on('crash',()=>peerTrace.push('renderer crashed')); peer.on('close',()=>peerTrace.push('page closed'));
-  await peer.exposeFunction('recordPeerTrace',message=>peerTrace.push(message));
-  await peer.evaluate(()=>{for(const [object,key] of [[library,'loadMetadata'],[library,'scan'],[localState,'localLibraryId']]){const original=object[key];object[key]=async(...args)=>{await window.recordPeerTrace(key+' start');try{const value=await original(...args);await window.recordPeerTrace(key+' done');return value;}catch(error){await window.recordPeerTrace(key+' failed: '+error.message);throw error;}}}});
-  await peer.evaluate(()=>{
-    const same=FileSystemHandle.prototype.isSameEntry;
-    FileSystemHandle.prototype.isSameEntry=async function(...args){await window.recordPeerTrace('isSameEntry start');const result=await same.apply(this,args);await window.recordPeerTrace('isSameEntry done '+result);return result;};
-    for(const method of ['getAllKeys','get']){const original=IDBObjectStore.prototype[method];IDBObjectStore.prototype[method]=function(...args){window.recordPeerTrace(method+' '+this.name);const request=original.apply(this,args);request.addEventListener('success',()=>window.recordPeerTrace(method+' done'));return request;};}
-    const locks=navigator.locks.request.bind(navigator.locks);
-    navigator.locks.request=(name,...args)=>{window.recordPeerTrace('lock request '+name);const cb=args.pop();return locks(name,...args,async lock=>{await window.recordPeerTrace('lock entered '+name);return cb(lock);});};
-  });
   await peer.evaluate(async()=>{const opfs=await navigator.storage.getDirectory();const dir=await opfs.getDirectoryHandle('games');window.showDirectoryPicker=async()=>dir;});
   await peer.getByRole('button',{name:'設定',exact:true}).click();await peer.getByRole('button',{name:'フォルダーを指定',exact:true}).click();
   await expect(peer.locator('#folderName')).toHaveText('games');
@@ -134,7 +125,7 @@ try {
   await page.evaluate(async () => {
     const opfs=await navigator.storage.getDirectory(), target=await opfs.getDirectoryHandle('copied-library',{create:true});
     async function copy(from,to) { for await(const entry of from.values()) if(entry.kind==='directory')await copy(entry,await to.getDirectoryHandle(entry.name,{create:true}));else{const w=await(await to.getFileHandle(entry.name,{create:true})).createWritable();await w.write(await entry.getFile());await w.close();} }
-    await copy(window.testRoot,target); window.testRoot=target; window.showDirectoryPicker=async()=>target;
+    await copy(window.testRoot,target); await (await target.getDirectoryHandle('.gameportal')).removeEntry('library-id.json'); window.testRoot=target; window.showDirectoryPicker=async()=>target;
   });
   await page.getByRole('button',{name:'設定',exact:true}).click(); await page.getByRole('button',{name:'フォルダーを指定',exact:true}).click();
   await expect(page.locator('#folderName')).toHaveText('copied-library'); await expect(card('My portable game').locator('.type')).toHaveText('Godot 4.6'); await expect(card('My portable game').locator('img')).toHaveCount(1);
@@ -147,6 +138,7 @@ try {
   page.once('dialog',dialog=>dialog.accept());
   await page.locator('#importSave').setInputFiles({name:'save.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({...exportedData,data:{level:'imported'}}))});
   await expect(frame.locator('body')).toHaveAttribute('data-previous','imported');
+  for (const value of ['restart-1','restart-2']) { page.once('dialog',dialog=>dialog.accept()); await page.locator('#importSave').setInputFiles({name:'save.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({...exportedData,data:{level:value}}))}); await expect(frame.locator('body')).toHaveAttribute('data-previous',value); }
   // Quota/write failure keeps the pending snapshot and does not close the player.
   await page.evaluate(()=>{window.originalSavePut=IDBObjectStore.prototype.put;IDBObjectStore.prototype.put=function(...args){if(this.name==='saves')throw new DOMException('Test full disk','QuotaExceededError');return window.originalSavePut.apply(this,args);};});
   await frame.locator('body').evaluate(()=>localStorage.setItem('level','unsaved'));

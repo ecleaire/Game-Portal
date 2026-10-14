@@ -1,6 +1,6 @@
 // Executed inside an opaque sandbox. Only game bytes, runtime bytes and its own
 // localStorage snapshot cross the message port; directory handles never do.
-function webBootstrap() {
+function webBootstrap(nonce) {
   addEventListener('message', event => {
     if (event.source !== parent || event.data?.type !== 'offline-game' || !event.ports[0]) return;
     const port = event.ports[0];
@@ -23,8 +23,9 @@ function webBootstrap() {
       document.open(); document.write(html); document.close();
     } catch (e) { port.postMessage({ type: 'error', message: e.message }); }
   }, { once: true });
+  parent.postMessage({ type: 'offline-bootstrap-ready', nonce }, '*');
 }
-function pyxelBootstrap() {
+function pyxelBootstrap(nonce) {
   addEventListener('message', async event => {
     if (event.source !== parent || event.data?.type !== 'offline-game' || !event.ports[0]) return;
     const port = event.ports[0], assets = event.data.runtime, urls = new Map(), bytes = new Map();
@@ -66,6 +67,7 @@ function pyxelBootstrap() {
       await window.launchPyxel({ command: 'play', name: 'game.pyxapp', base64: event.data.app, gamepad: 'enabled' });
     } catch (e) { port.postMessage({ type: 'error', message: 'Pyxelを起動できません：' + e.message }); }
   }, { once: true });
+  parent.postMessage({ type: 'offline-bootstrap-ready', nonce }, '*');
 }
 export function startPlayer(frame, options, preview, onMessage) {
   const channel = new MessageChannel();
@@ -75,7 +77,13 @@ export function startPlayer(frame, options, preview, onMessage) {
   const helpers = `const decoder=new TextDecoder();const mimeTypes=${JSON.stringify(mimeTypes)};const mime=n=>mimeTypes[n.split('.').pop().toLowerCase()]||'application/octet-stream';window.offlinePreview=${preview.privatePreviewDocument.toString()};`;
   const boot = options.kind === 'pyxapp' ? pyxelBootstrap : webBootstrap;
   const csp = "default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data:; style-src 'unsafe-inline' blob:; img-src blob: data:; connect-src blob: data:; worker-src blob:; font-src blob: data:; media-src blob: data:; base-uri 'none'";
-  frame.addEventListener('load', () => frame.contentWindow.postMessage({ type: 'offline-game', ...options }, '*', [channel.port2]), { once: true });
-  frame.srcdoc = `<!doctype html><meta http-equiv="Content-Security-Policy" content="${csp}"><style>body{margin:0;background:#080c0e;color:white}canvas{image-rendering:pixelated}</style><script>${(helpers + '(' + boot.toString() + ')();').replaceAll('</script', '<\\/script')}<\/script>`;
-  return () => { channel.port1.close(); channel.port2.close(); frame.srcdoc = ''; };
+  const nonce = crypto.randomUUID();
+  const ready = event => {
+    if (event.source !== frame.contentWindow || event.data?.type !== 'offline-bootstrap-ready' || event.data.nonce !== nonce) return;
+    window.removeEventListener('message', ready);
+    frame.contentWindow.postMessage({ type: 'offline-game', ...options }, '*', [channel.port2]);
+  };
+  window.addEventListener('message', ready);
+  frame.srcdoc = `<!doctype html><meta http-equiv="Content-Security-Policy" content="${csp}"><style>body{margin:0;background:#080c0e;color:white}canvas{image-rendering:pixelated}</style><script>${(helpers + '(' + boot.toString() + ')(' + JSON.stringify(nonce) + ');').replaceAll('</script', '<\\/script')}<\/script>`;
+  return () => { window.removeEventListener('message', ready); channel.port1.close(); channel.port2.close(); frame.srcdoc = ''; };
 }

@@ -16,6 +16,29 @@ export async function writeFile(root, path, content) {
   try { await writer.write(content); await writer.close(); }
   catch (error) { await writer.abort().catch(() => {}); throw error; }
 }
+function parseLibraryId(text) {
+  const data = JSON.parse(text);
+  if (data.schema !== 1 || typeof data.id !== 'string' || !/^[a-f0-9]{32}$/.test(data.id)) throw new Error('保管フォルダーのID設定を確認してください。');
+  return data.id;
+}
+export async function loadLibraryId(root) {
+  try { const file = await getFile(root, '.gameportal/library-id.json'); if (file.size > 1024) throw new Error('保管フォルダーのID設定が大きすぎます。'); return parseLibraryId(await file.text()); }
+  catch (error) { if (error.name === 'NotFoundError') return null; throw error; }
+}
+export async function ensureLibraryId(root) {
+  const existing = await loadLibraryId(root); if (existing) return existing;
+  const folder = await root.getDirectoryHandle('.gameportal', { create: true });
+  const handle = await folder.getFileHandle('library-id.json', { create: true });
+  const writer = await handle.createWritable({ mode: 'exclusive' });
+  try {
+    const text = await (await handle.getFile()).text();
+    if (text) { const id = parseLibraryId(text); await writer.abort(); return id; }
+    const id = crypto.randomUUID().replaceAll('-', '');
+    await writer.write(JSON.stringify({ schema: 1, id }, null, 2)); await writer.close();
+    if (await loadLibraryId(root) !== id) throw new Error('初期設定中に別の更新がありました。フォルダーを選び直してください。');
+    return id;
+  } catch (error) { await writer.abort().catch(() => {}); throw error; }
+}
 export async function loadMetadata(root) {
   try {
     const file = await getFile(root, '.gameportal/library.json');

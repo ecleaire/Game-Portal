@@ -32,8 +32,8 @@ const offlinePreview = (await source('assets/private-preview.js')).replaceAll("s
 const script = [
   'const tagPresets=' + JSON.stringify(JSON.parse(await source('offline-html/tag-presets.json')).tags) + ';',
   wrap('preview', offlinePreview, 'unpackPrivateZip,webArchiveLayout,privatePreviewDocument'),
-  wrap('library', await source('offline-html/library.js'), 'safePath,getFile,writeFile,loadMetadata,saveMetadata,loadGameSettings,saveGameSettings,tagsFrom,gameId,scan,readTree,postGame,validatePyxapp,embeddedPyxel'),
-  wrap('localState', await source('offline-html/local-state.js'), 'cacheHandle,localLibraryId,loadLocalSave,writeLocalSave,acquirePlaySession,validSave'),
+  wrap('library', await source('offline-html/library.js'), 'safePath,getFile,writeFile,loadLibraryId,ensureLibraryId,loadMetadata,saveMetadata,loadGameSettings,saveGameSettings,tagsFrom,gameId,scan,readTree,postGame,validatePyxapp,embeddedPyxel'),
+  wrap('localState', await source('offline-html/local-state.js'), 'cacheHandle,loadLocalSave,writeLocalSave,acquirePlaySession,validSave'),
   wrap('player', await source('offline-html/player.js'), 'startPlayer'),
   await source('offline-html/app.js'),
 ].join('\n').replaceAll('</script', '<\\/script');

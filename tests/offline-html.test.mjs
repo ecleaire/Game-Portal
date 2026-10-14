@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { safePath, tagsFrom, gameId, validatePyxapp, embeddedPyxel, loadMetadata, saveMetadata, loadGameSettings, saveGameSettings, scan, readTree, postGame } from '../offline-html/library.js';
+import { safePath, tagsFrom, gameId, validatePyxapp, embeddedPyxel, loadMetadata, saveMetadata, loadGameSettings, saveGameSettings, scan, readTree, postGame, loadLibraryId, ensureLibraryId } from '../offline-html/library.js';
 import { validSave } from '../offline-html/local-state.js';
 import { packageWebFiles } from '../assets/zip-upload.js';
 
@@ -155,4 +155,14 @@ test('a newly appearing upload marker also hides a folder during enumeration', a
   const original=child.getFileHandle;let first=true;
   child.getFileHandle=async(name,...args)=>{if(name==='.gameportal-uploading'&&first){first=false;throw new DOMException('Not visible yet','NotFoundError');}return original(name,...args);};
   assert.deepEqual((await scan(root,{games:{}})).map(game=>game.path),['complete.html']);
+});
+
+test('a library ID is initialized once, remains read-only for viewers, and separates libraries', async () => {
+  const first=memoryFolder(), second=memoryFolder();
+  assert.equal(await loadLibraryId(first.root),null); assert.equal(first.folders.size,0);
+  const id=await ensureLibraryId(first.root);assert.match(id,/^[a-f0-9]{32}$/);
+  assert.equal(await ensureLibraryId(first.root),id);assert.equal(await loadLibraryId(first.root),id);
+  assert.notEqual(await ensureLibraryId(second.root),id);
+  first.folders.get('.gameportal').files.set('library-id.json','{invalid');
+  await assert.rejects(ensureLibraryId(first.root)); assert.equal(first.folders.get('.gameportal').files.get('library-id.json'),'{invalid');
 });

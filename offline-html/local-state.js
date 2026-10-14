@@ -1,10 +1,13 @@
-// Folder handles and saves belong to this Chrome profile, never to the NAS.
+// Only the last folder label and saves are stored in this Chrome profile.
+// Directory handles are never serialized into IndexedDB.
 let database;
 function openDatabase() {
   if (!database) database = new Promise((resolve, reject) => {
-    const request = indexedDB.open('game-portal-offline-folder-v1', 2);
+    const request = indexedDB.open('game-portal-offline-folder-v1', 3);
     request.onupgradeneeded = () => {
-      for (const name of ['settings', 'libraries', 'saves']) if (!request.result.objectStoreNames.contains(name)) request.result.createObjectStore(name);
+      if (request.result.objectStoreNames.contains('libraries')) request.result.deleteObjectStore('libraries');
+      for (const name of ['settings', 'saves']) if (!request.result.objectStoreNames.contains(name)) request.result.createObjectStore(name);
+      request.transaction.objectStore('settings').delete('folder');
     };
     request.onerror = () => reject(request.error);
     request.onblocked = () => reject(new Error('以前のランチャーを閉じてから再読み込みしてください。'));
@@ -21,19 +24,7 @@ async function access(name, mode, operation) {
   });
 }
 export async function cacheHandle(value) {
-  return access('settings', value ? 'readwrite' : 'readonly', store => value ? store.put(value, 'folder') : store.get('folder'));
-}
-export async function localLibraryId(handle) {
-  const find = async () => {
-    // Deserialize handles individually: bulk handle cloning can fail across renderers.
-    const keys = await access('libraries', 'readonly', store => store.getAllKeys());
-    for (const key of keys) {
-      const item = await access('libraries', 'readonly', store => store.get(key));
-      if (item && await handle.isSameEntry(item.handle)) return item.id;
-    }
-    const id = crypto.randomUUID(); await access('libraries', 'readwrite', store => store.put({ id, handle }, id)); return id;
-  };
-  return navigator.locks.request('game-portal-library-registry', find);
+  return access('settings', value ? 'readwrite' : 'readonly', store => value ? store.put({ name: value.name }, 'folder') : store.get('folder'));
 }
 export function validSave(data) {
   return data && typeof data === 'object' && !Array.isArray(data) && Object.keys(data).length <= 1000 &&

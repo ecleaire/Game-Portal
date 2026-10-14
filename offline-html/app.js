@@ -11,7 +11,8 @@ function writeControls() {
   $('#postButton').disabled = !root || !editingEnabled;
   $('#enableEditing').checked = editingEnabled;
   $('#accessMode').textContent = editingEnabled ? '追加・編集が有効です。共有フォルダーは同時編集を避けてください。' : '閲覧・プレイのみ。ゲームと設定を書き換えません。';
-  document.querySelectorAll('[data-unavailable]').forEach(button => { button.disabled = true; });
+  document.querySelectorAll('[data-play]').forEach(button => { button.disabled = !localLibrary || button.dataset.unavailable === 'true'; });
+  $('#storageNotice').hidden = !root || !!localLibrary;
   document.querySelectorAll('[data-edit]').forEach(button => { button.disabled = !editingEnabled || button.dataset.invalid === 'true'; });
   if (starting) document.querySelectorAll('button').forEach(button => { button.disabled = true; });
 }
@@ -37,7 +38,7 @@ async function connect(handle, request = false) {
   // Read and validate before replacing the current folder or cached handle.
   const next = await library.loadMetadata(handle), nextGames = await library.scan(handle, next);
   if (!await flushSave()) throw new Error('このPCへのセーブを完了してからフォルダーを切り替えてください。');
-  const nextLocalLibrary = await localState.localLibraryId(handle);
+  const nextLocalLibrary = editingEnabled ? await library.ensureLibraryId(handle) : await library.loadLibraryId(handle);
   root = handle; localLibrary = nextLocalLibrary; remembered = handle; selectedTags.clear();
   await cacheHandle(handle).catch(() => {}); $('#reconnect').hidden = true;
   metadata = next; games = nextGames; $('#folderName').textContent = handle.name; $('#settingFolder').textContent = handle.name;
@@ -75,7 +76,7 @@ async function render() {
     const buttons = document.createElement('div'); buttons.className = 'buttons';
     const play = document.createElement('button'); play.textContent = 'プレイ'; play.onclick = () => action(() => playGame(game));
     const edit = document.createElement('button'); edit.textContent = '編集'; edit.className = 'secondary'; edit.setAttribute('aria-label', game.title + 'を編集'); edit.dataset.edit = ''; edit.dataset.invalid = String(!!game.settingsError); edit.disabled = !editingEnabled || !!game.settingsError; edit.onclick = () => editGame(game);
-    play.disabled = !!game.settingsError; if (game.settingsError) play.dataset.unavailable = 'true';
+    play.dataset.play = ''; play.disabled = !localLibrary || !!game.settingsError; if (game.settingsError) play.dataset.unavailable = 'true';
     buttons.append(play, edit); body.append(title, type, tags);
     if (game.settingsError) { const warning = document.createElement('p'); warning.className = 'hint'; warning.textContent = '設定の確認が必要です：' + game.settingsError; body.append(warning); }
     body.append(buttons); article.append(cover, body); $('#games').append(article);
@@ -155,6 +156,7 @@ function stopPlayer() {
   try { if (stopGame) stopGame(); } finally { stopGame = null; if (activePlay) activePlay.release(); activePlay = null; }
 }
 async function playGame(game) {
+  if (!localLibrary) throw new Error('編集する人が設定から保管フォルダーの初期設定を行ってください。');
   if (game.settingsError) throw new Error(game.settingsError);
   if (!await flushSave()) return; stopPlayer();
   const session = { libraryId: localLibrary, game, release: await localState.acquirePlaySession(localLibrary, game.id) };
@@ -213,18 +215,17 @@ $('#player').addEventListener('cancel', event => { event.preventDefault(); $('#c
 $('#fullscreen').onclick = () => $('#frame').requestFullscreen().catch(e => { $('#playerStatus').textContent = e.message; });
 function initialized() { starting = false; document.querySelectorAll('button').forEach(button => { button.disabled = false; }); writeControls(); document.documentElement.dataset.ready = 'true'; }
 if (!window.showDirectoryPicker) { status('このブラウザーはフォルダーへの保存に対応していません。PC版Google Chromeを使用してください。'); initialized(); }
-else cacheHandle().then(async handle => {
-  if (!handle) return; remembered = handle; $('#settingFolder').textContent = handle.name;
-  if (await handle.queryPermission({ mode: editingEnabled ? 'readwrite' : 'read' }) === 'granted') await action(() => connect(handle));
-  else { $('#reconnect').hidden = false; status('設定の「再接続する」で保管フォルダーへのアクセスを許可してください。'); }
+else cacheHandle().then(previous => {
+  if (previous?.name) $('#settingFolder').textContent = '前回：' + previous.name + '（フォルダーを選び直してください）';
 }).catch(error => status('このPCの保存機能を確認してください：' + error.message)).finally(initialized);
 
 $('#enableEditing').onchange = () => action(async () => {
   const requested = $('#enableEditing').checked;
   if (requested && root && await root.requestPermission({ mode: 'readwrite' }) !== 'granted') throw new Error('追加・編集には保管フォルダーの書き込み許可が必要です。');
+  if (requested && root) localLibrary = await library.ensureLibraryId(root);
   editingEnabled = requested;
   try { localStorage.setItem('game-portal.offline-editing', String(editingEnabled)); } catch { /* The setting applies for this session. */ }
-  writeControls();
+  if (root) await render(); writeControls();
 });
 window.addEventListener('beforeunload', event => { if (pendingSave || flushing) { event.preventDefault(); event.returnValue = ''; } });
 document.addEventListener('visibilitychange', () => { if (document.hidden) flushSave(); });
