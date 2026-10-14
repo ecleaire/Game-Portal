@@ -10,10 +10,20 @@
     "test:browser": "playwright test",
     "build": "node scripts/build-site.mjs",
     "dev": "node scripts/serve.mjs",
-    "bootstrap": "node --env-file=.env.bootstrap scripts/bootstrap-admin.mjs"
+    "bootstrap": "node --env-file=.env.bootstrap scripts/bootstrap-admin.mjs",
+    "launcher:dev": "electron .",
+    "launcher:build:win": "electron-builder --config launcher/builder.cjs --win --x64",
+    "launcher:build:dir": "electron-builder --config launcher/builder.cjs --dir",
+    "launcher:test": "node tests/launcher/smoke.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",
-    "@playwright/test": "1.63.0"
-  }
+    "@playwright/test": "1.63.0",
+    "electron": "44.7.2",
+    "electron-builder": "26.15.3"
+  },
+  "version": "0.1.0",
+  "main": "launcher/main.cjs",
+  "description": "GAME PORTAL offline Windows game launcher and web portal",
+  "author": "GAME PORTAL運営"
 }

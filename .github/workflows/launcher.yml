@@ -1,0 +1,25 @@
+name: Build Windows offline launcher
+on:
+  workflow_dispatch:
+  push:
+    paths: ['launcher/**', 'assets/private-preview.js', 'package.json', 'package-lock.json', '.github/workflows/launcher.yml']
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run launcher:test
+      - run: npm run launcher:build:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GAME-PORTAL-Windows-x64
+          path: launcher-release/*.exe
+          if-no-files-found: error
