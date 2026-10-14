@@ -1,17 +1,19 @@
 const $ = selector => document.querySelector(selector);
 let root = null, remembered = null, metadata = null, games = [], editing = null, busy = false, localLibrary = null;
 let stopGame = null, pendingSave = null, saveTimer, flushing = null, activePlay = null;
-let editingEnabled = false;
+let editingEnabled = false, starting = true;
 try { editingEnabled = localStorage.getItem('game-portal.offline-editing') === 'true'; } catch { /* A new session starts read-only. */ }
 let imageURLs = [], selectedTags = new Set(), renderRevision = 0;
 const status = message => { $('#status').textContent = message; document.querySelectorAll('[data-dialog-status]').forEach(node => { node.textContent = node.closest('dialog').open ? message : ''; }); };
 const cacheHandle = localState.cacheHandle;
 function writeControls() {
+  $('#enableEditing').disabled = starting;
   $('#postButton').disabled = !root || !editingEnabled;
   $('#enableEditing').checked = editingEnabled;
   $('#accessMode').textContent = editingEnabled ? '追加・編集が有効です。共有フォルダーは同時編集を避けてください。' : '閲覧・プレイのみ。ゲームと設定を書き換えません。';
   document.querySelectorAll('[data-unavailable]').forEach(button => { button.disabled = true; });
   document.querySelectorAll('[data-edit]').forEach(button => { button.disabled = !editingEnabled || button.dataset.invalid === 'true'; });
+  if (starting) document.querySelectorAll('button').forEach(button => { button.disabled = true; });
 }
 async function action(fn) {
   if (busy) return; busy = true;
@@ -209,12 +211,13 @@ $('#editForm').onsubmit = event => { event.preventDefault(); if (!event.target.r
 $('#closePlayer').onclick = async () => { if (!await flushSave()) return; stopPlayer(); $('#player').close(); };
 $('#player').addEventListener('cancel', event => { event.preventDefault(); $('#closePlayer').click(); });
 $('#fullscreen').onclick = () => $('#frame').requestFullscreen().catch(e => { $('#playerStatus').textContent = e.message; });
-if (!window.showDirectoryPicker) status('このブラウザーはフォルダーへの保存に対応していません。PC版Google Chromeを使用してください。');
+function initialized() { starting = false; document.querySelectorAll('button').forEach(button => { button.disabled = false; }); writeControls(); document.documentElement.dataset.ready = 'true'; }
+if (!window.showDirectoryPicker) { status('このブラウザーはフォルダーへの保存に対応していません。PC版Google Chromeを使用してください。'); initialized(); }
 else cacheHandle().then(async handle => {
   if (!handle) return; remembered = handle; $('#settingFolder').textContent = handle.name;
   if (await handle.queryPermission({ mode: editingEnabled ? 'readwrite' : 'read' }) === 'granted') await action(() => connect(handle));
   else { $('#reconnect').hidden = false; status('設定の「再接続する」で保管フォルダーへのアクセスを許可してください。'); }
-}).catch(() => {});
+}).catch(error => status('このPCの保存機能を確認してください：' + error.message)).finally(initialized);
 
 $('#enableEditing').onchange = () => action(async () => {
   const requested = $('#enableEditing').checked;

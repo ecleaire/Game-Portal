@@ -15,6 +15,7 @@ const origin = 'http://127.0.0.1:' + server.address().port;
 const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined, headless:true });
 const context = await browser.newContext({ viewport:{width:1200,height:850} });
 let peer;
+const peerTrace = [];
 const page = await context.newPage(); const errors = [], requests = [];
 page.on('pageerror', e => errors.push(e.message));
 page.on('console', message => { if(message.type()==='error') console.log('Console:',message.text().slice(0,600)); });
@@ -26,14 +27,14 @@ try {
   try {
     await filePage.goto(pathToFileURL(main).href);
     assert.equal(await filePage.evaluate(()=>isSecureContext && typeof showDirectoryPicker==='function'),true);
-    await expect(filePage.getByRole('heading',{name:/ゲーム/})).toBeVisible();
+    await expect(filePage.getByRole('heading',{name:/ゲーム/})).toBeVisible(); await expect(filePage.locator('html')).toHaveAttribute('data-ready','true');
     console.log('file:// startup and folder picker availability passed.');
   } catch(e) {
     if (!String(e.message).includes('ERR_BLOCKED_BY_ADMINISTRATOR')) throw e;
     console.log('file:// startup NOT RUN: managed browser administrator policy blocks file URLs.');
   } finally { await filePage.close(); }
-  await page.goto(origin); await expect(page.getByRole('heading',{name:/ゲーム/})).toBeVisible();
-  peer = await context.newPage(); await peer.goto(origin); await expect(peer.getByRole('heading',{name:/ゲーム/})).toBeVisible(); peer.on('pageerror',error=>errors.push(error.message));
+  await page.goto(origin); await expect(page.getByRole('heading',{name:/ゲーム/})).toBeVisible(); await expect(page.locator('html')).toHaveAttribute('data-ready','true');
+  peer = await context.newPage(); await peer.goto(origin); await expect(peer.getByRole('heading',{name:/ゲーム/})).toBeVisible(); peer.on('pageerror',error=>errors.push(error.message)); await expect(peer.locator('html')).toHaveAttribute('data-ready','true');
   await page.evaluate(async () => {
     const opfs = await navigator.storage.getDirectory();
     window.testRoot = await opfs.getDirectoryHandle('games',{create:true});
@@ -103,6 +104,9 @@ try {
   const exportedData=JSON.parse(await readFile(exportName,'utf8')); assert.equal(exportedData.data.level,'saved');
   assert.equal(exportedData.gameId,initialSettings.data.id);
   // A second tab must not overwrite saves from an active session.
+  peer.on('crash',()=>peerTrace.push('renderer crashed')); peer.on('close',()=>peerTrace.push('page closed'));
+  await peer.exposeFunction('recordPeerTrace',message=>peerTrace.push(message));
+  await peer.evaluate(()=>{for(const [object,key] of [[library,'loadMetadata'],[library,'scan'],[localState,'localLibraryId']]){const original=object[key];object[key]=async(...args)=>{await window.recordPeerTrace(key+' start');try{const value=await original(...args);await window.recordPeerTrace(key+' done');return value;}catch(error){await window.recordPeerTrace(key+' failed: '+error.message);throw error;}}}});
   await peer.evaluate(async()=>{const opfs=await navigator.storage.getDirectory();const dir=await opfs.getDirectoryHandle('games');window.showDirectoryPicker=async()=>dir;});
   await peer.getByRole('button',{name:'設定',exact:true}).click();await peer.getByRole('button',{name:'フォルダーを指定',exact:true}).click();
   await expect(peer.locator('#folderName')).toHaveText('games');
@@ -187,6 +191,6 @@ try {
   console.error('Browser status:',await page.locator('#status').textContent().catch(()=>''),'Player:',await page.locator('#playerStatus').textContent().catch(()=>''));console.error('Browser errors:',errors);
   const peerState=peer&&!peer.isClosed()?await peer.evaluate(()=>({status:document.querySelector('#status')?.textContent,folder:document.querySelector('#folderName')?.textContent,cards:[...document.querySelectorAll('.card h2')].map(n=>n.textContent),settings:document.querySelector('#settings')?.open})).catch(()=>null):null;
   console.error('Peer state:',peerState);
-  if(process.env.GITHUB_ACTIONS)console.log('::error title=Offline HTML::'+(String(e.stack||e)+'\nPeer state: '+JSON.stringify(peerState)).replaceAll('%','%25').replaceAll('\n','%0A').replaceAll('\r','%0D'));
+  if(process.env.GITHUB_ACTIONS)console.log('::error title=Offline HTML::'+(String(e.stack||e)+'\nPeer state: '+JSON.stringify(peerState)+'\nPeer trace: '+JSON.stringify(peerTrace)).replaceAll('%','%25').replaceAll('\n','%0A').replaceAll('\r','%0D'));
   throw e;
 } finally { await browser.close(); await new Promise(resolve=>server.close(resolve)); await rm(temp,{recursive:true,force:true,maxRetries:10}); }
