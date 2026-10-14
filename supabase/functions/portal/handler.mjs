@@ -1,4 +1,5 @@
 import { digest, token, readBody, statusFor } from './security.mjs';
+import { projectTransfer } from './project-transfer.mjs';
 import { checkPrivateFolders, deletePrivateZip, driveError, downloadPrivateZip, movePrivateZip, storePrivateZip, storePrivateProject, validateZip } from './drive.mjs';
 
 // Dependency injection keeps the actual HTTP boundary testable without deployed secrets.
@@ -14,7 +15,7 @@ export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleS
     const reply = (data, status = 200) => new Response(JSON.stringify(data), { status, headers });
     if (origin && !origins.has(origin)) return reply({ error: 'forbidden' }, 403);
     if (origin) headers['Access-Control-Allow-Origin'] = origin;
-    headers['Access-Control-Allow-Headers'] = 'content-type, x-portal-session, apikey';
+    headers['Access-Control-Allow-Headers'] = 'content-type, x-portal-session, apikey, x-portal-submission, x-portal-revision, x-portal-offset';
     headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS';
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers });
     if (request.method !== 'POST') return reply({ error: 'method_not_allowed' }, 405);
@@ -65,6 +66,14 @@ export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleS
       return key;
     };
     const publicPath = requestUrl.pathname;
+    if (['start','chunk','status','finish'].some(path=>publicPath.endsWith(`/project-${path}`))) {
+      const supplied=request.headers.get('x-portal-session');
+      if(!/^[a-f0-9]{64}$/.test(supplied??''))return reply({error:'unauthorized'},401);
+      if(!(googleServiceAccountJson||googleDriveOAuthJson)||!googlePendingFolderId)return reply({error:'drive_unavailable'},503);
+      const transfer=projectTransfer({projectRpc:async(action,body)=>publicRpc('portal_project_transfer',{p_action:action,p_body:body,p_token_hash:await digest(supplied,pepper)}),serviceAccountJson:googleServiceAccountJson,oauthJson:googleDriveOAuthJson,pendingFolderId:googlePendingFolderId,fetcher});
+      try{return reply(await transfer(publicPath.split('project-').pop(),request));}
+      catch(error){const code=['unauthorized','forbidden','not_found','conflict','invalid_request','invalid_project','rate_limited'].includes(error.message)?error.message:driveError(error);return reply({error:code},code.startsWith('drive_')?503:statusFor(code));}
+    }
     if (['/project-upload','/project-download'].some(path => publicPath.endsWith(path))) {
       const supplied = request.headers.get('x-portal-session');
       if (!/^[a-f0-9]{64}$/.test(supplied ?? '')) return reply({ error: 'unauthorized' }, 401);
@@ -78,7 +87,7 @@ export function createHandler({ url, serviceKey, pepper, allowedOrigins, googleS
           if (typeof input.submission_id !== 'string') return reply({ error: 'invalid_request' }, 400);
           const checked = await projectRpc('download', { submission_id: input.submission_id });
           if (checked.error) return reply({ error: checked.error }, statusFor(checked.error));
-          const response = await downloadPrivateZip({ serviceAccountJson: googleServiceAccountJson, oauthJson: googleDriveOAuthJson, fileId: checked.file_id, fetcher });
+          const response = await downloadPrivateZip({ serviceAccountJson: googleServiceAccountJson, oauthJson: googleDriveOAuthJson, fileId: checked.file_id, fetcher, timeout:150000 });
           const safeName = String(checked.name).replace(/[^A-Za-z0-9._-]/g, '_');
           return new Response(response.body, { headers: { ...headers, 'Content-Type': 'application/octet-stream',
             'Content-Disposition': `attachment; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(checked.name)}`,

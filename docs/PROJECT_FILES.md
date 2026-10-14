@@ -2,7 +2,7 @@
 
 新規ゲームはプレイ用ファイルと制作プロジェクトの両方が必要です。既存投稿は必須に変更せず、編集から追加できます。投稿フォームと投稿後の編集フォームの同じ保存ボタンで送信します。プロジェクトの保存が確認できてからプレイ用ファイルを送信し、失敗時は投稿完了を表示しません。未提出の新規ゲームを審査待ち／下書き完成へ進める操作はDBでも拒否します。
 
-Godotは `project.godot` を含む制作フォルダーをZIPにします。`.godot` キャッシュ、`.git`、Web書き出し結果、秘密情報を除外してください。Scratch／TurboWarpはエディターの「ファイル」→「コンピューターに保存」の `.sb3`、または `project.json`／`.sb3` を含むZIPです。その他は制作データのZIPです。各プロジェクトは最大50MB、最大5,000エントリー、宣言展開容量500MBです。暗号化・シンボリックリンク・危険パス・重複パス・不整合ヘッダーを拒否します。保管時に展開／実行しません。ZIP構造検査はゲームの動作や完全な復元可能性を保証しません。
+Godotは `project.godot` を含む制作フォルダーをZIPにします。`.godot` キャッシュ、`.git`、Web書き出し結果、秘密情報を除外してください。Scratch／TurboWarpはエディターの「ファイル」→「コンピューターに保存」の `.sb3`、または `project.json`／`.sb3` を含むZIPです。その他は制作データのZIPです。各プロジェクトは最大500MB、最大5,000エントリー、宣言展開容量2GBです。暗号化・シンボリックリンク・危険パス・重複パス・不整合ヘッダーを拒否します。保管時に展開／実行しません。ZIP構造検査はゲームの動作や完全な復元可能性を保証しません。
 
 Google Driveの既存非公開pending保管先へ、プレイ用とは異なるファイルIDで保存します。プロジェクトは公開配信用Storageへコピーせず、ゲーム公開設定によって公開されません。旧版も非公開保管し、作品／アカウント削除時は既存のファイル削除キューに含めます。Drive障害時の削除は既存の再試行手順に従います。
 
@@ -19,3 +19,9 @@ Google Driveの既存非公開pending保管先へ、プレイ用とは異なる�
 `portal_private.game_submissions` の `project_required` は既存行false、新規行trueです。`project_drive_id/name/size/revision/updated_at` で保管を管理します。既存privateテーブルのRLS・直接権限なしを維持し、`public.portal_project_file` はservice roleだけ実行できます。認証・BAN・KICK・規約は既存 `portal_api` を再利用し、所有権／担当グループを毎回検証します。
 
 Edgeの `/project-upload` は `submission_id`、UUID `revision`、`project` のmultipartを受け、バイト数とファイル構成を確認します。`/project-download` は `{submission_id}` と既存 `X-Portal-Session` で添付ファイルとして返します。ゲームへ認証トークンを渡しません。公開APIからプロジェクトを取得する経路はありません。
+
+## 大容量プロジェクト（migration 035）
+
+`202610140035_large_project_files.sql` →最新Edge Function→Pagesの順で反映します。プレイ用は50MBのままです。50MBを超えるプロジェクトは8MBずつEdgeを経由してDriveへ分割送信し、一度に全体をメモリへ載せません。送信後は中央ディレクトリーと各ローカルヘッダーを範囲取得して検査します。Driveの再開URL・認証情報はprivate DBにのみ保存し、クライアントへ返しません。各チャンク・完了時にも所有権、投稿権限、BAN/KICKを検証します。通信断はDriveの受信位置を確認して最大3回再試行します。送信は2時間以内に完了してください。タブを閉じた後の再開は現時点では対応していません。
+
+未完了のtransfer行は `delete from portal_private.project_transfers where expires_at < now();` で定期削除できます。Driveで未完成のresumable sessionは失効します。送信済みのDriveファイルIDは既存ゲームファイル台帳に記録し、作品削除時に回収します。通信断や認証失効が保存と競合すると、Drive内に非公開の孤立ファイルが残る場合があります。既存の投稿保管の運用と同様に保管先を定期点検してください。

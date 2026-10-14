@@ -2,7 +2,8 @@ import { currentTerms, consentCheckbox, rememberAcceptance } from './terms.js?v=
 import { config } from './config.js';
 import { protectEdits, confirmLeaving } from './edit-guard.js?v=20261010f';
 import { releaseHistory } from './release-history.js?v=20261010f';
-import { checkProjectFile } from './project-files.js?v=20261014a';
+import { checkProjectFile } from './project-files.js?v=20261014b';
+import { sendLargeProject } from './project-transfer.js?v=20261014b';
 import { organizeAdmin, collectionTools } from './admin-workspace.js?v=20261010e';
 import { aiDisclosure, aiSummary } from './ai-disclosure.js?v=20261010b';
 import { avatars, avatarGlyph } from './avatars.js?v=20261010b';
@@ -79,7 +80,7 @@ const errors = {
   invalid_preview: 'ZIP内のHTMLまたはゲームファイルを確認してください。',
   invalid_upload: 'ZIP形式・ファイル構成またはサイズを確認してください（最大50MB）。',
   project_required: 'プロジェクトファイルを提出してください。Godotは制作フォルダーのZIP、Scratchは.sb3を選択してください。',
-  invalid_project: 'プロジェクトファイルは50MB以下のZIPまたは.sb3を選んでください。GodotのZIPにはproject.godot、Scratchにはproject.jsonまたは.sb3が必要です。',
+  invalid_project: 'プロジェクトファイルは500MB以下のZIPまたは.sb3を選んでください。GodotのZIPにはproject.godot、Scratchにはproject.jsonまたは.sb3が必要です。',
   web_export_required: 'ブラウザーで遊べるHTMLが見つかりません。Godotの「Web」書き出しで生成したHTML・.js・.wasm・.pckをまとめてください。「PCK/ZIP」書き出しだけではプレイできません。',
   invalid_thumbnail: 'サムネイルはPNG・JPEG・WebPの5MB以下を選んでください。',
   thumbnail_conflict: 'サムネイルや投稿状態が別の操作で変更されました。画面を更新して再試行してください。',
@@ -789,11 +790,11 @@ async function uploadPackage(submissionId, file, refresh = upload, thumbnail = n
 function projectInput(parent, required = false, game = {}) {
   const area = section('プロジェクトファイル', parent);
   area.classList.add('project-files');
-  area.append(el('p', '制作データを提出します。プレイ用のゲームファイルとは別のファイルです。', { class: 'muted' }));
+  area.append(el('p', '制作データを提出します。プレイ用とは別のZIP / .sb3を選択してください（最大500MB）。', { class: 'muted' }));
   const guide = el('details', null); guide.append(el('summary', 'プロジェクトファイルの準備方法'));
   guide.append(el('p', 'Godot：project.godotが入った制作フォルダーをZIPに圧縮してください。.godotキャッシュ、.git、書き出したゲーム、秘密情報は含めないでください。'));
   guide.append(el('p', 'Scratch / TurboWarp：エディターの「ファイル」→「コンピューターに保存」で.sb3を保存してください。プレイ用HTMLとは別に選択します。'));
-  guide.append(el('p', 'その他：編集・制作に必要なファイルをZIPにまとめてください。最大50MB。提出したデータは公開ゲームページには配信されません。'));
+  guide.append(el('p', 'その他：編集・制作に必要なファイルをZIPにまとめてください。最大500MB。提出したデータは公開ゲームページには配信されません。'));
   area.append(guide);
   const label = el('label', required ? 'プロジェクトファイルを選択（必須）' : 'プロジェクトファイルを追加・変更（任意）');
   const input = el('input', null, { type: 'file', name: 'project', 'aria-label': 'プロジェクトファイルを選択' });
@@ -811,7 +812,7 @@ function projectSummary(parent, game) {
     button(area, 'プロジェクトファイルをダウンロード', async () => {
       const response = await fetch(`${config.supabaseUrl}/functions/v1/portal/project-download`, { method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(config.anonKey ? { apikey: config.anonKey } : {}), 'X-Portal-Session': session.token },
-        body: JSON.stringify({ submission_id: game.id }), signal: AbortSignal.timeout(60000) });
+        body: JSON.stringify({ submission_id: game.id }), signal: AbortSignal.timeout(180000) });
       if (!response.ok) { const result = await response.json(); throw new Error(result.error ?? 'unavailable'); }
       const url = URL.createObjectURL(await response.blob()), link = el('a', null, { href: url, download: game.project_file.name });
       document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 30000);
@@ -827,7 +828,9 @@ async function uploadProject(submissionId, file) {
   const update = () => notice(`プロジェクトファイルを${progress === 100 ? 'サーバーで保存中' : `送信中…${progress ?? ''}%`}（${Math.floor((Date.now() - started) / 1000)}秒経過）`);
   update(); const timer = setInterval(update, 1000);
   try {
-    try { return (await sendUpload(`${config.supabaseUrl}/functions/v1/portal/project-upload`, { body,
+    try {
+      if(file.size>50*1024*1024)return (await sendLargeProject(file,submissionId,{base:`${config.supabaseUrl}/functions/v1/portal`,revision,headers:{...(config.anonKey?{apikey:config.anonKey}:{}),'X-Portal-Session':session.token},onProgress:value=>{progress=value;update();}})).submission;
+      return (await sendUpload(`${config.supabaseUrl}/functions/v1/portal/project-upload`, { body,
       headers: { ...(config.anonKey ? { apikey: config.anonKey } : {}), 'X-Portal-Session': session.token },
       onProgress: value => { progress = value; update(); } })).submission; }
     catch (error) {

@@ -7,9 +7,11 @@ import { createHandler } from '../supabase/functions/portal/handler.mjs';
 import { digest, token } from '../supabase/functions/portal/security.mjs';
 import { packageWebFiles } from '../assets/zip-upload.js';
 import { checkProjectFile, validateProjectArchive } from '../assets/project-files.js';
+import { sendLargeProject } from '../assets/project-transfer.js';
 let db, handler, author, other, superAdmin, manager, visitor, group;
 const password='project-test-password', pepper='project-test-only-pepper-long-enough';
 const drive = new Map();
+const transfers=new Map();let lostChunk=false,recovered=false;
 async function api(action,body={},who=superAdmin,fresh=null) {
  return (await db.query('select public.portal_api($1,$2::jsonb,$3,$4) result',[action,JSON.stringify(body),who?.hash??null,fresh])).rows[0].result;
 }
@@ -47,15 +49,26 @@ before(async()=>{
  await api('admin.group.manager',{group_id:group.id,admin_id:manager.id,operation:'add'});
  handler=createHandler({url:'https://project-test.supabase.co',serviceKey:'test-only',pepper,allowedOrigins:'https://ecleaire.github.io',googleDriveOAuthJson:'{"client_id":"test","client_secret":"test","refresh_token":"test"}',googlePendingFolderId:'test-pending',fetcher:async(url,options)=>{
   if(url.includes('/rest/v1/rpc/')) { const p=JSON.parse(options.body),name=url.split('/').pop();
-   const result=name==='portal_project_file'?(await db.query('select public.portal_project_file($1,$2::jsonb,$3) result',[p.p_action,JSON.stringify(p.p_body),p.p_token_hash])).rows[0].result:
+   const result=name==='portal_project_transfer'?(await db.query('select public.portal_project_transfer($1,$2::jsonb,$3) result',[p.p_action,JSON.stringify(p.p_body),p.p_token_hash])).rows[0].result:name==='portal_project_file'?(await db.query('select public.portal_project_file($1,$2::jsonb,$3) result',[p.p_action,JSON.stringify(p.p_body),p.p_token_hash])).rows[0].result:
     (await db.query('select public.portal_api($1,$2::jsonb,$3,$4) result',[p.p_action,JSON.stringify(p.p_body),p.p_token_hash,p.p_new_token_hash])).rows[0].result;
    return Response.json(result);
   }
   if(url.includes('oauth2.googleapis.com'))return Response.json({access_token:'test-only'});
+  if(url.includes('/upload/drive/')&&options.headers['X-Upload-Content-Length']){
+   const location='https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id='+crypto.randomUUID();transfers.set(location,{offset:0,size:Number(options.headers['X-Upload-Content-Length']),chunks:[],id:crypto.randomUUID()});return new Response(null,{headers:{location}});
+  }
+  if(transfers.has(url)){
+   const transfer=transfers.get(url),range=options.headers['Content-Range'];
+   if(!range.startsWith('bytes */')){const offset=Number(range.split(' ')[1].split('-')[0]);assert.equal(offset,transfer.offset);assert.ok(options.body.length<=8*1024*1024);transfer.chunks.push(options.body);transfer.offset+=options.body.length;}
+   else recovered=true;
+   if(transfer.offset===transfer.size){drive.set(transfer.id,Buffer.concat(transfer.chunks));return Response.json({id:transfer.id,size:String(transfer.size)});}
+   return new Response(null,{status:308,headers:transfer.offset?{range:`bytes=0-${transfer.offset-1}`}:{}});
+  }
   if(url.includes('/upload/drive/')) { const bytes=Buffer.from(options.body),marker=Buffer.from('Content-Type: application/zip\r\n\r\n'),boundary=options.headers['Content-Type'].split('boundary=')[1];
    const id=crypto.randomUUID();drive.set(id,bytes.subarray(bytes.indexOf(marker)+marker.length,bytes.lastIndexOf(Buffer.from(`\r\n--${boundary}--`))));return Response.json({id}); }
   const id=new URL(url).pathname.split('/').pop();
   if(options.method==='DELETE'){drive.delete(id);return new Response(null,{status:204});}
+  if(drive.has(id)&&options.headers.Range){const [start,end]=options.headers.Range.slice(6).split('-').map(Number);return new Response(drive.get(id).subarray(start,end+1),{status:206,headers:{'Content-Range':`bytes ${start}-${end}/${drive.get(id).length}`}});}
   return drive.has(id)?new Response(drive.get(id)):new Response(null,{status:404});
  }});
 });
@@ -68,7 +81,7 @@ test('source archive validation accepts Godot and SB3, rejects web-only, dangero
  await assert.rejects(checkProjectFile(new File(['not zip'],'game.sb3'),'scratch'),/invalid_project/);
  const bytes=new Uint8Array(await (await source()).arrayBuffer());bytes[30]=47;
  assert.throws(()=>validateProjectArchive(bytes,'source.zip','godot'),/invalid_project/);
- await assert.rejects(checkProjectFile({size:52428801},'godot'),/invalid_project/);
+ await assert.rejects(checkProjectFile({size:524288001},'godot'),/invalid_project/);
 });
 test('new works require source on server and upload stores it separately without leaking Drive IDs',async()=>{
  const game=await make();assert.equal(game.project_required,true);
@@ -106,4 +119,32 @@ test('KICK and BAN revoke source access; legacy works remain compatible without 
  await api('admin.unban',{user_id:author.id});author=await login('project_author');
  const legacy=await make();await db.query('update portal_private.game_submissions set project_required=false where id=$1',[legacy.id]);
  assert.ok(!(await api('user.submission.prepare',{submission_id:legacy.id},author)).error);
+});
+test('large source transfers use bounded chunks, reconcile a lost response and finish only after archive verification',async()=>{
+ const game=await make(),size=51*1024*1024;
+ const name=Buffer.from('project.godot'),local=Buffer.alloc(30),central=Buffer.alloc(46),end=Buffer.alloc(22);
+ local.writeUInt32LE(0x04034b50);local.writeUInt32LE(size,18);local.writeUInt32LE(size,22);local.writeUInt16LE(name.length,26);
+ central.writeUInt32LE(0x02014b50);central.writeUInt32LE(size,20);central.writeUInt32LE(size,24);central.writeUInt16LE(name.length,28);
+ end.writeUInt32LE(0x06054b50);end.writeUInt16LE(1,8);end.writeUInt16LE(1,10);end.writeUInt32LE(central.length+name.length,12);end.writeUInt32LE(local.length+name.length+size,16);
+ const file=new File([local,name,Buffer.alloc(size),central,name,end],'large-source.zip'),progress=[];
+ assert.ok(await checkProjectFile(file,'godot'));
+ const result=await sendLargeProject(file,game.id,{base:'https://project-test.supabase.co/functions/v1/portal',headers:{'X-Portal-Session':author.raw},onProgress:value=>progress.push(value),fetcher:async(url,options)=>{
+   const response=await handler(new Request(url,options));
+   if(url.endsWith('/project-chunk')&&!lostChunk){lostChunk=true;throw new Error('Response lost');}
+   return response;
+ }});
+ assert.ok(recovered);assert.equal(progress.at(-1),100);assert.equal(result.submission.project_file.size,file.size);
+ assert.ok(!JSON.stringify(result).includes('upload_url'));
+ const deleted=await api('user.submission.delete',{submission_id:game.id,title:game.title,confirmation:'delete'},author);assert.equal(deleted.deleted,true);
+});
+test('transfer metadata and resumable URLs remain server-only and each operation rechecks ownership and revocation',async()=>{
+ const game=await make(),revision=crypto.randomUUID(),body={submission_id:game.id,revision,name:'large.zip',size:'524288000',upload_url:'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=test'};
+ const transfer=async(action,who=author,data=body)=>(await db.query('select public.portal_project_transfer($1,$2::jsonb,$3) result',[action,JSON.stringify(data),who.hash])).rows[0].result;
+ assert.ok(!(await transfer('create')).error);
+ assert.equal((await transfer('get',other)).error,'not_found');
+ assert.equal((await transfer('advance',author,{...body,offset:'524288001'})).error,'conflict');
+ assert.equal((await transfer('finish')).error,'conflict');
+ for(const role of ['anon','authenticated','service_role']){await db.exec(`set role ${role}`);try{await assert.rejects(db.query('select upload_url from portal_private.project_transfers'),/permission denied/);if(role!=='service_role')await assert.rejects(transfer('get'),/permission denied/);}finally{await db.exec('reset role');}}
+ await api('admin.kick',{user_id:author.id});assert.equal((await transfer('get')).error,'unauthorized');author=await login('project_author');
+ await db.query("update portal_private.project_transfers set expires_at=now()-interval '1 minute' where revision=$1",[revision]);assert.equal((await transfer('get')).error,'not_found');
 });

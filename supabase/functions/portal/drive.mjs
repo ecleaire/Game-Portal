@@ -131,11 +131,11 @@ export async function movePrivateZip({ serviceAccountJson, oauthJson = '', fileI
   if (!response.ok || result?.id !== fileId) throw apiError(result);
 }
 
-export async function downloadPrivateZip({ serviceAccountJson, oauthJson = '', fileId, fetcher = fetch }) {
+export async function downloadPrivateZip({ serviceAccountJson, oauthJson = '', fileId, fetcher = fetch, timeout = 30000 }) {
   if (!fileId) throw new Error('drive_unavailable');
   const access = await accessToken(serviceAccountJson, fetcher, oauthJson);
   const response = await fetcher(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media&supportsAllDrives=true`, {
-    headers: { Authorization: `Bearer ${access}` }, signal: AbortSignal.timeout(30000),
+    headers: { Authorization: `Bearer ${access}` }, signal: AbortSignal.timeout(timeout),
   });
   if (!response.ok || !response.body) throw new Error('drive_unavailable');
   return response;
