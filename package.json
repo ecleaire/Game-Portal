@@ -10,7 +10,10 @@
     "test:browser": "playwright test",
     "build": "node scripts/build-site.mjs",
     "dev": "node scripts/serve.mjs",
-    "bootstrap": "node --env-file=.env.bootstrap scripts/bootstrap-admin.mjs"
+    "bootstrap": "node --env-file=.env.bootstrap scripts/bootstrap-admin.mjs",
+    "offline:prepare": "node scripts/build-offline-html.mjs --prepare",
+    "offline:build": "node scripts/build-offline-html.mjs",
+    "offline:test": "node tests/offline-html/browser.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",

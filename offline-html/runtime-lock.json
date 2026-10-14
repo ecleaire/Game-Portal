@@ -1,0 +1,120 @@
+{
+  "pyxel": "2.9.9",
+  "pyodide": "314.0.4",
+  "files": [
+    {
+      "path": "pyodide/LICENSE",
+      "url": "https://cdn.jsdelivr.net/gh/pyodide/pyodide@314.0.4/LICENSE",
+      "sha256": "1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5",
+      "bytes": 16725
+    },
+    {
+      "path": "pyodide/pyodide-lock.json",
+      "url": "https://cdn.jsdelivr.net/pyodide/v314.0.4/full/pyodide-lock.json",
+      "sha256": "c963d22858f6bcb8f41586a2142f03905ab370c88ea22a86a2736e95fac2a8f3",
+      "bytes": 113804
+    },
+    {
+      "path": "pyodide/pyodide.asm.mjs",
+      "url": "https://cdn.jsdelivr.net/pyodide/v314.0.4/full/pyodide.asm.mjs",
+      "sha256": "fd7a3cefa122ff6463dcf2997961eb341250e4cc4ed60281448390f0a767cca2",
+      "bytes": 1249500
+    },
+    {
+      "path": "pyodide/pyodide.asm.wasm",
+      "url": "https://cdn.jsdelivr.net/pyodide/v314.0.4/full/pyodide.asm.wasm",
+      "sha256": "6c8986a8ee583401069aa403e76ee79d4633a1478ab11cea76030bc299aded9f",
+      "bytes": 9596386
+    },
+    {
+      "path": "pyodide/pyodide.js",
+      "url": "https://cdn.jsdelivr.net/pyodide/v314.0.4/full/pyodide.js",
+      "sha256": "0b67ae576fd39ce3ef96f46706e67ce184842bb4415515514a7ee6664c7491ea",
+      "bytes": 18912
+    },
+    {
+      "path": "pyodide/python_stdlib.zip",
+      "url": "https://cdn.jsdelivr.net/pyodide/v314.0.4/full/python_stdlib.zip",
+      "sha256": "b5ca2308e9fa72eda319889a1ddf086389e9f1234ced279cc71267fe9ba56e54",
+      "bytes": 2545198
+    },
+    {
+      "path": "pyxel/LICENSE",
+      "url": "https://cdn.jsdelivr.net/gh/kitao/pyxel@v2.9.9/LICENSE",
+      "sha256": "d9f301d8f64dfbba5e7c3301daad34a1b66eb5240ad42e3ddc8e1d0a17b3d0db",
+      "bytes": 1139
+    },
+    {
+      "path": "pyxel/images/click_to_start_114x14.png",
+      "url": "https://cdn.jsdelivr.net/gh/kitao/pyxel@v2.9.9/wasm/images/click_to_start_114x14.png",
+      "sha256": "05eaccb3b2d44225b3b8b90657d664c07abfe495336c7a8af50049886383f48c",
+      "bytes": 641
+    },
+    {
+      "path": "pyxel/images/gamepad_button_98x98.png",
+      "url": "https://cdn.jsdelivr.net/gh/kitao/pyxel@v2.9.9/wasm/images/gamepad_button_98x98.png",
+      "sha256": "d5e3a83196ec9c5cdf953825c6b7b416f9a9c54921554578e2de3d1d5bb6d9d5",
+      "bytes": 879
+    },
+    {
+      "path": "pyxel/images/gamepad_cross_98x98.png",
+      "url": "https://cdn.jsdelivr.net/gh/kitao/pyxel@v2.9.9/wasm/images/gamepad_cross_98x98.png",
+      "sha256": "cf97365abfe0a9d4221e4300c21040fb0640fd4e18c4a5ef5a40bcb2e02a9b7e",
+      "bytes": 510
+    },
+    {
+      "path": "pyxel/images/gamepad_menu_92x26.png",
+      "url": "https://cdn.jsdelivr.net/gh/kitao/pyxel@v2.9.9/wasm/images/gamepad_menu_92x26.png",
+      "sha256": "33a576bf3e6e4f0ca3dba491d86ed66c8e983dabc43a59a4e3338ba33f354309",
+      "bytes": 319
+    },
+    {
+      "path": "pyxel/images/pyxel_icon_64x64.ico",
+      "url": "https://cdn.jsdelivr.net/gh/kitao/pyxel@v2.9.9/wasm/images/pyxel_icon_64x64.ico",
+      "sha256": "62280f322d64fc702441b5216477c5b5b3f3045916eb3936e88ddd37d8dda02c",
+      "bytes": 2686
+    },
+    {
+      "path": "pyxel/images/pyxel_logo_76x32.png",
+      "url": "https://cdn.jsdelivr.net/gh/kitao/pyxel@v2.9.9/wasm/images/pyxel_logo_76x32.png",
+      "sha256": "4272ab5584a292162215b4db039ac028b362a05c8d53077e315ff3e3409786d3",
+      "bytes": 692
+    },
+    {
+      "path": "pyxel/images/touch_to_start_114x14.png",
+      "url": "https://cdn.jsdelivr.net/gh/kitao/pyxel@v2.9.9/wasm/images/touch_to_start_114x14.png",
+      "sha256": "fb7b2c53cb9cb72ef1921094cd375723e64feed3a1b8d4d12c96694847d7305a",
+      "bytes": 629
+    },
+    {
+      "path": "pyxel/import_hook.py",
+      "url": "https://cdn.jsdelivr.net/gh/kitao/pyxel@v2.9.9/wasm/import_hook.py",
+      "sha256": "f4d59a26d6e927dbcd8f61dde2d4b55c61e07fbdbe4cb879cc4f60db66ae8201",
+      "bytes": 2485
+    },
+    {
+      "path": "pyxel/pyxel-2.9.9-cp311-abi3-emscripten_5_0_3_wasm32.whl",
+      "url": "https://cdn.jsdelivr.net/gh/kitao/pyxel@v2.9.9/wasm/pyxel-2.9.9-cp311-abi3-emscripten_5_0_3_wasm32.whl",
+      "sha256": "a6f45776c13c814631d3898f0e691e7dde9afe4f84344106795a2e2c99e77e2d",
+      "bytes": 5024321
+    },
+    {
+      "path": "pyxel/pyxel.css",
+      "url": "https://cdn.jsdelivr.net/gh/kitao/pyxel@v2.9.9/wasm/pyxel.css",
+      "sha256": "7f68028f0567bf8d30ad028aad32bb9a39e7e4e17b31ac4c129beb9f688359bc",
+      "bytes": 2166
+    },
+    {
+      "path": "pyxel/pyxel.js",
+      "url": "https://cdn.jsdelivr.net/gh/kitao/pyxel@v2.9.9/wasm/pyxel.js",
+      "sha256": "6588dc514ed3cb9571df4005b7a2b457dc2f000edb0ae35c42253342fb2cdb70",
+      "bytes": 28614
+    },
+    {
+      "path": "python/LICENSE",
+      "url": "https://cdn.jsdelivr.net/gh/python/cpython@v3.14.0/LICENSE",
+      "sha256": "b0e25a78cffb43f4d92de8b61ccfa1f1f98ecbc22330b54b5251e7b6ba010231",
+      "bytes": 13804
+    }
+  ]
+}

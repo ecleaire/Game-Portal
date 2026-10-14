@@ -11,3 +11,5 @@ supabase/.branches/
 .tools/
 test-results/
 playwright-report/
+offline-release/
+launcher-release/
