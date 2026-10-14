@@ -1,34 +1,36 @@
 const $ = selector => document.querySelector(selector);
-let games = [], busy = false;
+let games = [], folder = '', busy = false;
 function render() {
   const matches = games.filter(game => game.title.toLocaleLowerCase().includes($('#search').value.trim().toLocaleLowerCase()));
   $('#games').replaceChildren(); $('#count').textContent = String(games.length);
+  $('#folder').textContent = folder || '未設定';
+  $('#folderSummary').textContent = folder || '設定からゲームの保管フォルダーを指定してください。';
   $('#empty').hidden = matches.length > 0;
-  $('#empty').textContent = games.length ? '条件に合うゲームがありません。' : '「ゲームを取り込む」からHTMLまたはZIPを追加してください。';
+  $('#empty').textContent = !folder ? '「設定」からゲームの保管フォルダーを指定してください。' : games.length ? '条件に合うゲームがありません。' : 'ゲームが見つかりません。フォルダーにHTML・ZIP・EXEを置いて再読み込みしてください。';
   for (const game of matches) {
     const card = document.createElement('article'); card.className = 'card';
     const art = document.createElement('div'); art.className = 'game-art'; art.textContent = '▶';
-    const title = document.createElement('h3'); title.textContent = game.title;
-    const label = document.createElement('p'); label.className = 'saved'; label.textContent = '● この端末に保存済み';
-    const actions = document.createElement('div'); actions.className = 'actions';
+    const title = document.createElement('h2'); title.textContent = game.title;
+    const type = document.createElement('p'); type.className = 'saved'; type.textContent = game.kind === 'exe' ? 'Windows' : 'Webゲーム';
     const play = document.createElement('button'); play.textContent = 'プレイ'; play.disabled = busy; play.onclick = () => run(() => window.launcher.play(game.id), false);
-    const remove = document.createElement('button'); remove.className = 'secondary'; remove.textContent = '削除'; remove.setAttribute('aria-label', `${game.title}を削除`); remove.disabled = busy; remove.onclick = () => run(() => window.launcher.remove(game.id));
-    actions.append(play, remove); card.append(art, title, label, actions); $('#games').append(card);
+    card.append(art, title, type, play); $('#games').append(card);
   }
 }
 async function run(operation, update = true) {
   if (busy) return;
-  busy = true; $('#import').disabled = true; $('#chooseFolder').disabled = true; render();
-  $('#status').textContent = '処理しています…';
+  busy = true; $('#refresh').disabled = true; $('#chooseFolder').disabled = true; render();
+  $('#status').textContent = '読み込んでいます…';
   try {
     const result = await operation();
     if (!result.ok) throw new Error(result.error);
-    if (update) { games = result.value.games; $('#folder').textContent = result.value.folder || 'フォルダーを選んで始めましょう'; }
+    if (update) { games = result.value.games; folder = result.value.folder; }
     $('#status').textContent = '';
   } catch (error) { $('#status').textContent = error.message || '操作できませんでした。'; }
-  finally { busy = false; $('#chooseFolder').disabled = false; $('#import').disabled = !$('#folder').textContent || $('#folder').textContent === 'フォルダーを選んで始めましょう'; render(); }
+  finally { busy = false; $('#refresh').disabled = false; $('#chooseFolder').disabled = false; render(); }
 }
 $('#search').oninput = render;
-$('#chooseFolder').onclick = () => run(() => window.launcher.chooseFolder());
-$('#import').onclick = () => run(() => window.launcher.importGame());
+$('#settings').onclick = () => $('#settingsDialog').showModal();
+$('#closeSettings').onclick = () => $('#settingsDialog').close();
+$('#chooseFolder').onclick = async () => { await run(() => window.launcher.chooseFolder()); if (folder) $('#settingsDialog').close(); };
+$('#refresh').onclick = () => run(() => window.launcher.state());
 run(() => window.launcher.state());

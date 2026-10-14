@@ -1,10 +1,8 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { unpackPrivateZip } from '../assets/private-preview.js';
 
-const idPattern = /^[a-f0-9-]{36}$/;
-const marker = 'game-portal-offline-library-v1';
 export function safeResource(resource) {
   if (typeof resource !== 'string' || !resource || resource.length > 1000) throw new Error('invalid_path');
   const parts = resource.split('/');
@@ -12,79 +10,82 @@ export function safeResource(resource) {
   return parts.join('/');
 }
 export async function openLibrary(folder) {
-  if (!path.isAbsolute(folder) || /^\\\\/.test(folder)) throw new Error('local_folder_required');
-  const parent = await fs.realpath(folder);
-  const root = path.join(parent, 'GAMEPORTAL-library');
-  await fs.mkdir(root, { recursive: true });
-  if ((await fs.lstat(root)).isSymbolicLink()) throw new Error('invalid_library');
-  const markerPath = path.join(root, '.gameportal-library');
-  try { await fs.writeFile(markerPath, marker, { flag: 'wx' }); }
-  catch (e) { if (e.code !== 'EEXIST') throw e; }
-  if (await fs.readFile(markerPath, 'utf8') !== marker) throw new Error('invalid_library');
+  if (typeof folder !== 'string' || !path.isAbsolute(folder) || /^\\\\/.test(folder)) throw new Error('local_folder_required');
+  const root = await fs.realpath(folder);
+  if (!(await fs.stat(root)).isDirectory()) throw new Error('invalid_folder');
   return root;
 }
-async function gameDirectory(root, id) {
-  if (!idPattern.test(id)) throw new Error('invalid_game');
-  if (await fs.readFile(path.join(root, '.gameportal-library'), 'utf8') !== marker) throw new Error('invalid_library');
-  const dir = path.join(root, id);
-  if ((await fs.lstat(dir)).isSymbolicLink()) throw new Error('invalid_game');
-  return dir;
+function gameId(relative) {
+  const h = createHash('sha256').update(relative).digest('hex').slice(0, 32);
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 export async function listGames(root) {
-  const entries = await fs.readdir(root, { withFileTypes: true });
-  const games = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory() || !idPattern.test(entry.name)) continue;
-    try {
-      const dir = await gameDirectory(root, entry.name);
-      const data = JSON.parse(await fs.readFile(path.join(dir, 'game.json'), 'utf8'));
-      if (data.id !== entry.name || typeof data.title !== 'string' || typeof data.createdAt !== 'string') continue;
-      games.push({ id: data.id, title: data.title.slice(0, 120), createdAt: data.createdAt });
-    } catch { /* Incomplete or unrelated folders are never offered as games. */ }
-  }
-  return games.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-}
-export async function importGame(root, filename) {
-  const stat = await fs.stat(filename);
-  if (!stat.isFile() || stat.size > 50 * 1024 * 1024) throw new Error('game_too_large');
-  const bytes = await fs.readFile(filename);
-  const ext = path.extname(filename).toLowerCase();
-  let files;
-  if (ext === '.zip') files = await unpackPrivateZip(bytes);
-  else if (ext === '.html' || ext === '.htm') files = new Map([['index.html', bytes]]);
-  else throw new Error('unsupported_game');
-  const names = new Set();
-  for (const name of files.keys()) {
-    safeResource(name);
-    const normalized = name.toLowerCase();
-    if (names.has(normalized)) throw new Error('duplicate_path');
-    names.add(normalized);
-  }
-  const id = randomUUID();
-  const dir = path.join(root, id);
-  const game = { id, title: path.basename(filename, ext).slice(0, 120), createdAt: new Date().toISOString() };
-  // The manifest is written last so failed imports cannot appear in the library.
-  await fs.mkdir(dir);
-  try {
-    for (const [name, contents] of files) {
-      const target = path.join(dir, 'content', safeResource(name));
-      await fs.mkdir(path.dirname(target), { recursive: true });
-      await fs.writeFile(target, contents, { flag: 'wx' });
+  const games = []; let visited = 0;
+  const add = (relative, title, kind) => games.push({ id: gameId(relative), title, relative, kind });
+  async function walk(relative = '', depth = 0) {
+    const entries = await fs.readdir(path.join(root, relative), { withFileTypes: true });
+    visited += entries.length;
+    if (visited > 10000 || games.length > 1000) throw new Error('folder_too_large');
+    const files = entries.filter(e => e.isFile() && !e.name.startsWith('.'));
+    const html = files.filter(e => /\.html?$/i.test(e.name));
+    const entry = html.find(e => /^index\.html?$/i.test(e.name)) || (html.length === 1 ? html[0] : null);
+    if (depth > 0 && entry) add(path.join(relative, entry.name), path.basename(relative), 'html');
+    for (const f of files) {
+      const ext = path.extname(f.name).toLowerCase();
+      if ((depth === 0 || !entry) && ['.html', '.htm'].includes(ext)) add(path.join(relative, f.name), path.basename(f.name, ext), 'html');
+      if (['.zip', '.exe'].includes(ext)) add(path.join(relative, f.name), path.basename(f.name, ext), ext.slice(1));
     }
-    await fs.writeFile(path.join(dir, 'game.json'), JSON.stringify(game), { flag: 'wx' });
-    return game;
-  } catch (error) { await fs.rm(dir, { recursive: true, force: true }); throw error; }
+    if (depth < 3 && !(depth > 0 && (entry || files.some(e => /\.exe$/i.test(e.name))))) {
+      for (const e of entries) if (e.isDirectory() && !e.name.startsWith('.')) await walk(path.join(relative, e.name), depth + 1);
+    }
+  }
+  await walk(); return games.sort((a, b) => a.title.localeCompare(b.title, 'ja'));
 }
-export async function readGameFile(root, id, resource) {
-  const dir = await gameDirectory(root, id);
-  const content = path.join(dir, 'content');
-  const target = await fs.realpath(path.join(content, safeResource(resource)));
-  const relative = path.relative(content, target);
+async function inside(root, filename) {
+  const resolved = await fs.realpath(filename), relative = path.relative(root, resolved);
   if (relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('invalid_path');
-  if (!(await fs.stat(target)).isFile()) throw new Error('invalid_path');
-  return fs.readFile(target);
+  return resolved;
 }
-export async function removeGame(root, id) {
-  const dir = await gameDirectory(root, id);
-  await fs.rm(dir, { recursive: true });
+export async function storageFolder(root, id) {
+  if (!/^[a-f0-9-]{36}$/.test(id)) throw new Error('invalid_game');
+  let current = root;
+  for (const part of ['.gameportal-data', id]) {
+    current = path.join(current, part); await fs.mkdir(current, { recursive: true });
+    if ((await fs.lstat(current)).isSymbolicLink()) throw new Error('invalid_path');
+  }
+  return current;
+}
+export async function prepareGame(root, game) {
+  const filename = await inside(root, path.join(root, game.relative));
+  if (game.kind === 'exe') return { filename };
+  if (game.kind === 'html') return { base: path.dirname(filename), entry: path.basename(filename) };
+  if (game.kind !== 'zip') throw new Error('unsupported_game');
+  if ((await fs.stat(filename)).size > 50 * 1024 * 1024) throw new Error('game_too_large');
+  const bytes = await fs.readFile(filename), hash = createHash('sha256').update(bytes).digest('hex');
+  const saved = await storageFolder(root, game.id), content = path.join(saved, 'content');
+  try {
+    if (await fs.readFile(path.join(saved, 'archive-hash'), 'utf8') === hash) {
+      await inside(root, path.join(content, 'index.html')); return { base: content, entry: 'index.html' };
+    }
+  } catch { /* Unpack on first launch or when the archive changes. */ }
+  const files = await unpackPrivateZip(bytes), names = new Set();
+  for (const name of files.keys()) {
+    safeResource(name); if (names.has(name.toLowerCase())) throw new Error('duplicate_path'); names.add(name.toLowerCase());
+  }
+  const staging = path.join(saved, 'extract-' + randomUUID()); await fs.mkdir(staging);
+  try {
+    for (const [name, data] of files) {
+      const target = path.join(staging, safeResource(name)); await fs.mkdir(path.dirname(target), { recursive: true }); await fs.writeFile(target, data, { flag: 'wx' });
+    }
+    if (await fs.lstat(content).then(s => s.isSymbolicLink(), () => false)) throw new Error('invalid_path');
+    await fs.rm(content, { recursive: true, force: true }); await fs.rename(staging, content);
+    await fs.writeFile(path.join(saved, 'archive-hash'), hash);
+  } finally { await fs.rm(staging, { recursive: true, force: true }); }
+  return { base: content, entry: 'index.html' };
+}
+export async function readGameFile(root, prepared, resource) {
+  const target = await inside(root, path.join(prepared.base, safeResource(resource)));
+  const relative = path.relative(prepared.base, target);
+  if (relative.startsWith('..') || path.isAbsolute(relative) || !(await fs.stat(target)).isFile()) throw new Error('invalid_path');
+  return fs.readFile(target);
 }
