@@ -53,6 +53,8 @@ try {
   await page.locator('#editImage').setInputFiles({name:'cover.png',mimeType:'image/png',buffer:Buffer.from(cover,'base64')});
   await page.getByRole('button',{name:'保存',exact:true}).click(); await expect(card('My portable game')).toBeVisible();
   await expect(card('My portable game').locator('img')).toHaveCount(1);
+  await page.evaluate(()=>{const s=document.querySelector('#search');for(const value of ['','My','missing']){s.value=value;s.dispatchEvent(new Event('input'));}});
+  await page.evaluate(()=>new Promise(resolve=>setTimeout(resolve,100)));await expect(page.locator('.card')).toHaveCount(0);await page.locator('#search').fill('');
   await page.locator('#search').fill('missing'); await expect(page.locator('.card')).toHaveCount(0); await page.locator('#search').fill('お気に入り'); await expect(page.locator('.card')).toHaveCount(1); await page.locator('#search').fill('');
   await page.locator('#tagFilters').getByRole('button',{name:'アクション',exact:true}).click(); await expect(page.locator('.card')).toHaveCount(1);
   await page.locator('#tagFilters').getByRole('button',{name:'アクション',exact:true}).click();

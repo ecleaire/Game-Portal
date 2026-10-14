@@ -1,7 +1,7 @@
 const $ = selector => document.querySelector(selector);
 let root = null, remembered = null, metadata = null, games = [], editing = null, busy = false;
 let stopGame = null, pendingSave = null, saveTimer, saveChain = Promise.resolve();
-let imageURLs = [], selectedTags = new Set();
+let imageURLs = [], selectedTags = new Set(), renderRevision = 0;
 const status = message => { $('#status').textContent = message; };
 async function cacheHandle(value) {
   return new Promise((resolve, reject) => {
@@ -40,6 +40,7 @@ async function connect(handle, request = false) {
   await refresh(); $('#settings').close();
 }
 async function render() {
+  const revision = ++renderRevision, folder = root;
   for (const url of imageURLs) URL.revokeObjectURL(url); imageURLs = [];
   const allTags = [...new Set(games.flatMap(g => g.tags))].sort((a,b) => a.localeCompare(b,'ja'));
   $('#tagFilters').replaceChildren(); $('#knownTags').replaceChildren();
@@ -56,9 +57,11 @@ async function render() {
     const article = document.createElement('article'); article.className = 'card';
     const cover = document.createElement('div'); cover.className = 'cover'; cover.textContent = '▶\uFE0E';
     if (game.thumbnail) try {
-      const file = await library.getFile(root, `.gameportal/thumbnails/${game.id}.webp`);
+      const file = await library.getFile(folder, `.gameportal/thumbnails/${game.id}.webp`);
+      if (revision !== renderRevision) return;
       if (file.size <= 2 * 1024 * 1024) { const url = URL.createObjectURL(file); imageURLs.push(url); const img = document.createElement('img'); img.src = url; img.alt = ''; cover.replaceChildren(img); }
     } catch { /* A missing image does not make the game unavailable. */ }
+    if (revision !== renderRevision) return;
     const body = document.createElement('div'); body.className = 'cardbody';
     const title = document.createElement('h2'); title.textContent = game.title;
     const type = document.createElement('p'); type.className = 'type'; type.textContent = game.kind === 'pyxapp' ? 'Pyxel' : 'Webゲーム';
