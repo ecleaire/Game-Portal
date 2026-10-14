@@ -12,7 +12,7 @@ export async function writeFile(root, path, content) {
   const parts = safePath(path); let folder = root;
   for (const part of parts.slice(0, -1)) folder = await folder.getDirectoryHandle(part, { create: true });
   const handle = await folder.getFileHandle(parts.at(-1), { create: true });
-  const writer = await handle.createWritable();
+  const writer = await handle.createWritable({ mode: 'exclusive' });
   try { await writer.write(content); await writer.close(); }
   catch (error) { await writer.abort().catch(() => {}); throw error; }
 }
@@ -61,7 +61,20 @@ export async function saveGameSettings(root, game, values) {
     (next.thumbnail !== null && (typeof next.thumbnail !== 'string' || !/^data:image\/webp;base64,[A-Za-z0-9+/]+={0,2}$/.test(next.thumbnail)))) throw new Error('ゲーム設定の入力内容を確認してください。');
   const text = JSON.stringify(next, null, 2) + '\n';
   if (new TextEncoder().encode(text).length > 2 * 1024 * 1024) throw new Error('ゲーム設定のサイズが大きすぎます。');
-  await writeFile(root, game.path + '.gameportal.json', text);
+  const parts = safePath(game.path + '.gameportal.json'); let folder = root;
+  for (const part of parts.slice(0, -1)) folder = await folder.getDirectoryHandle(part);
+  const handle = await folder.getFileHandle(parts.at(-1), { create: true });
+  let writer;
+  try { writer = await handle.createWritable({ mode: 'exclusive' }); }
+  catch (error) { if (error.name === 'NoModificationAllowedError') throw new Error('このゲームの設定は別の画面で保存中です。少し待って再読み込みしてください。'); throw error; }
+  try {
+    const live = await handle.getFile(), actual = await live.text();
+    if ((current.text === null ? actual !== '' : actual !== current.text)) throw new Error('このゲームの設定が更新されています。「再読み込み」してから編集してください。');
+    const history = { schema: 1, gamePath: game.path, before: current.text, after: text, savedAt: new Date().toISOString() };
+    await writeFile(root, `.gameportal/history/${game.id}/${crypto.randomUUID()}.json`, JSON.stringify(history, null, 2));
+    await writer.write(text); await writer.close();
+  } catch (error) { await writer.abort().catch(() => {}); throw error; }
+  if (await (await handle.getFile()).text() !== text) throw new Error('保存後に設定の変更を検出しました。再読み込みしてください。編集内容は .gameportal/history に残っています。');
 }
 export function validatePyxapp(buffer) {
   const bytes = new Uint8Array(buffer), view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -96,15 +109,18 @@ export async function gameId(path) {
 export async function scan(root, metadata) {
   const games = []; let visited = 0;
   async function add(path, title, kind, handle, folder, entry) {
-    const settings = await loadGameSettings(root, path);
+    let settings, settingsError = '';
+    try { settings = await loadGameSettings(root, path); }
+    catch (error) { settings = { data: null, text: null }; settingsError = error.message; }
     const saved = settings.data || (Object.hasOwn(metadata.games, path) ? metadata.games[path] : {});
-    games.push({ id: settings.data?.id || await gameId(path), settingsText: settings.text, path, kind, handle, folder, entry, title: typeof saved?.title === 'string' && saved.title.trim() ? saved.title.slice(0, 120) : title,
+    games.push({ id: settings.data?.id || await gameId(path), settingsText: settings.text, settingsError, path, kind, handle, folder, entry, title: typeof saved?.title === 'string' && saved.title.trim() ? saved.title.slice(0, 120) : title,
       tags: Array.isArray(saved?.tags) ? tagsFrom(saved.tags.filter(t => typeof t === 'string').join(',')) : [],
       developmentEnvironment: settings.data?.developmentEnvironment || (kind === 'pyxapp' ? 'Pyxel' : ''),
       thumbnail: settings.data ? saved.thumbnail : saved?.thumbnail === true });
   }
   async function walk(folder, prefix = '', depth = 0) {
-    const entries = []; for await (const entry of folder.values()) { if (++visited > 10000) throw new Error('ファイルが多すぎます。ゲーム専用のフォルダーを選択してください。'); if (!entry.name.startsWith('.')) entries.push(entry); }
+    try { await folder.getFileHandle('.gameportal-uploading'); return; } catch (error) { if (error.name !== 'NotFoundError') throw error; }
+    const entries = []; for await (const entry of folder.values()) { if (entry.name === '.gameportal-uploading') return; if (++visited > 10000) throw new Error('ファイルが多すぎます。ゲーム専用のフォルダーを選択してください。'); if (!entry.name.startsWith('.')) entries.push(entry); }
     const html = entries.filter(e => e.kind === 'file' && /\.html?$/i.test(e.name));
     const entry = html.find(e => /^index\.html?$/i.test(e.name)) || (html.length === 1 ? html[0] : null);
     if (depth > 0 && entry) { await add(prefix + entry.name, folder.name, 'html', entry, folder, entry.name); return; }
@@ -114,7 +130,10 @@ export async function scan(root, metadata) {
     }
     if (depth < 3) for (const dir of entries.filter(e => e.kind === 'directory')) await walk(dir, prefix + dir.name + '/', depth + 1);
   }
-  await walk(root); return games.sort((a, b) => a.title.localeCompare(b.title, 'ja'));
+  await walk(root);
+  const ids = new Map(); for (const game of games) ids.set(game.id, (ids.get(game.id) || 0) + 1);
+  for (const game of games) if (ids.get(game.id) > 1) { game.identityConflict = true; game.settingsError = '同じ作品IDのゲームが複数あります。別作品として追加する場合は「投稿」を使用してください。'; }
+  return games.sort((a, b) => a.title.localeCompare(b.title, 'ja'));
 }
 export async function readTree(folder) {
   const files = new Map(); let bytes = 0;
@@ -147,12 +166,14 @@ export async function postGame(root, files, packageTools) {
   const name = 'game-' + crypto.randomUUID();
   const dir = await root.getDirectoryHandle(name, { create: true });
   try {
+    await writeFile(dir, '.gameportal-uploading', '投稿準備中');
     for (let i = 0; i < files.length; i++) await writeFile(dir, paths[i], files[i]);
     const layout = single ? null : packageTools.webArchiveLayout(paths);
     const entry = single ? paths[0] : layout.root + layout.entry;
     const relative = name + '/' + entry;
-    await saveGameSettings(root, { path: relative, id: await gameId(relative), settingsText: null },
+    await saveGameSettings(root, { path: relative, id: crypto.randomUUID().replaceAll('-', ''), settingsText: null },
       { title, tags: [], thumbnail: null, developmentEnvironment: /\.pyxapp$/i.test(entry) ? 'Pyxel' : '' });
+    await dir.removeEntry('.gameportal-uploading');
     return relative;
   } catch (e) { await root.removeEntry(name, { recursive: true }).catch(() => {}); throw e; }
 }

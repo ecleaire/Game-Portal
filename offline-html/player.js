@@ -9,7 +9,7 @@ function webBootstrap() {
       const data = Object.assign(Object.create(null), snapshot);
       const send = () => port.postMessage({ type: 'save', data });
       const api = { getItem: key => Object.hasOwn(data, key) ? data[key] : null,
-        setItem: (key, value) => { if (JSON.stringify({ ...data, [key]: String(value) }).length > 500000) throw new DOMException('保存容量を超えました。', 'QuotaExceededError'); data[key] = String(value); send(); },
+        setItem: (key, value) => { const next = { ...data, [key]: String(value) }; if (Object.keys(next).length > 1000 || new TextEncoder().encode(JSON.stringify(next)).length > 500000) throw new DOMException('保存容量を超えました。', 'QuotaExceededError'); data[key] = String(value); send(); },
         removeItem: key => { delete data[key]; send(); }, clear: () => { for (const key of Object.keys(data)) delete data[key]; send(); },
         key: index => Object.keys(data)[index] ?? null, get length() { return Object.keys(data).length; } };
       Object.defineProperty(window, 'localStorage', { value: api });

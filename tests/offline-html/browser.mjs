@@ -32,14 +32,18 @@ try {
     console.log('file:// startup NOT RUN: managed browser administrator policy blocks file URLs.');
   } finally { await filePage.close(); }
   await page.goto(origin); await expect(page.getByRole('heading',{name:/ゲーム/})).toBeVisible();
+  const peer = await context.newPage(); await peer.goto(origin); await expect(peer.getByRole('heading',{name:/ゲーム/})).toBeVisible(); peer.on('pageerror',error=>errors.push(error.message));
   await page.evaluate(async () => {
     const opfs = await navigator.storage.getDirectory();
     window.testRoot = await opfs.getDirectoryHandle('games',{create:true});
-    window.showDirectoryPicker = async () => window.testRoot;
+    window.showDirectoryPicker = async options => { window.testPickerOptions = options; return window.testRoot; };
   });
   await page.getByRole('button',{name:'設定',exact:true}).click();
   await page.getByRole('button',{name:'フォルダーを指定',exact:true}).click();
   await expect(page.locator('#folderName')).toHaveText('games');
+  assert.equal(await page.evaluate(()=>window.testPickerOptions.mode),'read');
+  await expect(page.locator('#postButton')).toBeDisabled();
+  await page.getByRole('button',{name:'設定',exact:true}).click(); await page.locator('#enableEditing').check(); await page.getByRole('button',{name:'閉じる',exact:true}).click();
   await context.setOffline(true); const before = requests.length;
   const gameFile = join(temp,'Sample.html');
   await writeFile(gameFile,'<h1>HTML offline</h1><script>document.body.dataset.previous=localStorage.getItem("level")||"none";localStorage.setItem("level","saved");document.body.dataset.parent=(()=>{try{return parent.document.title}catch{return "blocked"}})();fetch("https://example.com/forbidden").then(()=>document.body.dataset.network="allowed",()=>document.body.dataset.network="blocked");</script>');
@@ -90,6 +94,25 @@ try {
   await expect(frame.locator('body')).toHaveAttribute('data-previous','none'); await expect(frame.locator('body')).toHaveAttribute('data-parent','blocked'); await expect(frame.locator('body')).toHaveAttribute('data-network','blocked');
   await expect(frame.locator('body')).toHaveAttribute('data-compiler','7');
   await page.getByRole('button',{name:'終了',exact:true}).click();
+  await card('My portable game').getByRole('button',{name:'プレイ'}).click();
+  await expect(frame.locator('body')).toHaveAttribute('data-previous','saved');
+  assert.equal(await frame.locator('body').evaluate(()=>{try{localStorage.setItem('large','あ'.repeat(180000));return 'allowed';}catch(error){return error.name;}}),'QuotaExceededError');
+  const exported = page.waitForEvent('download'); await page.getByRole('button',{name:'セーブ書き出し',exact:true}).click();
+  const download = await exported; const exportName=join(temp,'save.json'); await download.saveAs(exportName);
+  const exportedData=JSON.parse(await readFile(exportName,'utf8')); assert.equal(exportedData.data.level,'saved');
+  assert.equal(exportedData.gameId,initialSettings.data.id);
+  // A second tab must not overwrite saves from an active session.
+  await peer.evaluate(async()=>{const opfs=await navigator.storage.getDirectory();const dir=await opfs.getDirectoryHandle('games');window.showDirectoryPicker=async()=>dir;});
+  await peer.getByRole('button',{name:'設定',exact:true}).click();await peer.getByRole('button',{name:'フォルダーを指定',exact:true}).click();
+  await expect(peer.locator('#postButton')).toBeDisabled();
+  const peerCard=peer.locator('.card').filter({has:peer.getByRole('heading',{name:'My portable game',exact:true})});
+  await expect(peerCard.getByRole('button',{name:'My portable gameを編集',exact:true})).toBeDisabled();
+  await peerCard.getByRole('button',{name:'プレイ',exact:true}).click(); await expect(peer.locator('#status')).toContainText('別のタブで起動中');
+  await expect(peer.locator('#player')).not.toBeVisible();
+  await page.getByRole('button',{name:'終了',exact:true}).click();
+  await peerCard.getByRole('button',{name:'プレイ',exact:true}).click(); await expect(peer.frameLocator('#frame').locator('body')).toHaveAttribute('data-previous','saved');
+  await peer.getByRole('button',{name:'終了',exact:true}).click(); await peer.close();
+  assert.equal(await page.evaluate(async()=>{const dir=await window.testRoot.getDirectoryHandle('.gameportal');try{await dir.getDirectoryHandle('saves');return true;}catch(e){if(e.name==='NotFoundError')return false;throw e;}}),false,'Playing must never create shared NAS saves');
   const zip = await packageWebFiles([new File(['<h1>ZIP offline</h1><script>fetch("data.json").then(r=>r.json()).then(d=>document.body.dataset.loaded=d.value)</script>'],'index.html'),new File(['{"value":"local"}'],'data.json')]);
   const zipName=join(temp,'Package.zip'); await writeFile(zipName,Buffer.from(await zip.arrayBuffer())); await post(zipName);
   assert.deepEqual(await readSettings(), updatedSettings);
@@ -102,7 +125,23 @@ try {
   });
   await page.getByRole('button',{name:'設定',exact:true}).click(); await page.getByRole('button',{name:'フォルダーを指定',exact:true}).click();
   await expect(page.locator('#folderName')).toHaveText('copied-library'); await expect(card('My portable game').locator('.type')).toHaveText('Godot 4.6'); await expect(card('My portable game').locator('img')).toHaveCount(1);
-  await card('My portable game').getByRole('button',{name:'プレイ'}).click(); await expect(frame.locator('body')).toHaveAttribute('data-previous','saved'); await page.getByRole('button',{name:'終了',exact:true}).click();
+  await card('My portable game').getByRole('button',{name:'プレイ'}).click(); await expect(frame.locator('body')).toHaveAttribute('data-previous','none'); await page.getByRole('button',{name:'終了',exact:true}).click();
+  // Imported legacy/exported saves stay on this PC; wrong-game files are refused.
+  await card('My portable game').getByRole('button',{name:'プレイ'}).click();
+  await expect(frame.locator('body')).toHaveAttribute('data-previous','saved');
+  await page.locator('#importSave').setInputFiles({name:'wrong.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({...exportedData,gameId:'0'.repeat(32)}))});
+  await expect(page.locator('#status')).toContainText('別のゲーム');
+  page.once('dialog',dialog=>dialog.accept());
+  await page.locator('#importSave').setInputFiles({name:'save.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({...exportedData,data:{level:'imported'}}))});
+  await expect(frame.locator('body')).toHaveAttribute('data-previous','imported');
+  // Quota/write failure keeps the pending snapshot and does not close the player.
+  await page.evaluate(()=>{window.originalSavePut=IDBObjectStore.prototype.put;IDBObjectStore.prototype.put=function(...args){if(this.name==='saves')throw new DOMException('Test full disk','QuotaExceededError');return window.originalSavePut.apply(this,args);};});
+  await frame.locator('body').evaluate(()=>localStorage.setItem('level','unsaved'));
+  await expect(page.locator('#playerStatus')).toContainText('セーブできません');
+  await page.getByRole('button',{name:'終了',exact:true}).click(); await expect(page.locator('#player')).toBeVisible();
+  await page.evaluate(()=>{IDBObjectStore.prototype.put=window.originalSavePut;});
+  await page.getByRole('button',{name:'終了',exact:true}).click(); await expect(page.locator('#player')).not.toBeVisible();
+  await card('My portable game').getByRole('button',{name:'プレイ'}).click();await expect(frame.locator('body')).toHaveAttribute('data-previous','unsaved');await page.getByRole('button',{name:'終了',exact:true}).click();
   const source='import pyxel\nfrom js import document\npyxel.init(32,32,title="Offline Pyxel")\ndocument.body.dataset.pyxel="running"\ndef update():\n    pass\ndef draw():\n    pyxel.cls(3)\npyxel.run(update,draw)\n';
   const app = await packageWebFiles([new File(['main.py'],'test/.pyxapp_startup_script'),new File([source],'test/main.py')]);
   const appName=join(temp,'Tiny.pyxapp'); await writeFile(appName,Buffer.from(await app.arrayBuffer())); await post(appName);
@@ -139,7 +178,7 @@ try {
   assert.equal(requests.length,before,'No HTTP requests may start after loading the single HTML');
   assert.deepEqual(errors,[]);
   await page.screenshot({path:join(temp,'offline-html.png'),fullPage:true});
-  console.log('Offline HTML passed: real browser folder writes, posting HTML/ZIP/PYXAPP, metadata and thumbnail, tags/search, isolated play, save persistence, portable folder copy, real Pyxel canvas, no runtime HTTP.');
+  console.log('Offline HTML passed: read-only browsing, local saves, cross-tab play lock, save import/export and failed-save retry, real browser folder writes, posting HTML/ZIP/PYXAPP, metadata and thumbnail, tags/search, isolated play, save persistence, portable folder copy, real Pyxel canvas, no runtime HTTP.');
 } catch(e) {
   const child=page.frames().find(f=>f!==page.mainFrame());
   if(child)console.error('Frame diagnosis:',await child.evaluate(()=>({body:document.body?.innerHTML.slice(0,1500),links:[...document.querySelectorAll('link')].map(x=>x.href),runtime:!!window.pyxelContext,resources:performance.getEntriesByType('resource').slice(-10).map(x=>x.name)})).catch(()=>null));
