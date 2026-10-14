@@ -165,7 +165,11 @@ export function privatePreviewDocument(files, resourceUrl = dataUrl, readyScript
 // Parent-origin Blob URLs cannot safely be fetched from an opaque game frame.
 // No credentials, parent DOM access, or external network access are provided.
 export function mountPrivatePreview(frame, files, shellUrl) {
-  if (frame.getAttribute('sandbox') !== 'allow-scripts') throw new Error('invalid_preview');
+  const permissions = new Set((frame.getAttribute('sandbox') ?? '').split(/\s+/).filter(Boolean));
+  if (!permissions.has('allow-scripts') || [...permissions].some(value => !['allow-scripts','allow-pointer-lock'].includes(value))) throw new Error('invalid_preview');
+  // Mouse capture enables FPS/3D camera controls without granting same-origin,
+  // navigation, popups, downloads, or access to the portal's credentials.
+  frame.setAttribute('sandbox', 'allow-scripts allow-pointer-lock');
   const channel = new MessageChannel();
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => finish(new Error('preview_timeout')), 90000);

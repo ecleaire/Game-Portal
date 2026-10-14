@@ -19,7 +19,7 @@ function gameTagPicker(game = {}) {
   for (const tag of game.tags ?? []) if (!merged.has(tag.id)) merged.set(tag.id, tag);
   return tagPicker([...merged.values()], game.tags ?? []);
 }
-import { checkWebGameZip, unpackPrivateZip, mountPrivatePreview } from './private-preview.js?v=20261010f';
+import { checkWebGameZip, unpackPrivateZip, mountPrivatePreview } from './private-preview.js?v=20261014c';
 import { packageWebFiles } from './zip-upload.js?v=20261003a';
 import { sendUpload, uploadWithRecovery } from './upload-request.js?v=20261004d';
 import { submissionList } from './submission-list.js?v=20261003a';
@@ -914,12 +914,15 @@ async function upload() {
   for (const step of [
     'Godotでプロジェクトを開き、「プロジェクト」→「エクスポート」を選びます。',
     '「追加」から「Web」を選びます。書き出しテンプレートを求められたら、Godotの画面に沿ってインストールします。',
+    '3Dゲームは画面右上のレンダラーを「Compatibility（互換性）」にして、見た目と動作を確認してください。WebではForward+ / Mobileレンダラーを使用できません。',
     'Godot 4.7.2ではWebプリセットの「Thread Support」をオフにし、「Extensions Support」も使わないならオフにします。',
     '「プロジェクトをエクスポート」で空のフォルダーへ書き出します。HTML名はindex.htmlでもjump.htmlでも構いません。生成後に名前を変更しないでください。',
     'HTML・同名の.js・.wasm・.pck・画像など、書き出されたファイル一式をZIPにするか、この画面へまとめてドラッグ＆ドロップします。ZIP内に1つの親フォルダーがあっても受け付けます。',
     '「PCK/ZIPのエクスポート」だけではブラウザーで遊べません。必ず「プロジェクトをエクスポート」でWeb一式を作成してください。',
   ]) steps.append(el('li', step));
   guide.append(steps);
+  guide.append(el('p', 'FPSなどのマウス視点操作は、ゲーム内のクリック・キー入力を受けてマウスをキャプチャしてください。Escで解除できます。スマホ向け作品にはタッチ操作を用意してください。', { class: 'muted' }));
+  guide.append(el('p', 'プレイ用ファイルは最大50MB、制作プロジェクトは最大500MBです。3Dモデル・テクスチャ・音声は必要な素材だけ書き出してください。', { class: 'muted' }));
   s.append(guide);
   const turboGuide = el('details', null, { class: 'export-guide' });
   turboGuide.append(el('summary', 'Scratch / TurboWarpのHTML書き出し・投稿手順'));

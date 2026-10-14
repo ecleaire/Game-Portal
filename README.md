@@ -52,3 +52,5 @@ Godotでは**Web**プリセットから「プロジェクトをエクスポー�
 管理・モバイルUIと名称設定: [docs/UI_AND_BRANDING.md](docs/UI_AND_BRANDING.md)
 
 制作プロジェクトの必須提出・非公開保管・権限・反映手順: [プロジェクトファイル](docs/PROJECT_FILES.md)
+
+[3Dゲームの投稿設定・視点操作・隔離プレイヤー](docs/3D_GAMES.md)

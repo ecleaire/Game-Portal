@@ -8,7 +8,7 @@ import { downloadArchive } from './game-download.js?v=20261010f';
 import { aiSummary } from './ai-disclosure.js?v=20261010b';
 import { userSessionKey, adminSessionKey } from './navigation.js?v=20261009b';
 import { tagChips } from './tags.js?v=20261004a';
-import { unpackPrivateZip, mountPrivatePreview } from './private-preview.js?v=20261010f';
+import { unpackPrivateZip, mountPrivatePreview } from './private-preview.js?v=20261014c';
 
 const params = new URLSearchParams(location.search);
 const frame = document.getElementById('gameFrame');

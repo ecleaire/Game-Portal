@@ -26,7 +26,7 @@ test('super admin edits a pending submission and safely previews it without expo
  await page.getByRole('searchbox',{name:'ユーザーを検索',exact:true}).fill('');
  await expect(privateRow.getByRole('button',{name:'隔離してプレビュー'})).toHaveCount(0);await expect(privateRow.locator('.admin-game-editor')).toHaveCount(0);
  await row.getByRole('button',{name:'隔離してプレビュー',exact:true}).click();
- const frame=row.locator('iframe');await expect(frame).toHaveAttribute('sandbox','allow-scripts');await expect(page.frameLocator('.review-preview iframe').locator('p')).toHaveText('Review game');
+ const frame=row.locator('iframe');await expect(frame).toHaveAttribute('sandbox','allow-scripts allow-pointer-lock');await expect(page.frameLocator('.review-preview iframe').locator('p')).toHaveText('Review game');
  await expect(page.frameLocator('.review-preview iframe').locator('body')).toHaveAttribute('data-isolated','true');expect(await page.locator('body').getAttribute('data-compromised')).toBe(null);
  await row.getByRole('button',{name:'プレビューを閉じる',exact:true}).click();await expect(row.locator('iframe')).toHaveCount(0);
  const edit=row.locator('.admin-game-editor');await edit.locator(':scope > summary').click();
