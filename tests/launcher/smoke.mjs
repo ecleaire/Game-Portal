@@ -54,4 +54,7 @@ try {
   await page.getByRole('button', { name: 'Offline gameを削除' }).click(); await expect(page.locator('.card')).toHaveCount(0);
   assert.ok(await fs.stat(source));
   console.log('Electron smoke passed: folder selection, import, search, offline play, network denial, isolated games, reopen and deletion.');
-} finally { if (app) await app.close(); await fs.rm(temp, { recursive: true, force: true }); }
+} catch (error) {
+  if (process.env.GITHUB_ACTIONS) console.log('::error title=Offline launcher smoke::' + String(error.stack || error).replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A'));
+  throw error;
+} finally { if (app) await app.close(); await fs.rm(temp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }
